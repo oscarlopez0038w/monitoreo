@@ -92,76 +92,43 @@ export default function SkuTable({ onRefreshNeeded, refreshTrigger }) {
     );
   };
 
-  const renderStockBadge = (qtyRaw, type) => {
-    const qty = qtyRaw ?? 0;
-    const isZero = qty === 0;
-    const formattedQty = qty.toLocaleString('es-NI');
+  const renderQtyCell = (value, type = 'normal') => {
+    const qty = value ?? 0;
+    const isNegative = qty < 0;
 
-    if (isZero) {
-      return (
-        <span
-          style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: '0.35rem',
-            padding: '0.25rem 0.75rem',
-            borderRadius: '999px',
-            fontSize: '0.8rem',
-            background: 'rgba(255, 255, 255, 0.03)',
-            border: '1px solid rgba(255, 255, 255, 0.08)',
-            color: '#64748b',
-          }}
-        >
-          <Warehouse size={12} color="#64748b" />
-          <span style={{ color: '#94a3b8', fontWeight: 600 }}>0</span> unid.
-        </span>
-      );
-    }
+    let color = '#cbd5e1';
+    let fontWeight = 500;
 
-    let bg = 'rgba(251, 191, 36, 0.12)';
-    let border = '1px solid rgba(251, 191, 36, 0.35)';
-    let labelColor = '#fbbf24';
-    let IconComp = Warehouse;
-
-    if (type === 'wh2') {
-      bg = 'rgba(129, 140, 248, 0.14)';
-      border = '1px solid rgba(129, 140, 248, 0.35)';
-      labelColor = '#a5b4fc';
-    } else if (type === 'total') {
-      bg = 'rgba(52, 211, 153, 0.14)';
-      border = '1px solid rgba(52, 211, 153, 0.35)';
-      labelColor = '#34d399';
-      IconComp = Layers;
+    if (type === 'total') {
+      color = '#38bdf8';
+      fontWeight = 600;
+    } else if (type === 'reserved') {
+      color = qty > 0 ? '#fbbf24' : '#64748b';
+      fontWeight = qty > 0 ? 700 : 500;
+    } else if (type === 'available') {
+      if (isNegative) {
+        color = '#f87171';
+        fontWeight = 700;
+      } else if (qty > 0) {
+        color = '#34d399';
+        fontWeight = 700;
+      } else {
+        color = '#64748b';
+      }
     }
 
     return (
-      <span
-        style={{
-          display: 'inline-flex',
-          alignItems: 'center',
-          gap: '0.35rem',
-          padding: '0.25rem 0.75rem',
-          borderRadius: '999px',
-          fontSize: '0.82rem',
-          background: bg,
-          border: border,
-          color: labelColor,
-        }}
-      >
-        <IconComp size={13} color={labelColor} />
-        <strong style={{ color: '#ffffff', fontWeight: 700, letterSpacing: '0.02em' }}>
-          {formattedQty}
-        </strong>{' '}
-        unid.
+      <span style={{ color, fontWeight, fontFamily: 'var(--font-mono)', fontSize: '0.78rem', whiteSpace: 'nowrap' }}>
+        {qty.toLocaleString('es-NI')}
       </span>
     );
   };
 
   return (
-    <div className="glass-card" style={{ padding: '1.75rem' }}>
+    <div className="glass-card" style={{ padding: '1.25rem' }}>
       
       {/* Header Controls */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '1rem' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', flexWrap: 'wrap', gap: '1rem' }}>
         <div>
           <h3 style={{ fontSize: '1.15rem', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
             <Hash size={18} color="var(--accent-primary)" />
@@ -172,14 +139,14 @@ export default function SkuTable({ onRefreshNeeded, refreshTrigger }) {
           </p>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap', width: '100%', maxWidth: 'max-content' }} className="responsive-flex-stack">
           {/* Search Input */}
-          <div style={{ position: 'relative', minWidth: '240px' }}>
+          <div style={{ position: 'relative', minWidth: '220px', flex: '1 1 auto' }}>
             <Search size={16} color="var(--text-dim)" style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)' }} />
             <input
               type="text"
               className="glass-input"
-              style={{ paddingLeft: '2.4rem', width: '100%', fontSize: '0.88rem' }}
+              style={{ width: '100%', paddingLeft: '2.3rem', fontSize: '0.84rem' }}
               placeholder="Buscar SKU ID..."
               value={search}
               onChange={handleSearchChange}
@@ -191,138 +158,242 @@ export default function SkuTable({ onRefreshNeeded, refreshTrigger }) {
       </div>
 
       {/* Table Element */}
-      <div style={{ overflowX: 'auto', borderRadius: '12px', border: '1px solid var(--border-subtle)' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.9rem' }}>
+      <div style={{ overflowX: 'auto', borderRadius: '12px', border: '1px solid var(--border-subtle)', width: '100%' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.78rem', tableLayout: 'auto' }}>
           <thead>
-            <tr style={{ background: 'rgba(15, 23, 42, 0.8)', borderBottom: '1px solid var(--border-subtle)', color: 'var(--text-muted)', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-              
+            {/* Fila 1: Encabezados Principales y Grupos */}
+            <tr style={{ background: 'rgba(15, 23, 42, 0.95)', borderBottom: '1px solid var(--border-subtle)', color: 'var(--text-muted)', fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
               <th
+                rowSpan={2}
                 onClick={() => handleSort('id')}
-                style={{ padding: '0.85rem 1.25rem', cursor: 'pointer', userSelect: 'none' }}
+                style={{ padding: '0.45rem 0.4rem', cursor: 'pointer', userSelect: 'none', borderRight: '1px solid rgba(255, 255, 255, 0.05)', whiteSpace: 'nowrap' }}
                 title="Ordenar por SKU ID"
               >
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                  SKU ID {renderSortIcon('id')}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.2rem' }}>
+                  SKU {renderSortIcon('id')}
                 </div>
               </th>
 
               <th
-                onClick={() => handleSort('is_active')}
-                style={{ padding: '0.85rem 1.25rem', cursor: 'pointer', userSelect: 'none' }}
-                title="Ordenar por Estado (Activo/Inactivo)"
+                rowSpan={2}
+                style={{ padding: '0.45rem 0.4rem', borderRight: '1px solid rgba(255, 255, 255, 0.05)', maxWidth: '140px' }}
+                title="Descripción del Producto"
               >
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                Descripción
+              </th>
+
+              <th
+                rowSpan={2}
+                style={{ padding: '0.45rem 0.4rem', borderRight: '1px solid rgba(255, 255, 255, 0.05)', textAlign: 'center', whiteSpace: 'nowrap' }}
+                title="Stock Mínimo de Seguridad Configurado"
+              >
+                Stock Seg.
+              </th>
+
+              <th
+                rowSpan={2}
+                onClick={() => handleSort('is_active')}
+                style={{ padding: '0.45rem 0.4rem', cursor: 'pointer', userSelect: 'none', borderRight: '1px solid rgba(255, 255, 255, 0.05)', whiteSpace: 'nowrap' }}
+                title="Ordenar por Estado"
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.2rem' }}>
                   Estado {renderSortIcon('is_active')}
                 </div>
               </th>
 
+              {/* Grupo Mega */}
               <th
-                onClick={() => handleSort('stock_wh1')}
-                style={{ padding: '0.85rem 1.25rem', cursor: 'pointer', userSelect: 'none' }}
-                title="Ordenar por Bodega 1 (Mayor a Menor)"
+                colSpan={3}
+                style={{ padding: '0.35rem', textAlign: 'center', background: 'rgba(251, 191, 36, 0.06)', borderRight: '1px solid rgba(255, 255, 255, 0.08)', color: '#fbbf24', fontWeight: 700 }}
               >
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                  Mega {renderSortIcon('stock_wh1')}
+                <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem', justifyContent: 'center' }}>
+                  <Warehouse size={12} color="#fbbf24" /> Bodega Mega (24)
                 </div>
               </th>
 
+              {/* Grupo Cedis */}
               <th
-                onClick={() => handleSort('stock_wh2')}
-                style={{ padding: '0.85rem 1.25rem', cursor: 'pointer', userSelect: 'none' }}
-                title="Ordenar por Bodega 2 (Mayor a Menor)"
+                colSpan={3}
+                style={{ padding: '0.35rem', textAlign: 'center', background: 'rgba(129, 140, 248, 0.06)', borderRight: '1px solid rgba(255, 255, 255, 0.08)', color: '#a5b4fc', fontWeight: 700 }}
               >
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                  Cedis  {renderSortIcon('stock_wh2')}
+                <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem', justifyContent: 'center' }}>
+                  <Warehouse size={12} color="#a5b4fc" /> Bodega Cedis (1041)
                 </div>
               </th>
 
+              {/* Grupo Totales */}
               <th
-                onClick={() => handleSort('total_stock')}
-                style={{ padding: '0.85rem 1.25rem', cursor: 'pointer', userSelect: 'none' }}
-                title="Ordenar por Total Stock Consolidado"
+                colSpan={3}
+                style={{ padding: '0.35rem', textAlign: 'center', background: 'rgba(52, 211, 153, 0.06)', borderRight: '1px solid rgba(255, 255, 255, 0.08)', color: '#34d399', fontWeight: 700 }}
               >
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                  Total Stock {renderSortIcon('total_stock')}
+                <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem', justifyContent: 'center' }}>
+                  <Layers size={12} color="#34d399" /> Consolidado
                 </div>
               </th>
 
-              <th style={{ padding: '0.85rem 1.25rem' }}>
-                Última Actualización
+              <th rowSpan={2} style={{ padding: '0.45rem 0.4rem', borderRight: '1px solid rgba(255, 255, 255, 0.05)', whiteSpace: 'nowrap' }}>
+                Actualizado
               </th>
 
-              <th style={{ padding: '0.85rem 1.25rem', textAlign: 'right' }}>
+              <th rowSpan={2} style={{ padding: '0.45rem 0.4rem', textAlign: 'right', whiteSpace: 'nowrap' }}>
                 Acciones
+              </th>
+            </tr>
+
+            {/* Fila 2: Sub-encabezados Total / Reservado / Disponible */}
+            <tr style={{ background: 'rgba(15, 23, 42, 0.85)', borderBottom: '1px solid var(--border-subtle)', color: 'var(--text-dim)', fontSize: '0.68rem', textTransform: 'uppercase' }}>
+              {/* Mega */}
+              <th onClick={() => handleSort('wh1_total')} style={{ padding: '0.3rem 0.35rem', cursor: 'pointer', textAlign: 'right', whiteSpace: 'nowrap' }} title="Total Mega">
+                Total {renderSortIcon('wh1_total')}
+              </th>
+              <th onClick={() => handleSort('wh1_reserved')} style={{ padding: '0.3rem 0.35rem', cursor: 'pointer', textAlign: 'right', whiteSpace: 'nowrap' }} title="Reservado Mega">
+                Reserv. {renderSortIcon('wh1_reserved')}
+              </th>
+              <th onClick={() => handleSort('stock_wh1')} style={{ padding: '0.3rem 0.35rem', cursor: 'pointer', textAlign: 'right', borderRight: '1px solid rgba(255, 255, 255, 0.08)', whiteSpace: 'nowrap' }} title="Disponible Mega">
+                Dispon. {renderSortIcon('stock_wh1')}
+              </th>
+
+              {/* Cedis */}
+              <th onClick={() => handleSort('wh2_total')} style={{ padding: '0.3rem 0.35rem', cursor: 'pointer', textAlign: 'right', whiteSpace: 'nowrap' }} title="Total Cedis">
+                Total {renderSortIcon('wh2_total')}
+              </th>
+              <th onClick={() => handleSort('wh2_reserved')} style={{ padding: '0.3rem 0.35rem', cursor: 'pointer', textAlign: 'right', whiteSpace: 'nowrap' }} title="Reservado Cedis">
+                Reserv. {renderSortIcon('wh2_reserved')}
+              </th>
+              <th onClick={() => handleSort('stock_wh2')} style={{ padding: '0.3rem 0.35rem', cursor: 'pointer', textAlign: 'right', borderRight: '1px solid rgba(255, 255, 255, 0.08)', whiteSpace: 'nowrap' }} title="Disponible Cedis">
+                Dispon. {renderSortIcon('stock_wh2')}
+              </th>
+
+              {/* Consolidados */}
+              <th onClick={() => handleSort('total_quantity')} style={{ padding: '0.3rem 0.35rem', cursor: 'pointer', textAlign: 'right', whiteSpace: 'nowrap' }} title="Total Físico Consolidado">
+                Total {renderSortIcon('total_quantity')}
+              </th>
+              <th onClick={() => handleSort('total_reserved')} style={{ padding: '0.3rem 0.35rem', cursor: 'pointer', textAlign: 'right', whiteSpace: 'nowrap' }} title="Total Reservado Consolidado">
+                Reserv. {renderSortIcon('total_reserved')}
+              </th>
+              <th onClick={() => handleSort('total_stock')} style={{ padding: '0.3rem 0.35rem', cursor: 'pointer', textAlign: 'right', borderRight: '1px solid rgba(255, 255, 255, 0.08)', whiteSpace: 'nowrap' }} title="Total Disponible Consolidado">
+                Dispon. {renderSortIcon('total_stock')}
               </th>
             </tr>
           </thead>
           <tbody>
             {loading && skus.length === 0 ? (
               <tr>
-                <td colSpan={7} style={{ padding: '3rem', textAlign: 'center', color: 'var(--text-muted)' }}>
-                  <RefreshCw size={24} className="animate-spin" style={{ margin: '0 auto 0.5rem auto', color: 'var(--accent-primary)' }} />
+                <td colSpan={15} style={{ padding: '2.5rem', textAlign: 'center', color: 'var(--text-muted)' }}>
+                  <RefreshCw size={20} className="animate-spin" style={{ margin: '0 auto 0.5rem auto', color: 'var(--accent-primary)' }} />
                   Cargando SKUs...
                 </td>
               </tr>
             ) : skus.length === 0 ? (
               <tr>
-                <td colSpan={7} style={{ padding: '3rem', textAlign: 'center', color: 'var(--text-muted)' }}>
-                  <Database size={32} style={{ margin: '0 auto 0.75rem auto', opacity: 0.4 }} />
+                <td colSpan={15} style={{ padding: '2.5rem', textAlign: 'center', color: 'var(--text-muted)' }}>
+                  <Database size={28} style={{ margin: '0 auto 0.75rem auto', opacity: 0.4 }} />
                   <p style={{ fontWeight: 500, color: 'var(--text-main)' }}>No hay SKUs registrados aún</p>
-                  <p style={{ fontSize: '0.82rem', color: 'var(--text-dim)' }}>
+                  <p style={{ fontSize: '0.8rem', color: 'var(--text-dim)' }}>
                     Presiona &quot;1. Extraer SKUs Masivos&quot; en el panel superior.
                   </p>
                 </td>
               </tr>
             ) : (
-              skus.map((sku) => (
-                <tr
-                  key={sku.id}
-                  style={{ borderBottom: '1px solid var(--border-subtle)', transition: 'background 0.15s ease' }}
-                  onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(255, 255, 255, 0.03)')}
-                  onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
-                >
-                  <td style={{ padding: '0.85rem 1.25rem', fontFamily: 'var(--font-mono)', fontWeight: 700, color: '#ffffff' }}>
-                    {sku.id}
+              skus.map((sku) => {
+                const isUnderSafety = (sku.safety_stock || 0) > 0 && (sku.total_stock || 0) < sku.safety_stock;
+
+                return (
+                  <tr
+                    key={sku.id}
+                    style={{
+                      borderBottom: '1px solid var(--border-subtle)',
+                      background: isUnderSafety ? 'rgba(251, 191, 36, 0.05)' : 'transparent',
+                      transition: 'background 0.15s ease',
+                    }}
+                    onMouseEnter={(e) =>
+                      (e.currentTarget.style.background = isUnderSafety ? 'rgba(251, 191, 36, 0.1)' : 'rgba(255, 255, 255, 0.03)')
+                    }
+                    onMouseLeave={(e) =>
+                      (e.currentTarget.style.background = isUnderSafety ? 'rgba(251, 191, 36, 0.05)' : 'transparent')
+                    }
+                  >
+                    <td style={{ padding: '0.45rem 0.35rem', fontFamily: 'var(--font-mono)', fontWeight: 700, color: '#ffffff', borderRight: '1px solid rgba(255, 255, 255, 0.04)', whiteSpace: 'nowrap' }}>
+                      {sku.id}
+                    </td>
+                    <td style={{ padding: '0.45rem 0.35rem', color: 'var(--text-main)', fontSize: '0.76rem', borderRight: '1px solid rgba(255, 255, 255, 0.04)', maxWidth: '160px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={sku.description || ''}>
+                      {sku.description || <span style={{ color: 'var(--text-dim)', fontStyle: 'italic' }}>Sin descripción</span>}
+                    </td>
+                    <td style={{ padding: '0.45rem 0.35rem', textAlign: 'center', borderRight: '1px solid rgba(255, 255, 255, 0.04)', whiteSpace: 'nowrap' }}>
+                      {(sku.safety_stock || 0) > 0 ? (
+                        <span className={`badge ${isUnderSafety ? 'badge-rose' : 'badge-amber'}`} style={{ fontSize: '0.7rem', gap: '0.2rem', padding: '0.15rem 0.35rem' }} title={isUnderSafety ? 'Alerta: Disponible por debajo del Stock de Seguridad' : 'Stock de Seguridad configurado'}>
+                          {isUnderSafety && '⚠️ '}
+                          {sku.safety_stock.toLocaleString('es-NI')}
+                        </span>
+                      ) : (
+                        <span style={{ color: 'var(--text-dim)', fontSize: '0.75rem' }}>0</span>
+                      )}
+                    </td>
+                    <td style={{ padding: '0.45rem 0.35rem', borderRight: '1px solid rgba(255, 255, 255, 0.04)', whiteSpace: 'nowrap' }}>
+                      {sku.is_active !== false ? (
+                        <span className="badge badge-emerald" style={{ gap: '0.2rem', fontSize: '0.7rem', padding: '0.15rem 0.4rem' }}>
+                          <CheckCircle2 size={11} /> Activo
+                        </span>
+                      ) : (
+                        <span className="badge badge-rose" style={{ gap: '0.2rem', fontSize: '0.7rem', padding: '0.15rem 0.4rem' }}>
+                          <XCircle size={11} /> Inactivo
+                        </span>
+                      )}
+                    </td>
+
+                  {/* Mega */}
+                  <td style={{ padding: '0.45rem 0.25rem', textAlign: 'right' }}>
+                    {renderQtyCell(sku.wh1_total, 'total')}
                   </td>
-                  <td style={{ padding: '0.85rem 1.25rem' }}>
-                    {sku.is_active !== false ? (
-                      <span className="badge badge-emerald" style={{ gap: '0.3rem', fontSize: '0.78rem' }}>
-                        <CheckCircle2 size={13} /> Activo
-                      </span>
-                    ) : (
-                      <span className="badge badge-rose" style={{ gap: '0.3rem', fontSize: '0.78rem' }}>
-                        <XCircle size={13} /> Inactivo
-                      </span>
-                    )}
+                  <td style={{ padding: '0.45rem 0.25rem', textAlign: 'right' }}>
+                    {renderQtyCell(sku.wh1_reserved, 'reserved')}
                   </td>
-                  <td style={{ padding: '0.85rem 1.25rem' }}>
-                    {renderStockBadge(sku.stock_wh1, 'wh1')}
+                  <td style={{ padding: '0.45rem 0.25rem', textAlign: 'right', borderRight: '1px solid rgba(255, 255, 255, 0.06)' }}>
+                    {renderQtyCell(sku.stock_wh1, 'available')}
                   </td>
-                  <td style={{ padding: '0.85rem 1.25rem' }}>
-                    {renderStockBadge(sku.stock_wh2, 'wh2')}
+
+                  {/* Cedis */}
+                  <td style={{ padding: '0.45rem 0.25rem', textAlign: 'right' }}>
+                    {renderQtyCell(sku.wh2_total, 'total')}
                   </td>
-                  <td style={{ padding: '0.85rem 1.25rem' }}>
-                    {renderStockBadge(sku.total_stock, 'total')}
+                  <td style={{ padding: '0.45rem 0.25rem', textAlign: 'right' }}>
+                    {renderQtyCell(sku.wh2_reserved, 'reserved')}
                   </td>
-                  <td style={{ padding: '0.85rem 1.25rem', color: 'var(--text-dim)', fontSize: '0.82rem' }}>
+                  <td style={{ padding: '0.45rem 0.25rem', textAlign: 'right', borderRight: '1px solid rgba(255, 255, 255, 0.06)' }}>
+                    {renderQtyCell(sku.stock_wh2, 'available')}
+                  </td>
+
+                  {/* Totales */}
+                  <td style={{ padding: '0.45rem 0.25rem', textAlign: 'right' }}>
+                    {renderQtyCell(sku.total_quantity, 'total')}
+                  </td>
+                  <td style={{ padding: '0.45rem 0.25rem', textAlign: 'right' }}>
+                    {renderQtyCell(sku.total_reserved, 'reserved')}
+                  </td>
+                  <td style={{ padding: '0.45rem 0.25rem', textAlign: 'right', borderRight: '1px solid rgba(255, 255, 255, 0.06)' }}>
+                    {renderQtyCell(sku.total_stock, 'available')}
+                  </td>
+
+                  <td style={{ padding: '0.45rem 0.35rem', color: 'var(--text-dim)', fontSize: '0.72rem', borderRight: '1px solid rgba(255, 255, 255, 0.04)', whiteSpace: 'nowrap' }}>
                     {sku.inventory_updated_at
-                      ? new Date(sku.inventory_updated_at).toLocaleString('es-NI', { dateStyle: 'short', timeStyle: 'medium' })
+                      ? new Date(sku.inventory_updated_at).toLocaleDateString('es-NI', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
                       : 'Pendiente'}
                   </td>
-                  <td style={{ padding: '0.85rem 1.25rem', textAlign: 'right' }}>
+                  <td style={{ padding: '0.45rem 0.35rem', textAlign: 'right', whiteSpace: 'nowrap' }}>
                     <button
                       onClick={() => handleSingleSkuRefresh(sku.id)}
                       disabled={updatingSkuId === sku.id}
                       className="btn-secondary"
-                      style={{ padding: '0.35rem 0.65rem', fontSize: '0.8rem', borderRadius: '8px' }}
+                      style={{ padding: '0.25rem 0.45rem', fontSize: '0.72rem', borderRadius: '6px' }}
                       title={`Consultar inventario en VTEX para SKU ${sku.id}`}
                     >
-                      <RefreshCw size={13} className={updatingSkuId === sku.id ? 'animate-spin' : ''} />
-                      {updatingSkuId === sku.id ? 'Consultando...' : 'Actualizar Stock'}
+                      <RefreshCw size={11} className={updatingSkuId === sku.id ? 'animate-spin' : ''} />
+                      {updatingSkuId === sku.id ? 'Cargando' : 'Actualizar'}
                     </button>
                   </td>
                 </tr>
-              ))
+              );
+              })
             )}
           </tbody>
         </table>

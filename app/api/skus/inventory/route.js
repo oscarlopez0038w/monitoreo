@@ -75,9 +75,15 @@ export async function POST(request) {
     const rowsToUpdate = results.map((item) => ({
       id: typeof item.skuId === 'number' ? item.skuId : parseInt(item.skuId, 10),
       is_active: item.isActive,
-      stock_wh1: item.stockWh1,
-      stock_wh2: item.stockWh2,
-      total_stock: item.totalStock,
+      wh1_total: item.wh1Total ?? 0,
+      wh1_reserved: item.wh1Reserved ?? 0,
+      stock_wh1: item.stockWh1 ?? 0,
+      wh2_total: item.wh2Total ?? 0,
+      wh2_reserved: item.wh2Reserved ?? 0,
+      stock_wh2: item.stockWh2 ?? 0,
+      total_quantity: item.totalQuantity ?? 0,
+      total_reserved: item.totalReserved ?? 0,
+      total_stock: item.totalStock ?? 0,
       inventory_detail: item.balance,
       inventory_updated_at: new Date().toISOString(),
     }));

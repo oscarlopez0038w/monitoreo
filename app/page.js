@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from 'react';
 import Header from '@/components/Header';
-import StatsCards from '@/components/StatsCards';
 import SyncPanel from '@/components/SyncPanel';
 import SkuTable from '@/components/SkuTable';
 
@@ -36,7 +35,7 @@ export default function Home() {
   };
 
   return (
-    <main style={{ maxWidth: '1240px', margin: '0 auto', padding: '2rem 1.5rem', width: '100%' }}>
+    <main style={{ maxWidth: '1700px', margin: '0 auto', padding: '1.5rem 1rem', width: '100%' }}>
       {/* Encabezado Principal */}
       <Header
         vtexStatus={stats?.vtex}
@@ -44,15 +43,14 @@ export default function Home() {
         onRefreshStats={handleRefresh}
       />
 
-      {/* Tarjetas de Métricas */}
-      <StatsCards stats={stats} loading={loadingStats && !stats} />
-
       {/* Control de Sincronización y Registro en Vivo */}
       <SyncPanel
         onSyncCompleted={handleRefresh}
         vtexReady={stats?.vtex?.configured}
         supabaseReady={stats?.supabase?.configured}
         initialTotalSkus={stats?.supabase?.totalSkus || 0}
+        activeSkus={stats?.supabase?.activeSkus || 0}
+        lastUpdated={stats?.supabase?.lastUpdated}
       />
 
       {/* Explorador y Tabla de SKUs */}

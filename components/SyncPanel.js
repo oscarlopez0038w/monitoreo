@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { Play, Pause, RefreshCw, Terminal, AlertTriangle, Warehouse } from 'lucide-react';
 
-export default function SyncPanel({ onSyncCompleted, vtexReady, supabaseReady, initialTotalSkus = 0 }) {
+export default function SyncPanel({ onSyncCompleted, vtexReady, supabaseReady, initialTotalSkus = 0, activeSkus = 0, lastUpdated = null }) {
   const [syncingCatalog, setSyncingCatalog] = useState(false);
   const [syncingInventory, setSyncingInventory] = useState(false);
   const [paused, setPaused] = useState(false);
@@ -14,6 +14,10 @@ export default function SyncPanel({ onSyncCompleted, vtexReady, supabaseReady, i
   const [statusMessage, setStatusMessage] = useState('Listo para operar.');
 
   const isPausedRef = useRef(paused);
+
+  const formattedLastUpdated = lastUpdated
+    ? new Date(lastUpdated).toLocaleString('es-NI', { dateStyle: 'short', timeStyle: 'medium' })
+    : 'Pendiente';
 
   useEffect(() => {
     isPausedRef.current = paused;
@@ -155,22 +159,22 @@ export default function SyncPanel({ onSyncCompleted, vtexReady, supabaseReady, i
   const displaySkuCount = syncingCatalog ? totalFetched : (totalFetched > 0 ? totalFetched : initialTotalSkus);
 
   return (
-    <div className="glass-card" style={{ padding: '1.75rem', marginBottom: '2rem' }}>
+    <div className="glass-card" style={{ padding: '1.5rem', marginBottom: '1.5rem' }}>
       
       {/* Panel Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', flexWrap: 'wrap', gap: '1rem' }}>
         <div>
-          <h2 style={{ fontSize: '1.2rem', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            <RefreshCw size={20} className={isAnySyncing ? 'animate-spin' : ''} color="var(--accent-primary)" />
+          <h2 style={{ fontSize: '1.15rem', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <RefreshCw size={19} className={isAnySyncing ? 'animate-spin' : ''} color="var(--accent-primary)" />
             Centro de Extracción e Inventario por Bodegas
           </h2>
           <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
-            Extrae SKUs e inventario de Bodega 1 y Bodega 2 desde VTEX y guarda en Supabase.
+            Extrae SKUs e inventario de Bodega Mega y Bodega Cedis desde VTEX y guarda en Supabase.
           </p>
         </div>
 
         {/* Action Controls */}
-        <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', gap: '0.65rem', flexWrap: 'wrap', width: '100%', maxWidth: 'max-content' }} className="responsive-flex-stack">
           {!isAnySyncing ? (
             <>
               <button
@@ -228,27 +232,34 @@ export default function SyncPanel({ onSyncCompleted, vtexReady, supabaseReady, i
         </div>
       )}
 
-      {/* Live Sync Progress Info */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '1rem', marginBottom: '1.25rem' }}>
-        <div style={{ background: 'rgba(15, 23, 42, 0.5)', padding: '1rem', borderRadius: '12px', border: '1px solid var(--border-subtle)' }}>
-          <span style={{ fontSize: '0.75rem', color: 'var(--text-dim)', textTransform: 'uppercase', fontWeight: 600 }}>Página Catálogo</span>
-          <div style={{ fontSize: '1.3rem', fontWeight: 700, color: 'var(--accent-primary)', marginTop: '0.2rem' }}>
-            Página {currentPage}
-          </div>
-        </div>
-
+      {/* Live Sync Progress Info Cards */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem', marginBottom: '1.25rem' }}>
         <div style={{ background: 'rgba(15, 23, 42, 0.5)', padding: '1rem', borderRadius: '12px', border: '1px solid var(--border-subtle)' }}>
           <span style={{ fontSize: '0.75rem', color: 'var(--text-dim)', textTransform: 'uppercase', fontWeight: 600 }}>
-            {syncingInventory ? 'Inventarios Actualizados' : 'SKUs en Supabase'}
+            {syncingInventory ? 'Inventarios Actualizados' : 'Total SKUs en BD'}
           </span>
-          <div style={{ fontSize: '1.3rem', fontWeight: 700, color: 'var(--accent-emerald)', marginTop: '0.2rem' }}>
+          <div style={{ fontSize: '1.35rem', fontWeight: 700, color: 'var(--accent-primary)', marginTop: '0.2rem' }}>
             {syncingInventory ? inventoryProcessed.toLocaleString() : displaySkuCount.toLocaleString()}
           </div>
         </div>
 
         <div style={{ background: 'rgba(15, 23, 42, 0.5)', padding: '1rem', borderRadius: '12px', border: '1px solid var(--border-subtle)' }}>
+          <span style={{ fontSize: '0.75rem', color: 'var(--text-dim)', textTransform: 'uppercase', fontWeight: 600 }}>Página Catálogo</span>
+          <div style={{ fontSize: '1.35rem', fontWeight: 700, color: '#a5b4fc', marginTop: '0.2rem' }}>
+            Página {currentPage}
+          </div>
+        </div>
+
+        <div style={{ background: 'rgba(15, 23, 42, 0.5)', padding: '1rem', borderRadius: '12px', border: '1px solid var(--border-subtle)' }}>
+          <span style={{ fontSize: '0.75rem', color: 'var(--text-dim)', textTransform: 'uppercase', fontWeight: 600 }}>Última Sincronización</span>
+          <div style={{ fontSize: '0.95rem', fontWeight: 600, color: '#e2e8f0', marginTop: '0.4rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            {formattedLastUpdated}
+          </div>
+        </div>
+
+        <div style={{ background: 'rgba(15, 23, 42, 0.5)', padding: '1rem', borderRadius: '12px', border: '1px solid var(--border-subtle)' }}>
           <span style={{ fontSize: '0.75rem', color: 'var(--text-dim)', textTransform: 'uppercase', fontWeight: 600 }}>Estado de Avance</span>
-          <div style={{ fontSize: '0.9rem', fontWeight: 500, color: 'var(--text-muted)', marginTop: '0.4rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+          <div style={{ fontSize: '0.9rem', fontWeight: 500, color: 'var(--accent-amber)', marginTop: '0.4rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
             {statusMessage}
           </div>
         </div>

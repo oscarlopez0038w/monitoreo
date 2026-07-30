@@ -9,11 +9,13 @@ export async function GET() {
     const vtexConfig = getVtexConfig();
 
     let totalSkusInDb = 0;
+    let activeSkusInDb = 0;
+    let safetySkusInDb = 0;
     let lastUpdated = null;
     let dbError = null;
 
     if (supabaseReady) {
-      // Conteo exacto en PostgREST usando .limit(1) para leer el Content-Range exacto de PostgreSQL
+      // Conteo exacto total
       const { count, error } = await supabaseAdmin
         .from('vtex_skus')
         .select('id', { count: 'exact' })
@@ -24,6 +26,24 @@ export async function GET() {
       } else {
         totalSkusInDb = count || 0;
       }
+
+      // Conteo de SKUs activos (is_active !== false)
+      const { count: activeCount } = await supabaseAdmin
+        .from('vtex_skus')
+        .select('id', { count: 'exact' })
+        .neq('is_active', false)
+        .limit(1);
+
+      activeSkusInDb = activeCount || 0;
+
+      // Conteo de SKUs con Stock de Seguridad configurado (> 0)
+      const { count: safetyCount } = await supabaseAdmin
+        .from('vtex_skus')
+        .select('id', { count: 'exact' })
+        .gt('safety_stock', 0)
+        .limit(1);
+
+      safetySkusInDb = safetyCount || 0;
 
       // Obtener la fecha más reciente de actualización de inventario o registro
       const { data: latestRecord } = await supabaseAdmin
@@ -48,6 +68,8 @@ export async function GET() {
       supabase: {
         configured: supabaseReady,
         totalSkus: totalSkusInDb,
+        activeSkus: activeSkusInDb,
+        safetySkus: safetySkusInDb,
         lastUpdated,
         dbError,
       },
