@@ -108,12 +108,25 @@ export async function GET(request) {
     let socialSellingRevenue = 0;
 
     currOrders.forEach((o) => {
+      const mData = o.marketingData || {};
+      const mTags = Array.isArray(mData.marketingTags)
+        ? mData.marketingTags
+        : Array.isArray(o.marketingTags)
+        ? o.marketingTags
+        : [];
+
+      const mTagsStr = JSON.stringify(mTags).toLowerCase();
+      const objStr = JSON.stringify(o).toLowerCase();
+
       const isSocial =
-        Boolean(o.utmiCampaign) ||
-        Boolean(o.utmSource) ||
-        Boolean(o.coupon) ||
-        String(o.hostname || '').toLowerCase().includes('vendedor') ||
-        String(o.origin || '').toLowerCase().includes('social');
+        mTagsStr.includes('vtexsocialselling') ||
+        mTagsStr.includes('socialselling') ||
+        objStr.includes('vtexsocialselling') ||
+        objStr.includes('socialselling') ||
+        Boolean(o.utmiCampaign || mData.utmiCampaign) ||
+        Boolean(o.utmSource || mData.utmSource) ||
+        Boolean(o.coupon || mData.coupon) ||
+        Boolean(o.callCenterOperatorData);
 
       if (isSocial) {
         socialSellingOrdersCount++;
