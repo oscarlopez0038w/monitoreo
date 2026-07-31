@@ -199,10 +199,39 @@ body {
   animation: spin 0.9s linear infinite;
 }
 
-/* Responsive Grid & Containers */
+/* Responsive Grid, Touch Targets & Mobile Drawer */
 @media (max-width: 768px) {
+  body {
+    font-size: 14px;
+  }
+
   .glass-card {
-    padding: 1.1rem !important;
+    padding: 1rem !important;
     border-radius: 14px !important;
   }
+
+  .glass-input, .btn-primary, .btn-secondary, select.glass-input {
+    min-height: 44px;
+    font-size: 14px !important;
+  }
+
+  .mobile-hide {
+    display: none !important;
+  }
+}
+
+/* Animations for Mobile Navigation Drawer */
+@keyframes slideInLeft {
+  from {
+    transform: translateX(-100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+.animate-drawer-in {
+  animation: slideInLeft 0.28s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }

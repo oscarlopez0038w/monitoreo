@@ -158,7 +158,7 @@ export default function SkuTable({ onRefreshNeeded, refreshTrigger }) {
       </div>
 
       {/* Table Element */}
-      <div style={{ overflowX: 'auto', borderRadius: '12px', border: '1px solid var(--border-subtle)', width: '100%' }}>
+      <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch', borderRadius: '12px', border: '1px solid var(--border-subtle)', width: '100%' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.78rem', tableLayout: 'auto' }}>
           <thead>
             {/* Fila 1: Encabezados Principales y Grupos */}

@@ -409,7 +409,7 @@ export default function OrdenesPage() {
 
         {/* Orders Table */}
         <div className="glass-card" style={{ padding: '1.25rem' }}>
-          <div style={{ overflowX: 'auto', borderRadius: '12px', border: '1px solid var(--border-subtle)', width: '100%' }}>
+          <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch', borderRadius: '12px', border: '1px solid var(--border-subtle)', width: '100%' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.8rem', tableLayout: 'auto' }}>
               <thead>
                 <tr style={{ background: 'rgba(15, 23, 42, 0.95)', borderBottom: '1px solid var(--border-subtle)', color: 'var(--text-muted)', fontSize: '0.72rem', textTransform: 'uppercase' }}>
