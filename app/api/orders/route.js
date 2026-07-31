@@ -38,8 +38,8 @@ export async function GET(request) {
     const searchParam = searchParams.get('search') || '';
     const pageParam = parseInt(searchParams.get('page') || '1', 10);
 
-    const startIso = new Date(`${startDateParam}T00:00:00.000Z`).toISOString();
-    const endIso = new Date(`${endDateParam}T23:59:59.999Z`).toISOString();
+    const startIso = new Date(`${startDateParam}T00:00:00-06:00`).toISOString();
+    const endIso = new Date(`${endDateParam}T23:59:59-06:00`).toISOString();
 
     const ordersData = await fetchVtexOrders(
       startIso,

@@ -80,6 +80,11 @@ export default function OrdenesPage() {
                 updated[idx] = { ...updated[idx], ...realtimeOrder };
                 return updated;
               }
+              // Si es una orden totalmente nueva, incrementamos la cuenta total en tiempo real
+              setPaging((prevPaging) => ({
+                ...prevPaging,
+                total: (prevPaging.total || 0) + 1,
+              }));
               return [realtimeOrder, ...prev];
             });
 
