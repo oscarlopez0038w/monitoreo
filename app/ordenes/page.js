@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import AppLayout from '@/components/AppLayout';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
-import { ShoppingCart, Calendar, Filter, Search, RefreshCw, ChevronDown, ChevronUp, Package, DollarSign, CheckCircle2, Clock, AlertTriangle, FileText, Zap, Radio, X, MessageSquare, Info } from 'lucide-react';
+import { ShoppingCart, Calendar, Filter, Search, RefreshCw, ChevronDown, ChevronUp, Package, DollarSign, CheckCircle2, Clock, AlertTriangle, FileText, Zap, Radio, X, MessageSquare, Info, Download } from 'lucide-react';
 
 export default function OrdenesPage() {
   const now = new Date();
@@ -243,6 +243,17 @@ export default function OrdenesPage() {
               <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
               Actualizar Órdenes
             </button>
+
+            <a
+              href={`/api/orders/export-canceled?startDate=${startDate}&endDate=${endDate}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="btn-secondary"
+              style={{ padding: '0.45rem 0.85rem', fontSize: '0.82rem', color: '#fb7185', borderColor: 'rgba(251, 113, 133, 0.45)', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}
+            >
+              <Download size={14} />
+              Exportar Canceladas (.CSV)
+            </a>
           </div>
         </div>
 
@@ -376,8 +387,19 @@ export default function OrdenesPage() {
             </div>
           </div>
 
-          <div className="glass-card" style={{ padding: '1rem' }}>
-            <span style={{ fontSize: '0.75rem', color: 'var(--text-dim)', textTransform: 'uppercase', fontWeight: 600 }}>Canceladas</span>
+          <div className="glass-card" style={{ padding: '1rem', position: 'relative' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontSize: '0.75rem', color: 'var(--text-dim)', textTransform: 'uppercase', fontWeight: 600 }}>Canceladas</span>
+              <a
+                href={`/api/orders/export-canceled?startDate=${startDate}&endDate=${endDate}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{ fontSize: '0.7rem', color: '#fb7185', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '0.2rem', fontWeight: 600 }}
+                title="Descargar reporte Excel / CSV de órdenes canceladas"
+              >
+                <Download size={12} /> CSV Excel
+              </a>
+            </div>
             <div style={{ fontSize: '1.4rem', fontWeight: 700, color: '#fb7185', marginTop: '0.2rem' }}>
               {canceledCount.toLocaleString()}
             </div>
