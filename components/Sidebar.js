@@ -2,12 +2,18 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Layers, ShieldAlert, Tag, ShoppingCart, Zap, Database, ShieldCheck, AlertCircle } from 'lucide-react';
+import { LayoutDashboard, Layers, ShieldAlert, Tag, ShoppingCart, Zap, Database, ShieldCheck, AlertCircle } from 'lucide-react';
 
 export default function Sidebar({ vtexStatus, supabaseStatus }) {
   const pathname = usePathname();
 
   const navItems = [
+    {
+      label: 'Dashboard Ventas',
+      href: '/dashboard',
+      icon: LayoutDashboard,
+      color: '#38bdf8',
+    },
     {
       label: 'Inventario & SKUs',
       href: '/',
