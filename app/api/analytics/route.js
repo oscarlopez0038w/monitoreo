@@ -5,13 +5,13 @@ export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
 // Función para obtener TODAS las órdenes de un período paginando por lotes de 100 en 100
-async function fetchAllPeriodOrders(startIso, endIso) {
+async function fetchAllPeriodOrders(startIso, endIso, extraParams = '') {
   let allOrders = [];
   let page = 1;
   let maxPages = 15; // Límite de seguridad (hasta 1,500 órdenes por mes)
 
   while (page <= maxPages) {
-    const res = await fetchVtexOrders(startIso, endIso, '', '', page, 100).catch(() => null);
+    const res = await fetchVtexOrders(startIso, endIso, '', '', page, 100, extraParams).catch(() => null);
     if (!res || !res.list || res.list.length === 0) break;
 
     allOrders.push(...res.list);
@@ -58,10 +58,13 @@ export async function GET(request) {
     const prevStartIso = new Date(`${prevStartStr}T00:00:00-06:00`).toISOString();
     const prevEndIso = new Date(`${prevEndStr}T23:59:59-06:00`).toISOString();
 
-    // Consultar TODAS las órdenes del mes actual y del mes anterior en paralelo
+    // Consultar TODAS las órdenes del mes actual y del mes anterior en paralelo, incluyendo filtros específicos para Social Selling
     const [
       currOrders,
       prevOrders,
+      currSocialTagRes,
+      currUtmiRes,
+      currUtmSourceRes,
       currInvoicedRes,
       currHandlingRes,
       currReadyRes,
@@ -71,6 +74,9 @@ export async function GET(request) {
     ] = await Promise.all([
       fetchAllPeriodOrders(currentStartIso, currentEndIso),
       fetchAllPeriodOrders(prevStartIso, prevEndIso),
+      fetchAllPeriodOrders(currentStartIso, currentEndIso, 'f_marketingTags=vtexSocialSelling').catch(() => []),
+      fetchAllPeriodOrders(currentStartIso, currentEndIso, 'f_UtmiCampaign=vtexSocialSelling').catch(() => []),
+      fetchAllPeriodOrders(currentStartIso, currentEndIso, 'f_UtmSource=vtexSocialSelling').catch(() => []),
       fetchVtexOrders(currentStartIso, currentEndIso, 'invoiced', '', 1, 1).catch(() => null),
       fetchVtexOrders(currentStartIso, currentEndIso, 'handling', '', 1, 1).catch(() => null),
       fetchVtexOrders(currentStartIso, currentEndIso, 'ready-for-handling', '', 1, 1).catch(() => null),
@@ -103,40 +109,33 @@ export async function GET(request) {
     const currCancelRate = currTotalOrders > 0 ? (currCanceledCount / currTotalOrders) * 100 : 0;
     const prevCancelRate = prevTotalOrders > 0 ? (prevCanceledCount / prevTotalOrders) * 100 : 0;
 
-    // Analizar Social Selling (vendedores, cupones, UTMs) en el total de órdenes reales
-    let socialSellingOrdersCount = 0;
-    let socialSellingRevenue = 0;
+    // Deduplicar órdenes identificadas por filtros de Social Selling en VTEX OMS
+    const socialMap = new Map();
+    [...(currSocialTagRes || []), ...(currUtmiRes || []), ...(currUtmSourceRes || [])].forEach((o) => {
+      if (o && o.orderId) socialMap.set(o.orderId, o);
+    });
 
+    // También revisar en currOrders si alguna orden en la lista trae banderas de social
     currOrders.forEach((o) => {
-      const mData = o.marketingData || {};
-      const mTags = Array.isArray(mData.marketingTags)
-        ? mData.marketingTags
-        : Array.isArray(o.marketingTags)
-        ? o.marketingTags
-        : [];
-
-      const mTagsStr = JSON.stringify(mTags).toLowerCase();
       const objStr = JSON.stringify(o).toLowerCase();
-
-      const isSocial =
-        mTagsStr.includes('vtexsocialselling') ||
-        mTagsStr.includes('socialselling') ||
+      if (
         objStr.includes('vtexsocialselling') ||
         objStr.includes('socialselling') ||
-        Boolean(o.utmiCampaign || mData.utmiCampaign) ||
-        Boolean(o.utmSource || mData.utmSource) ||
-        Boolean(o.coupon || mData.coupon) ||
-        Boolean(o.callCenterOperatorData);
-
-      if (isSocial) {
-        socialSellingOrdersCount++;
-        socialSellingRevenue += o.totalValue ? o.totalValue / 100 : 0;
+        Boolean(o.utmiCampaign) ||
+        Boolean(o.utmSource) ||
+        Boolean(o.coupon)
+      ) {
+        socialMap.set(o.orderId, o);
       }
     });
 
+    const socialOrdersList = Array.from(socialMap.values());
+    const socialSellingOrdersCount = socialOrdersList.length;
+    const socialSellingRevenue = socialOrdersList.reduce((sum, o) => sum + (o.totalValue ? o.totalValue / 100 : 0), 0);
+
     const socialSellingPct = currTotalOrders > 0 ? (socialSellingOrdersCount / currTotalOrders) * 100 : 0;
     const webDirectPct = 100 - socialSellingPct;
-    const webDirectRevenue = currTotalRevenue - socialSellingRevenue;
+    const webDirectRevenue = Math.max(0, currTotalRevenue - socialSellingRevenue);
 
     // Función auxiliar para calcular porcentaje de cambio
     const calcChange = (curr, prev) => {
@@ -179,10 +178,12 @@ export async function GET(request) {
       },
       channels: {
         socialSelling: {
+          count: socialSellingOrdersCount,
           pct: parseFloat(socialSellingPct.toFixed(1)),
           revenue: parseFloat(socialSellingRevenue.toFixed(2)),
         },
         webDirect: {
+          count: currTotalOrders - socialSellingOrdersCount,
           pct: parseFloat(webDirectPct.toFixed(1)),
           revenue: parseFloat(webDirectRevenue.toFixed(2)),
         },
