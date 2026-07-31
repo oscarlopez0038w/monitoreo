@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import AppLayout from '@/components/AppLayout';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
-import { ShoppingCart, Calendar, Filter, Search, RefreshCw, ChevronDown, ChevronUp, Package, DollarSign, CheckCircle2, Clock, AlertTriangle, FileText, Zap, Radio, X } from 'lucide-react';
+import { ShoppingCart, Calendar, Filter, Search, RefreshCw, ChevronDown, ChevronUp, Package, DollarSign, CheckCircle2, Clock, AlertTriangle, FileText, Zap, Radio, X, MessageSquare, Info } from 'lucide-react';
 
 export default function OrdenesPage() {
   const now = new Date();
@@ -472,12 +472,60 @@ export default function OrdenesPage() {
                                   <RefreshCw size={14} className="animate-spin" color="var(--accent-primary)" />
                                   Obteniendo items e información de inventario para la orden {order.orderId}...
                                 </div>
-                              ) : detail?.items ? (
+                              ) : detail ? (
                                 <div>
-                                  <h4 style={{ fontSize: '0.85rem', fontWeight: 600, color: '#ffffff', marginBottom: '0.6rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                                    <Package size={15} color="var(--accent-primary)" />
-                                    Desglose de SKUs Comprados ({detail.items.length} productos)
-                                  </h4>
+                                  {/* Banner de Motivo de Cancelación y Comentarios / Notas de la Orden */}
+                                  {((order.status === 'canceled') || detail.cancelReason || detail.cancellationData || detail.openTextField) && (
+                                    <div
+                                      style={{
+                                        marginBottom: '1rem',
+                                        padding: '0.85rem 1rem',
+                                        borderRadius: '8px',
+                                        background: order.status === 'canceled' ? 'rgba(248, 113, 113, 0.08)' : 'rgba(56, 189, 248, 0.08)',
+                                        border: `1px solid ${order.status === 'canceled' ? 'rgba(248, 113, 113, 0.3)' : 'rgba(56, 189, 248, 0.3)'}`,
+                                        fontSize: '0.82rem',
+                                        display: 'flex',
+                                        flexDirection: 'column',
+                                        gap: '0.5rem',
+                                      }}
+                                    >
+                                      {/* Motivo de Cancelación */}
+                                      {order.status === 'canceled' && (
+                                        <div style={{ color: '#fb7185', fontWeight: 600, display: 'flex', alignItems: 'flex-start', gap: '0.4rem' }}>
+                                          <AlertTriangle size={15} style={{ flexShrink: 0, marginTop: '2px' }} />
+                                          <div>
+                                            <span>Motivo de Cancelación VTEX: </span>
+                                            <span style={{ color: '#ffffff', fontWeight: 400 }}>
+                                              {detail.cancelReason ||
+                                                (typeof detail.cancellationData === 'object' ? detail.cancellationData?.reason : detail.cancellationData) ||
+                                                (typeof detail.openTextField === 'object' ? detail.openTextField?.value : detail.openTextField) ||
+                                                'Sin motivo registrado por el sistema'}
+                                            </span>
+                                          </div>
+                                        </div>
+                                      )}
+
+                                      {/* Comentarios / Observaciones de la Orden */}
+                                      {(detail.openTextField || detail.customData) && (
+                                        <div style={{ color: '#38bdf8', fontWeight: 600, display: 'flex', alignItems: 'flex-start', gap: '0.4rem' }}>
+                                          <MessageSquare size={15} style={{ flexShrink: 0, marginTop: '2px' }} />
+                                          <div>
+                                            <span>Comentario / Notas de la Orden: </span>
+                                            <span style={{ color: '#ffffff', fontWeight: 400 }}>
+                                              {typeof detail.openTextField === 'object' ? detail.openTextField?.value : (detail.openTextField || JSON.stringify(detail.customData))}
+                                            </span>
+                                          </div>
+                                        </div>
+                                      )}
+                                    </div>
+                                  )}
+
+                                  {detail.items && (
+                                    <>
+                                      <h4 style={{ fontSize: '0.85rem', fontWeight: 600, color: '#ffffff', marginBottom: '0.6rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                                        <Package size={15} color="var(--accent-primary)" />
+                                        Desglose de SKUs Comprados ({detail.items.length} productos)
+                                      </h4>
 
                                   <div style={{ borderRadius: '8px', border: '1px solid var(--border-subtle)', overflow: 'hidden', background: '#04070d' }}>
                                     <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.78rem', textAlign: 'left' }}>
@@ -518,7 +566,9 @@ export default function OrdenesPage() {
                                       </tbody>
                                     </table>
                                   </div>
-                                </div>
+                                 </>
+                               )}
+                             </div>
                               ) : (
                                 <span style={{ color: 'var(--text-dim)', fontSize: '0.8rem' }}>No se pudo cargar el detalle de items.</span>
                               )}
