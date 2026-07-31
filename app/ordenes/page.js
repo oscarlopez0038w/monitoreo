@@ -22,7 +22,7 @@ export default function OrdenesPage() {
   const [orderDetails, setOrderDetails] = useState({});
   const [loadingDetailId, setLoadingDetailId] = useState(null);
   const [liveBanner, setLiveBanner] = useState(null);
-  const [globalStats, setGlobalStats] = useState({ total: 0, invoiced: 0, handling: 0, canceled: 0 });
+  const [globalStats, setGlobalStats] = useState({ total: 0, invoiced: 0, handling: 0, readyForHandling: 0, canceled: 0 });
 
   const fetchOrders = async (page = 1) => {
     setLoading(true);
@@ -92,7 +92,8 @@ export default function OrdenesPage() {
               setGlobalStats((prevStats) => ({
                 total: (prevStats.total || 0) + 1,
                 invoiced: realtimeOrder.status === 'invoiced' ? (prevStats.invoiced || 0) + 1 : (prevStats.invoiced || 0),
-                handling: (realtimeOrder.status === 'handling' || realtimeOrder.status === 'ready-for-handling') ? (prevStats.handling || 0) + 1 : (prevStats.handling || 0),
+                handling: realtimeOrder.status === 'handling' ? (prevStats.handling || 0) + 1 : (prevStats.handling || 0),
+                readyForHandling: realtimeOrder.status === 'ready-for-handling' ? (prevStats.readyForHandling || 0) + 1 : (prevStats.readyForHandling || 0),
                 canceled: realtimeOrder.status === 'canceled' ? (prevStats.canceled || 0) + 1 : (prevStats.canceled || 0),
               }));
               return [realtimeOrder, ...prev];
@@ -170,6 +171,7 @@ export default function OrdenesPage() {
   // Conteo global por estados en todo el mes
   const totalOrdersCount = globalStats.total || paging.total || orders.length;
   const invoicedCount = globalStats.invoiced || 0;
+  const readyCount = globalStats.readyForHandling || 0;
   const handlingCount = globalStats.handling || 0;
   const canceledCount = globalStats.canceled || 0;
 
@@ -182,10 +184,17 @@ export default function OrdenesPage() {
         </span>
       );
     }
-    if (s === 'handling' || s === 'ready-for-handling') {
+    if (s === 'ready-for-handling') {
+      return (
+        <span className="badge" style={{ background: 'rgba(56, 189, 248, 0.15)', color: '#38bdf8', border: '1px solid rgba(56, 189, 248, 0.3)', padding: '0.2rem 0.55rem', fontSize: '0.75rem' }}>
+          <Clock size={12} /> Lista para preparar (ready-for-handling)
+        </span>
+      );
+    }
+    if (s === 'handling') {
       return (
         <span className="badge badge-amber" style={{ padding: '0.2rem 0.55rem', fontSize: '0.75rem' }}>
-          <Clock size={12} /> En Preparación ({s})
+          <Clock size={12} /> En Preparación (handling)
         </span>
       );
     }
@@ -307,10 +316,12 @@ export default function OrdenesPage() {
                 onChange={(e) => setStatusFilter(e.target.value)}
               >
                 <option value="">Todos los Estados</option>
+                <option value="ready-for-handling">Lista para preparar (ready-for-handling)</option>
+                <option value="handling">En preparación (handling)</option>
                 <option value="invoiced">Facturada (invoiced)</option>
-                <option value="handling">En Preparación (handling)</option>
-                <option value="ready-for-handling">Lista para preparar</option>
                 <option value="canceled">Cancelada (canceled)</option>
+                <option value="approve-payment">Pago Aprobado (approve-payment)</option>
+                <option value="payment-pending">Pago Pendiente (payment-pending)</option>
               </select>
             </div>
 
@@ -335,7 +346,7 @@ export default function OrdenesPage() {
         </div>
 
         {/* Metric Cards Summary */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem', marginBottom: '1.5rem' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '1rem', marginBottom: '1.5rem' }}>
           
           <div className="glass-card" style={{ padding: '1rem' }}>
             <span style={{ fontSize: '0.75rem', color: 'var(--text-dim)', textTransform: 'uppercase', fontWeight: 600 }}>Total Órdenes</span>
@@ -352,7 +363,14 @@ export default function OrdenesPage() {
           </div>
 
           <div className="glass-card" style={{ padding: '1rem' }}>
-            <span style={{ fontSize: '0.75rem', color: 'var(--text-dim)', textTransform: 'uppercase', fontWeight: 600 }}>En Preparación (Handling)</span>
+            <span style={{ fontSize: '0.75rem', color: 'var(--text-dim)', textTransform: 'uppercase', fontWeight: 600 }}>Lista para Preparar</span>
+            <div style={{ fontSize: '1.4rem', fontWeight: 700, color: '#38bdf8', marginTop: '0.2rem' }}>
+              {readyCount.toLocaleString()}
+            </div>
+          </div>
+
+          <div className="glass-card" style={{ padding: '1rem' }}>
+            <span style={{ fontSize: '0.75rem', color: 'var(--text-dim)', textTransform: 'uppercase', fontWeight: 600 }}>En Preparación</span>
             <div style={{ fontSize: '1.4rem', fontWeight: 700, color: '#fbbf24', marginTop: '0.2rem' }}>
               {handlingCount.toLocaleString()}
             </div>

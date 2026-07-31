@@ -41,10 +41,11 @@ export async function GET(request) {
     const startIso = new Date(`${startDateParam}T00:00:00-06:00`).toISOString();
     const endIso = new Date(`${endDateParam}T23:59:59-06:00`).toISOString();
 
-    const [ordersData, invoicedRes, handlingRes, canceledRes] = await Promise.all([
+    const [ordersData, invoicedRes, handlingRes, readyRes, canceledRes] = await Promise.all([
       fetchVtexOrders(startIso, endIso, statusParam, searchParam, pageParam, 30),
       fetchVtexOrders(startIso, endIso, 'invoiced', '', 1, 1).catch(() => null),
       fetchVtexOrders(startIso, endIso, 'handling', '', 1, 1).catch(() => null),
+      fetchVtexOrders(startIso, endIso, 'ready-for-handling', '', 1, 1).catch(() => null),
       fetchVtexOrders(startIso, endIso, 'canceled', '', 1, 1).catch(() => null),
     ]);
 
@@ -52,6 +53,7 @@ export async function GET(request) {
       total: ordersData.paging?.total || 0,
       invoiced: invoicedRes?.paging?.total ?? 0,
       handling: handlingRes?.paging?.total ?? 0,
+      readyForHandling: readyRes?.paging?.total ?? 0,
       canceled: canceledRes?.paging?.total ?? 0,
     };
 
