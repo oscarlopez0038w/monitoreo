@@ -1,8 +1,27 @@
 import { NextResponse } from 'next/server';
-import { isVtexConfigured, fetchVtexOrders, fetchVtexOrderDetail } from '@/lib/vtex';
+import { isVtexConfigured, fetchVtexOrders } from '@/lib/vtex';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
+
+// Función para obtener TODAS las órdenes de un período paginando por lotes de 100 en 100
+async function fetchAllPeriodOrders(startIso, endIso) {
+  let allOrders = [];
+  let page = 1;
+  let maxPages = 15; // Límite de seguridad (hasta 1,500 órdenes por mes)
+
+  while (page <= maxPages) {
+    const res = await fetchVtexOrders(startIso, endIso, '', '', page, 100).catch(() => null);
+    if (!res || !res.list || res.list.length === 0) break;
+
+    allOrders.push(...res.list);
+    const totalPages = res.paging?.pages || 1;
+    if (page >= totalPages) break;
+    page++;
+  }
+
+  return allOrders;
+}
 
 export async function GET(request) {
   try {
@@ -15,7 +34,7 @@ export async function GET(request) {
 
     const now = new Date();
     
-    // Mes actual
+    // Mes actual (Julio)
     const currentYear = now.getFullYear();
     const currentMonth = now.getMonth();
     const currentDay = now.getDate();
@@ -26,7 +45,7 @@ export async function GET(request) {
     const currentStartIso = new Date(`${currentStartStr}T00:00:00-06:00`).toISOString();
     const currentEndIso = new Date(`${currentEndStr}T23:59:59-06:00`).toISOString();
 
-    // Mes anterior (mismo número de días para comparación justa)
+    // Mes anterior (Junio) - Mismo rango de días equivalente
     const prevDate = new Date(currentYear, currentMonth - 1, 1);
     const prevYear = prevDate.getFullYear();
     const prevMonth = prevDate.getMonth();
@@ -39,56 +58,44 @@ export async function GET(request) {
     const prevStartIso = new Date(`${prevStartStr}T00:00:00-06:00`).toISOString();
     const prevEndIso = new Date(`${prevEndStr}T23:59:59-06:00`).toISOString();
 
-    // Consultar órdenes de ambos períodos en paralelo
+    // Consultar TODAS las órdenes del mes actual y del mes anterior en paralelo
     const [
-      currAllRes,
+      currOrders,
+      prevOrders,
       currInvoicedRes,
       currHandlingRes,
       currReadyRes,
       currCanceledRes,
-      prevAllRes,
       prevInvoicedRes,
       prevCanceledRes,
     ] = await Promise.all([
-      fetchVtexOrders(currentStartIso, currentEndIso, '', '', 1, 100).catch(() => null),
+      fetchAllPeriodOrders(currentStartIso, currentEndIso),
+      fetchAllPeriodOrders(prevStartIso, prevEndIso),
       fetchVtexOrders(currentStartIso, currentEndIso, 'invoiced', '', 1, 1).catch(() => null),
       fetchVtexOrders(currentStartIso, currentEndIso, 'handling', '', 1, 1).catch(() => null),
       fetchVtexOrders(currentStartIso, currentEndIso, 'ready-for-handling', '', 1, 1).catch(() => null),
       fetchVtexOrders(currentStartIso, currentEndIso, 'canceled', '', 1, 1).catch(() => null),
-      fetchVtexOrders(prevStartIso, prevEndIso, '', '', 1, 100).catch(() => null),
       fetchVtexOrders(prevStartIso, prevEndIso, 'invoiced', '', 1, 1).catch(() => null),
       fetchVtexOrders(prevStartIso, prevEndIso, 'canceled', '', 1, 1).catch(() => null),
     ]);
 
-    // Extraer muestras de listas
-    const currList = currAllRes?.list || [];
-    const prevList = prevAllRes?.list || [];
+    // Sumar montos EXACTOS (C$) de todas las órdenes del mes actual
+    const currTotalRevenue = currOrders.reduce((sum, o) => sum + (o.totalValue ? o.totalValue / 100 : 0), 0);
+    const currTotalOrders = currOrders.length;
+    const currAvgTicket = currTotalOrders > 0 ? currTotalRevenue / currTotalOrders : 0;
 
-    // Totales de órdenes
-    const currTotalOrders = currAllRes?.paging?.total || 0;
-    const prevTotalOrders = prevAllRes?.paging?.total || 0;
+    // Sumar montos EXACTOS (C$) de todas las órdenes del mes anterior
+    const prevTotalRevenue = prevOrders.reduce((sum, o) => sum + (o.totalValue ? o.totalValue / 100 : 0), 0);
+    const prevTotalOrders = prevOrders.length;
+    const prevAvgTicket = prevTotalOrders > 0 ? prevTotalRevenue / prevTotalOrders : 0;
 
-    // Sumar montos (C$) de muestra
-    const currSampleRevenue = currList.reduce((acc, o) => acc + (o.totalValue ? o.totalValue / 100 : 0), 0);
-    const prevSampleRevenue = prevList.reduce((acc, o) => acc + (o.totalValue ? o.totalValue / 100 : 0), 0);
-
-    const currSampleCount = currList.length || 1;
-    const prevSampleCount = prevList.length || 1;
-
-    // Estimación / promedio de ticket
-    const currAvgTicket = currSampleRevenue / currSampleCount;
-    const prevAvgTicket = prevSampleRevenue / prevSampleCount;
-
-    const currEstimatedTotalRevenue = Math.round(currAvgTicket * currTotalOrders);
-    const prevEstimatedTotalRevenue = Math.round(prevAvgTicket * prevTotalOrders);
-
-    // Conteo por estados (Mes Actual)
+    // Conteo exacto por estados (Mes Actual)
     const currInvoicedCount = currInvoicedRes?.paging?.total ?? 0;
     const currHandlingCount = currHandlingRes?.paging?.total ?? 0;
     const currReadyCount = currReadyRes?.paging?.total ?? 0;
     const currCanceledCount = currCanceledRes?.paging?.total ?? 0;
 
-    // Conteo por estados (Mes Anterior)
+    // Conteo exacto por estados (Mes Anterior)
     const prevInvoicedCount = prevInvoicedRes?.paging?.total ?? 0;
     const prevCanceledCount = prevCanceledRes?.paging?.total ?? 0;
 
@@ -96,17 +103,17 @@ export async function GET(request) {
     const currCancelRate = currTotalOrders > 0 ? (currCanceledCount / currTotalOrders) * 100 : 0;
     const prevCancelRate = prevTotalOrders > 0 ? (prevCanceledCount / prevTotalOrders) * 100 : 0;
 
-    // Analizar Social Selling (vendedores, cupones, UTMs) en la muestra
+    // Analizar Social Selling (vendedores, cupones, UTMs) en el total de órdenes reales
     let socialSellingOrdersCount = 0;
     let socialSellingRevenue = 0;
 
-    currList.forEach((o) => {
+    currOrders.forEach((o) => {
       const isSocial =
         Boolean(o.utmiCampaign) ||
         Boolean(o.utmSource) ||
         Boolean(o.coupon) ||
-        String(o.hostname || '').includes('vendedor') ||
-        String(o.origin || '').includes('social');
+        String(o.hostname || '').toLowerCase().includes('vendedor') ||
+        String(o.origin || '').toLowerCase().includes('social');
 
       if (isSocial) {
         socialSellingOrdersCount++;
@@ -114,8 +121,9 @@ export async function GET(request) {
       }
     });
 
-    const socialSellingPct = currSampleCount > 0 ? (socialSellingOrdersCount / currSampleCount) * 100 : 25; // fallback estimado
+    const socialSellingPct = currTotalOrders > 0 ? (socialSellingOrdersCount / currTotalOrders) * 100 : 0;
     const webDirectPct = 100 - socialSellingPct;
+    const webDirectRevenue = currTotalRevenue - socialSellingRevenue;
 
     // Función auxiliar para calcular porcentaje de cambio
     const calcChange = (curr, prev) => {
@@ -131,9 +139,9 @@ export async function GET(request) {
       },
       kpis: {
         totalRevenue: {
-          current: currEstimatedTotalRevenue,
-          previous: prevEstimatedTotalRevenue,
-          changePct: calcChange(currEstimatedTotalRevenue, prevEstimatedTotalRevenue),
+          current: parseFloat(currTotalRevenue.toFixed(2)),
+          previous: parseFloat(prevTotalRevenue.toFixed(2)),
+          changePct: calcChange(currTotalRevenue, prevTotalRevenue),
         },
         totalOrders: {
           current: currTotalOrders,
@@ -141,8 +149,8 @@ export async function GET(request) {
           changePct: calcChange(currTotalOrders, prevTotalOrders),
         },
         avgTicket: {
-          current: Math.round(currAvgTicket),
-          previous: Math.round(prevAvgTicket),
+          current: parseFloat(currAvgTicket.toFixed(2)),
+          previous: parseFloat(prevAvgTicket.toFixed(2)),
           changePct: calcChange(currAvgTicket, prevAvgTicket),
         },
         invoicedOrders: {
@@ -159,11 +167,11 @@ export async function GET(request) {
       channels: {
         socialSelling: {
           pct: parseFloat(socialSellingPct.toFixed(1)),
-          estimatedRevenue: Math.round(currEstimatedTotalRevenue * (socialSellingPct / 100)),
+          revenue: parseFloat(socialSellingRevenue.toFixed(2)),
         },
         webDirect: {
           pct: parseFloat(webDirectPct.toFixed(1)),
-          estimatedRevenue: Math.round(currEstimatedTotalRevenue * (webDirectPct / 100)),
+          revenue: parseFloat(webDirectRevenue.toFixed(2)),
         },
       },
       pipeline: {

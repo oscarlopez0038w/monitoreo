@@ -196,7 +196,7 @@ export default function DashboardPage() {
                       <Users size={14} color="#34d399" /> Social Selling / Vendedores
                     </span>
                     <span style={{ color: '#34d399', fontWeight: 700 }}>
-                      {channels?.socialSelling?.pct || 0}% (C$ {(channels?.socialSelling?.estimatedRevenue || 0).toLocaleString('es-NI')})
+                      {channels?.socialSelling?.pct || 0}% (C$ {(channels?.socialSelling?.revenue || 0).toLocaleString('es-NI', { minimumFractionDigits: 2 })})
                     </span>
                   </div>
                   <div style={{ width: '100%', height: '10px', borderRadius: '5px', background: 'rgba(255, 255, 255, 0.08)', overflow: 'hidden' }}>
@@ -211,7 +211,7 @@ export default function DashboardPage() {
                       <Globe size={14} color="#38bdf8" /> Web Directa / E-Commerce
                     </span>
                     <span style={{ color: '#38bdf8', fontWeight: 700 }}>
-                      {channels?.webDirect?.pct || 0}% (C$ {(channels?.webDirect?.estimatedRevenue || 0).toLocaleString('es-NI')})
+                      {channels?.webDirect?.pct || 0}% (C$ {(channels?.webDirect?.revenue || 0).toLocaleString('es-NI', { minimumFractionDigits: 2 })})
                     </span>
                   </div>
                   <div style={{ width: '100%', height: '10px', borderRadius: '5px', background: 'rgba(255, 255, 255, 0.08)', overflow: 'hidden' }}>
