@@ -74,3 +74,31 @@ CREATE INDEX idx_vtex_skus_total_stock ON public.vtex_skus(total_stock);
 ALTER TABLE public.vtex_skus ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Permitir acceso total vtex_skus" ON public.vtex_skus FOR ALL USING (true) WITH CHECK (true);
 */
+
+-- ==============================================================================
+-- TABLA DE ÓRDENES VTEX OMS EN TIEMPO REAL (HISTORIAL + WEBSOCKETS REALTIME)
+-- ==============================================================================
+
+CREATE TABLE IF NOT EXISTS public.vtex_orders (
+    order_id TEXT PRIMARY KEY,
+    sequence TEXT NULL,
+    status TEXT NOT NULL,
+    status_description TEXT NULL,
+    creation_date TIMESTAMPTZ NOT NULL,
+    client_name TEXT NULL,
+    client_email TEXT NULL,
+    total_value NUMERIC(12,2) DEFAULT 0,
+    items JSONB NULL,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_vtex_orders_status ON public.vtex_orders(status);
+CREATE INDEX IF NOT EXISTS idx_vtex_orders_creation ON public.vtex_orders(creation_date DESC);
+
+ALTER TABLE public.vtex_orders ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Permitir acceso total vtex_orders" ON public.vtex_orders FOR ALL USING (true) WITH CHECK (true);
+
+-- Habilitar publicación en tiempo real para la tabla vtex_orders
+ALTER PUBLICATION supabase_realtime ADD TABLE public.vtex_orders;
+

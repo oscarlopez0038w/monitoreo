@@ -2,7 +2,8 @@
 
 import { useState, useEffect } from 'react';
 import AppLayout from '@/components/AppLayout';
-import { ShoppingCart, Calendar, Filter, Search, RefreshCw, ChevronDown, ChevronUp, Package, DollarSign, CheckCircle2, Clock, AlertTriangle, FileText } from 'lucide-react';
+import { supabase, isSupabaseConfigured } from '@/lib/supabase';
+import { ShoppingCart, Calendar, Filter, Search, RefreshCw, ChevronDown, ChevronUp, Package, DollarSign, CheckCircle2, Clock, AlertTriangle, FileText, Zap, Radio, X } from 'lucide-react';
 
 export default function OrdenesPage() {
   const now = new Date();
@@ -14,11 +15,13 @@ export default function OrdenesPage() {
   const [statusFilter, setStatusFilter] = useState('');
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(false);
+  const [registeringHook, setRegisteringHook] = useState(false);
   const [orders, setOrders] = useState([]);
   const [paging, setPaging] = useState({ total: 0, currentPage: 1, pages: 1 });
   const [expandedOrderId, setExpandedOrderId] = useState(null);
   const [orderDetails, setOrderDetails] = useState({});
   const [loadingDetailId, setLoadingDetailId] = useState(null);
+  const [liveBanner, setLiveBanner] = useState(null);
 
   const fetchOrders = async (page = 1) => {
     setLoading(true);
@@ -47,7 +50,77 @@ export default function OrdenesPage() {
 
   useEffect(() => {
     fetchOrders(1);
+
+    // Escuchar notificaciones en tiempo real desde Supabase (WebSocket Realtime)
+    if (isSupabaseConfigured()) {
+      const channel = supabase
+        .channel('vtex_orders_channel')
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'vtex_orders' },
+          (payload) => {
+            const row = payload.new;
+            if (!row || !row.order_id) return;
+
+            const realtimeOrder = {
+              orderId: row.order_id,
+              sequence: row.sequence,
+              status: row.status,
+              statusDescription: row.status_description,
+              creationDate: row.creation_date,
+              clientName: row.client_name,
+              totalValue: Math.round((row.total_value || 0) * 100),
+              isRealtime: true,
+            };
+
+            setOrders((prev) => {
+              const idx = prev.findIndex((o) => o.orderId === realtimeOrder.orderId);
+              if (idx !== -1) {
+                const updated = [...prev];
+                updated[idx] = { ...updated[idx], ...realtimeOrder };
+                return updated;
+              }
+              return [realtimeOrder, ...prev];
+            });
+
+            setLiveBanner({
+              type: 'success',
+              text: `⚡ ¡Nueva orden recibida en tiempo real! ID: ${realtimeOrder.orderId} (Estado: ${realtimeOrder.status})`,
+            });
+          }
+        )
+        .subscribe();
+
+      return () => {
+        supabase.removeChannel(channel);
+      };
+    }
   }, [startDate, endDate, statusFilter]);
+
+  // Activar Hook Webhook VTEX en 1 clic
+  const handleActivateWebhook = async () => {
+    setRegisteringHook(true);
+    setLiveBanner(null);
+    try {
+      const res = await fetch('/api/orders/subscription', { method: 'POST' });
+      const data = await res.json();
+      if (data.success) {
+        setLiveBanner({
+          type: 'success',
+          text: data.message || '🎉 Webhook VTEX activado en tiempo real.',
+        });
+      } else {
+        setLiveBanner({
+          type: 'error',
+          text: `Error activando Webhook: ${data.error}`,
+        });
+      }
+    } catch (err) {
+      setLiveBanner({ type: 'error', text: `Error de conexión: ${err.message}` });
+    } finally {
+      setRegisteringHook(false);
+    }
+  };
 
   const handleSearchSubmit = (e) => {
     e.preventDefault();
@@ -131,11 +204,49 @@ export default function OrdenesPage() {
             </p>
           </div>
 
-          <button onClick={() => fetchOrders(paging.currentPage)} disabled={loading} className="btn-secondary" style={{ padding: '0.45rem 0.85rem', fontSize: '0.82rem' }}>
-            <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
-            Actualizar Órdenes
-          </button>
+          <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap' }}>
+            <button
+              onClick={handleActivateWebhook}
+              disabled={registeringHook}
+              className="btn-primary"
+              style={{ padding: '0.45rem 0.95rem', fontSize: '0.82rem' }}
+            >
+              <Zap size={14} className={registeringHook ? 'animate-spin' : ''} />
+              {registeringHook ? 'Activando...' : '⚡ Activar Webhook VTEX en Vivo'}
+            </button>
+
+            <button onClick={() => fetchOrders(paging.currentPage)} disabled={loading} className="btn-secondary" style={{ padding: '0.45rem 0.85rem', fontSize: '0.82rem' }}>
+              <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
+              Actualizar Órdenes
+            </button>
+          </div>
         </div>
+
+        {/* Live Notification Banner */}
+        {liveBanner && (
+          <div
+            style={{
+              background: liveBanner.type === 'success' ? 'rgba(52, 211, 153, 0.14)' : 'rgba(248, 113, 113, 0.14)',
+              border: `1px solid ${liveBanner.type === 'success' ? 'rgba(52, 211, 153, 0.35)' : 'rgba(248, 113, 113, 0.35)'}`,
+              borderRadius: '12px',
+              padding: '0.75rem 1rem',
+              marginBottom: '1.25rem',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              fontSize: '0.86rem',
+              color: liveBanner.type === 'success' ? '#34d399' : '#f87171',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <Radio size={16} className="animate-pulse" />
+              {liveBanner.text}
+            </div>
+            <button onClick={() => setLiveBanner(null)} style={{ background: 'none', border: 'none', color: 'inherit', cursor: 'pointer' }}>
+              <X size={14} />
+            </button>
+          </div>
+        )}
 
         {/* Date & Filter Bar */}
         <div className="glass-card" style={{ padding: '1.25rem', marginBottom: '1.5rem' }}>
