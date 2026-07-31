@@ -39,9 +39,11 @@ export async function POST(request) {
       },
     };
 
-    const url = `${config.baseUrl}/api/oms/pvt/subscriptions`;
+    // Endpoint oficial de VTEX OMS para Hooks
+    const primaryUrl = `${config.baseUrl}/api/orders/hook/config`;
+    const fallbackUrl = `${config.baseUrl}/api/oms/pvt/orders/hook/config`;
 
-    const res = await fetch(url, {
+    let res = await fetch(primaryUrl, {
       method: 'POST',
       headers: {
         'Accept': 'application/json',
@@ -52,6 +54,20 @@ export async function POST(request) {
       body: JSON.stringify(hookPayload),
       cache: 'no-store',
     });
+
+    if (res.status === 404) {
+      res = await fetch(fallbackUrl, {
+        method: 'POST',
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+          'X-VTEX-API-AppKey': config.appKey,
+          'X-VTEX-API-AppToken': config.appToken,
+        },
+        body: JSON.stringify(hookPayload),
+        cache: 'no-store',
+      });
+    }
 
     if (!res.ok) {
       const errText = await res.text();
@@ -82,9 +98,9 @@ export async function GET() {
     }
 
     const config = getVtexConfig();
-    const url = `${config.baseUrl}/api/oms/pvt/subscriptions`;
+    const primaryUrl = `${config.baseUrl}/api/orders/hook/config`;
 
-    const res = await fetch(url, {
+    const res = await fetch(primaryUrl, {
       method: 'GET',
       headers: {
         'Accept': 'application/json',
