@@ -40,15 +40,10 @@ async function analyzeSocialSellingOrders(orders) {
       if (!detail) return;
 
       const mData = detail.marketingData || {};
-      const mTags = mData.marketingTags || detail.marketingTags || [];
-      const mTagsStr = JSON.stringify(mTags).toLowerCase();
+      const utmi = mData.utmiCampaign || detail.utmiCampaign || mData.utmicampaign;
 
-      const isSocial =
-        mTagsStr.includes('vtexsocialselling') ||
-        mTagsStr.includes('socialselling') ||
-        Boolean(mData.utmiCampaign) ||
-        Boolean(mData.utmSource) ||
-        Boolean(detail.callCenterOperatorData);
+      // Regla explícita del negocio: Si trae el UTM icampaign (código de vendedor) es Social Selling, de lo contrario es Orgánica
+      const isSocial = Boolean(utmi && String(utmi).trim().length > 0);
 
       if (isSocial) {
         socialCount++;
