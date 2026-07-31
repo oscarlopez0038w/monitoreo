@@ -22,6 +22,7 @@ export default function OrdenesPage() {
   const [orderDetails, setOrderDetails] = useState({});
   const [loadingDetailId, setLoadingDetailId] = useState(null);
   const [liveBanner, setLiveBanner] = useState(null);
+  const [globalStats, setGlobalStats] = useState({ total: 0, invoiced: 0, handling: 0, canceled: 0 });
 
   const fetchOrders = async (page = 1) => {
     setLoading(true);
@@ -40,6 +41,9 @@ export default function OrdenesPage() {
       if (data.success) {
         setOrders(data.data || []);
         setPaging(data.paging || { total: 0, currentPage: page, pages: 1 });
+        if (data.stats) {
+          setGlobalStats(data.stats);
+        }
       }
     } catch (err) {
       console.error('Error cargando órdenes:', err);
@@ -80,10 +84,16 @@ export default function OrdenesPage() {
                 updated[idx] = { ...updated[idx], ...realtimeOrder };
                 return updated;
               }
-              // Si es una orden totalmente nueva, incrementamos la cuenta total en tiempo real
+              // Si es una orden totalmente nueva, incrementamos las métricas globales en tiempo real
               setPaging((prevPaging) => ({
                 ...prevPaging,
                 total: (prevPaging.total || 0) + 1,
+              }));
+              setGlobalStats((prevStats) => ({
+                total: (prevStats.total || 0) + 1,
+                invoiced: realtimeOrder.status === 'invoiced' ? (prevStats.invoiced || 0) + 1 : (prevStats.invoiced || 0),
+                handling: (realtimeOrder.status === 'handling' || realtimeOrder.status === 'ready-for-handling') ? (prevStats.handling || 0) + 1 : (prevStats.handling || 0),
+                canceled: realtimeOrder.status === 'canceled' ? (prevStats.canceled || 0) + 1 : (prevStats.canceled || 0),
               }));
               return [realtimeOrder, ...prev];
             });
@@ -157,11 +167,11 @@ export default function OrdenesPage() {
     }
   };
 
-  // Conteo rápido por estados
-  const totalOrdersCount = paging.total || orders.length;
-  const invoicedCount = orders.filter((o) => o.status === 'invoiced').length;
-  const handlingCount = orders.filter((o) => o.status === 'handling' || o.status === 'ready-for-handling').length;
-  const canceledCount = orders.filter((o) => o.status === 'canceled').length;
+  // Conteo global por estados en todo el mes
+  const totalOrdersCount = globalStats.total || paging.total || orders.length;
+  const invoicedCount = globalStats.invoiced || 0;
+  const handlingCount = globalStats.handling || 0;
+  const canceledCount = globalStats.canceled || 0;
 
   const renderStatusBadge = (status, statusDescription) => {
     const s = String(status || '').toLowerCase();
