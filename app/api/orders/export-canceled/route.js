@@ -77,15 +77,23 @@ export async function GET(request) {
           .map((item) => `${item.id || item.sellerSku} - ${item.name || 'SKU'} (${item.quantity} unid.)`)
           .join(' | ');
 
-        const clientName = ord.clientProfileData ? `${ord.clientProfileData.firstName || ''} ${ord.clientProfileData.lastName || ''}`.trim() : (ord.clientName || 'Cliente General');
-        const clientEmail = ord.clientProfileData?.email || ord.clientEmail || '';
+        const clientName = ord.clientProfileData
+          ? `${ord.clientProfileData.firstName || ''} ${ord.clientProfileData.lastName || ''}`.trim()
+          : (ord.clientName || orig.clientName || 'Cliente General');
+
+        const clientEmail = ord.clientProfileData?.email || ord.clientEmail || orig.clientEmail || '';
+        
+        // En la API de detalle de VTEX OMS el campo de monto total es 'value', mientras que en el listado es 'totalValue'
+        const rawValue = ord.value ?? ord.totalValue ?? orig.totalValue ?? orig.value ?? 0;
+        const totalValueFormatted = (rawValue / 100).toFixed(2);
+        const creationDateStr = ord.creationDate || orig.creationDate;
 
         detailedOrders.push({
-          orderId: ord.orderId || '',
-          creationDate: ord.creationDate ? new Date(ord.creationDate).toLocaleString('es-NI') : '',
+          orderId: ord.orderId || orig.orderId || '',
+          creationDate: creationDateStr ? new Date(creationDateStr).toLocaleString('es-NI') : '',
           clientName,
           clientEmail,
-          totalValue: ord.totalValue ? (ord.totalValue / 100).toFixed(2) : '0.00',
+          totalValue: totalValueFormatted,
           status: 'canceled',
           cancelReason,
           comments,
