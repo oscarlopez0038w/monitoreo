@@ -1,6 +1,9 @@
 import { NextResponse } from 'next/server';
 import { supabaseAdmin, isSupabaseConfigured } from '@/lib/supabase';
 
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
 // Función auxiliar para obtener TODOS los SKUs realizando peticiones paginadas por lotes a Supabase
 async function fetchAllSkus(sortColumn, isAscending, search = '') {
   const PAGE_SIZE = 1000;

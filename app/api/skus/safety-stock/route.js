@@ -1,6 +1,9 @@
 import { NextResponse } from 'next/server';
 import { supabaseAdmin, isSupabaseConfigured } from '@/lib/supabase';
 
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
 // GET: Obtener lista de Stock de Seguridad
 export async function GET(request) {
   try {
