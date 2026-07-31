@@ -39,6 +39,9 @@ async function analyzeSocialSellingOrders(orders) {
       const origOrder = batch[idx];
       if (!detail) return;
 
+      // Excluir canceladas si aplica
+      if (detail.status === 'canceled') return;
+
       const mData = detail.marketingData || {};
       const utmi = mData.utmiCampaign || detail.utmiCampaign || mData.utmicampaign;
 
@@ -65,6 +68,11 @@ export async function GET(request) {
       );
     }
 
+    const { searchParams } = new URL(request.url);
+    const compareMode = searchParams.get('compareMode') || 'previous_month';
+    const customYear = searchParams.get('compareYear');
+    const customMonth = searchParams.get('compareMonth');
+
     const now = new Date();
     
     // Mes actual (Julio)
@@ -78,10 +86,23 @@ export async function GET(request) {
     const currentStartIso = new Date(`${currentStartStr}T00:00:00-06:00`).toISOString();
     const currentEndIso = new Date(`${currentEndStr}T23:59:59-06:00`).toISOString();
 
-    // Mes anterior (Junio) - Mismo rango de días equivalente
-    const prevDate = new Date(currentYear, currentMonth - 1, 1);
-    const prevYear = prevDate.getFullYear();
-    const prevMonth = prevDate.getMonth();
+    // Determinar período de comparación
+    let prevYear = currentYear;
+    let prevMonth = currentMonth - 1;
+
+    if (compareMode === 'same_month_last_year') {
+      prevYear = currentYear - 1;
+      prevMonth = currentMonth;
+    } else if (compareMode === 'custom' && customYear && customMonth) {
+      prevYear = parseInt(customYear);
+      prevMonth = parseInt(customMonth) - 1;
+    }
+
+    // Ajuste de desbordamiento de año
+    const prevDateObj = new Date(prevYear, prevMonth, 1);
+    prevYear = prevDateObj.getFullYear();
+    prevMonth = prevDateObj.getMonth();
+
     const lastDayOfPrevMonth = new Date(prevYear, prevMonth + 1, 0).getDate();
     const targetPrevDay = Math.min(currentDay, lastDayOfPrevMonth);
 
@@ -91,7 +112,7 @@ export async function GET(request) {
     const prevStartIso = new Date(`${prevStartStr}T00:00:00-06:00`).toISOString();
     const prevEndIso = new Date(`${prevEndStr}T23:59:59-06:00`).toISOString();
 
-    // Consultar TODAS las órdenes del mes actual y del mes anterior en paralelo
+    // Consultar TODAS las órdenes del mes actual y del período de comparación en paralelo
     const [
       currOrders,
       prevOrders,
@@ -112,15 +133,16 @@ export async function GET(request) {
       fetchVtexOrders(prevStartIso, prevEndIso, 'canceled', '', 1, 1).catch(() => null),
     ]);
 
-    // Sumar montos EXACTOS (C$) de todas las órdenes del mes actual
-    const currTotalRevenue = currOrders.reduce((sum, o) => sum + (o.totalValue ? o.totalValue / 100 : 0), 0);
+    // EXCLUIR ÓRDENES CANCELADAS de la sumatoria de Ventas Totales
+    const currValidOrders = currOrders.filter((o) => o.status !== 'canceled');
+    const currTotalRevenue = currValidOrders.reduce((sum, o) => sum + (o.totalValue ? o.totalValue / 100 : 0), 0);
     const currTotalOrders = currOrders.length;
-    const currAvgTicket = currTotalOrders > 0 ? currTotalRevenue / currTotalOrders : 0;
+    const currAvgTicket = currValidOrders.length > 0 ? currTotalRevenue / currValidOrders.length : 0;
 
-    // Sumar montos EXACTOS (C$) de todas las órdenes del mes anterior
-    const prevTotalRevenue = prevOrders.reduce((sum, o) => sum + (o.totalValue ? o.totalValue / 100 : 0), 0);
+    const prevValidOrders = prevOrders.filter((o) => o.status !== 'canceled');
+    const prevTotalRevenue = prevValidOrders.reduce((sum, o) => sum + (o.totalValue ? o.totalValue / 100 : 0), 0);
     const prevTotalOrders = prevOrders.length;
-    const prevAvgTicket = prevTotalOrders > 0 ? prevTotalRevenue / prevTotalOrders : 0;
+    const prevAvgTicket = prevValidOrders.length > 0 ? prevTotalRevenue / prevValidOrders.length : 0;
 
     // Conteo exacto por estados (Mes Actual)
     const currInvoicedCount = currInvoicedRes?.paging?.total ?? 0;
@@ -128,7 +150,7 @@ export async function GET(request) {
     const currReadyCount = currReadyRes?.paging?.total ?? 0;
     const currCanceledCount = currCanceledRes?.paging?.total ?? 0;
 
-    // Conteo exacto por estados (Mes Anterior)
+    // Conteo exacto por estados (Mes Anterior / Comparativo)
     const prevInvoicedCount = prevInvoicedRes?.paging?.total ?? 0;
     const prevCanceledCount = prevCanceledRes?.paging?.total ?? 0;
 
@@ -136,12 +158,12 @@ export async function GET(request) {
     const currCancelRate = currTotalOrders > 0 ? (currCanceledCount / currTotalOrders) * 100 : 0;
     const prevCancelRate = prevTotalOrders > 0 ? (prevCanceledCount / prevTotalOrders) * 100 : 0;
 
-    // Análisis 100% preciso de Social Selling inspeccionando los detalles de las órdenes del mes
-    const socialAnalysis = await analyzeSocialSellingOrders(currOrders);
+    // Análisis 100% preciso de Social Selling inspeccionando los detalles de las órdenes del mes (excluyendo canceladas)
+    const socialAnalysis = await analyzeSocialSellingOrders(currValidOrders);
     const socialSellingOrdersCount = socialAnalysis.count;
     const socialSellingRevenue = socialAnalysis.revenue;
 
-    const socialSellingPct = currTotalOrders > 0 ? (socialSellingOrdersCount / currTotalOrders) * 100 : 0;
+    const socialSellingPct = currValidOrders.length > 0 ? (socialSellingOrdersCount / currValidOrders.length) * 100 : 0;
     const webDirectPct = 100 - socialSellingPct;
     const webDirectRevenue = Math.max(0, currTotalRevenue - socialSellingRevenue);
 
@@ -151,11 +173,15 @@ export async function GET(request) {
       return parseFloat((((curr - prev) / prev) * 100).toFixed(1));
     };
 
+    const monthNames = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+    const prevMonthLabel = `${monthNames[prevMonth]} ${prevYear}`;
+
     return NextResponse.json({
       success: true,
+      compareMode,
       periods: {
-        current: { label: `1 al ${currentDay} de ${new Date().toLocaleString('es-NI', { month: 'long' })}`, start: currentStartStr, end: currentEndStr },
-        previous: { label: `1 al ${targetPrevDay} del mes anterior`, start: prevStartStr, end: prevEndStr },
+        current: { label: `1 al ${currentDay} de ${monthNames[currentMonth]} ${currentYear}`, start: currentStartStr, end: currentEndStr },
+        previous: { label: `1 al ${targetPrevDay} de ${prevMonthLabel}`, start: prevStartStr, end: prevEndStr, monthName: prevMonthLabel },
       },
       kpis: {
         totalRevenue: {
@@ -191,7 +217,7 @@ export async function GET(request) {
           revenue: parseFloat(socialSellingRevenue.toFixed(2)),
         },
         webDirect: {
-          count: currTotalOrders - socialSellingOrdersCount,
+          count: currValidOrders.length - socialSellingOrdersCount,
           pct: parseFloat(webDirectPct.toFixed(1)),
           revenue: parseFloat(webDirectRevenue.toFixed(2)),
         },
