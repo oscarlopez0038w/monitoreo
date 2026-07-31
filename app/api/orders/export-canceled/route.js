@@ -4,6 +4,18 @@ import { isVtexConfigured, fetchVtexOrders, fetchVtexOrderDetail } from '@/lib/v
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
+const safeStr = (val) => {
+  if (val === null || val === undefined) return '';
+  if (typeof val === 'object') {
+    try {
+      return JSON.stringify(val).replace(/"/g, '""');
+    } catch (e) {
+      return '';
+    }
+  }
+  return String(val).replace(/"/g, '""');
+};
+
 export async function GET(request) {
   try {
     if (!isVtexConfigured()) {
@@ -48,6 +60,7 @@ export async function GET(request) {
       details.forEach((detail, idx) => {
         const orig = batch[idx];
         const ord = detail || orig;
+        if (!ord) return;
 
         const mData = ord.marketingData || {};
         const utmi = mData.utmiCampaign || ord.utmiCampaign || '';
@@ -68,7 +81,7 @@ export async function GET(request) {
         const clientEmail = ord.clientProfileData?.email || ord.clientEmail || '';
 
         detailedOrders.push({
-          orderId: ord.orderId,
+          orderId: ord.orderId || '',
           creationDate: ord.creationDate ? new Date(ord.creationDate).toLocaleString('es-NI') : '',
           clientName,
           clientEmail,
@@ -100,16 +113,16 @@ export async function GET(request) {
 
     detailedOrders.forEach((o) => {
       const row = [
-        `"${o.orderId.replace(/"/g, '""')}"`,
-        `"${o.creationDate.replace(/"/g, '""')}"`,
-        `"${o.clientName.replace(/"/g, '""')}"`,
-        `"${o.clientEmail.replace(/"/g, '""')}"`,
-        `"${o.totalValue}"`,
-        `"${o.status}"`,
-        `"${o.cancelReason.replace(/"/g, '""')}"`,
-        `"${o.comments.replace(/"/g, '""')}"`,
-        `"${o.sellerCode.replace(/"/g, '""')}"`,
-        `"${o.items.replace(/"/g, '""')}"`,
+        `"${safeStr(o.orderId)}"`,
+        `"${safeStr(o.creationDate)}"`,
+        `"${safeStr(o.clientName)}"`,
+        `"${safeStr(o.clientEmail)}"`,
+        `"${safeStr(o.totalValue)}"`,
+        `"${safeStr(o.status)}"`,
+        `"${safeStr(o.cancelReason)}"`,
+        `"${safeStr(o.comments)}"`,
+        `"${safeStr(o.sellerCode)}"`,
+        `"${safeStr(o.items)}"`,
       ];
       csvRows.push(row.join(','));
     });
