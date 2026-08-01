@@ -25,15 +25,17 @@ export default function DashboardPage() {
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
   const [compareMode, setCompareMode] = useState('previous_month');
+  const [compareRange, setCompareRange] = useState('full_month');
   const [customYear, setCustomYear] = useState('2026');
   const [customMonth, setCustomMonth] = useState('5');
 
-  const fetchAnalytics = async (mode = compareMode, year = customYear, month = customMonth) => {
+  const fetchAnalytics = async (mode = compareMode, range = compareRange, year = customYear, month = customMonth) => {
     setLoading(true);
     setError(null);
     try {
       const params = new URLSearchParams({
         compareMode: mode,
+        compareRange: range,
         compareYear: year,
         compareMonth: month,
       });
@@ -119,13 +121,30 @@ export default function DashboardPage() {
               
               <select
                 className="glass-input"
-                style={{ fontSize: '0.85rem', minWidth: '240px', padding: '0.4rem 0.75rem' }}
+                style={{ fontSize: '0.85rem', minWidth: '220px', padding: '0.4rem 0.75rem' }}
                 value={compareMode}
-                onChange={(e) => setCompareMode(e.target.value)}
+                onChange={(e) => {
+                  setCompareMode(e.target.value);
+                  fetchAnalytics(e.target.value, compareRange, customYear, customMonth);
+                }}
               >
                 <option value="previous_month">Mes Anterior (Mes Inmediatamente Anterior)</option>
                 <option value="same_month_last_year">Mismo Mes del Año Anterior (Año Pasado)</option>
                 <option value="custom">Mes y Año Personalizado...</option>
+              </select>
+
+              <select
+                className="glass-input"
+                style={{ fontSize: '0.85rem', minWidth: '220px', padding: '0.4rem 0.75rem' }}
+                value={compareRange}
+                onChange={(e) => {
+                  setCompareRange(e.target.value);
+                  fetchAnalytics(compareMode, e.target.value, customYear, customMonth);
+                }}
+                title="Selecciona si deseas comparar contra el mes completo o sólo los mismos días acumulados"
+              >
+                <option value="full_month">📅 Comparar vs. Mes Completo (31 Días)</option>
+                <option value="mtd">⏱️ Comparar vs. Mismos Días Acumulados (MTD)</option>
               </select>
 
               {compareMode === 'custom' && (

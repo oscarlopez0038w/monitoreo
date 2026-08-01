@@ -71,6 +71,7 @@ export async function GET(request) {
 
     const { searchParams } = new URL(request.url);
     const compareMode = searchParams.get('compareMode') || 'previous_month';
+    const compareRange = searchParams.get('compareRange') || 'full_month'; // 'full_month' (Mes Completo) o 'mtd' (Mismos días)
     const customYear = searchParams.get('compareYear');
     const customMonth = searchParams.get('compareMonth');
 
@@ -105,7 +106,10 @@ export async function GET(request) {
     prevMonth = prevDateObj.getMonth();
 
     const lastDayOfPrevMonth = new Date(prevYear, prevMonth + 1, 0).getDate();
-    const targetPrevDay = Math.min(currentDay, lastDayOfPrevMonth);
+    
+    // Si compareRange es 'full_month', se compara contra todo el mes anterior completo (ej. 1 al 31 de Julio)
+    // Si es 'mtd', se compara contra los mismos días transcurridos (ej. 1 al 1 de Julio)
+    const targetPrevDay = compareRange === 'mtd' ? Math.min(currentDay, lastDayOfPrevMonth) : lastDayOfPrevMonth;
 
     const prevStartStr = `${prevYear}-${String(prevMonth + 1).padStart(2, '0')}-01`;
     const prevEndStr = `${prevYear}-${String(prevMonth + 1).padStart(2, '0')}-${String(targetPrevDay).padStart(2, '0')}`;
@@ -192,9 +196,15 @@ export async function GET(request) {
     return NextResponse.json({
       success: true,
       compareMode,
+      compareRange,
       periods: {
         current: { label: `1 al ${currentDay} de ${monthNames[currentMonth]} ${currentYear}`, start: currentStartStr, end: currentEndStr },
-        previous: { label: `1 al ${targetPrevDay} de ${prevMonthLabel}`, start: prevStartStr, end: prevEndStr, monthName: prevMonthLabel },
+        previous: {
+          label: compareRange === 'full_month' ? `1 al ${targetPrevDay} de ${prevMonthLabel} (Mes Completo)` : `1 al ${targetPrevDay} de ${prevMonthLabel} (Días Transcurridos MTD)`,
+          start: prevStartStr,
+          end: prevEndStr,
+          monthName: prevMonthLabel,
+        },
       },
       kpis: {
         totalRevenue: {
