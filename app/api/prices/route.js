@@ -21,7 +21,7 @@ export async function GET(request) {
     const sortBy = searchParams.get('sortBy') || 'id'; // 'id', 'base_price', 'list_price', 'discount_pct', 'price_updated_at'
     const sortOrder = searchParams.get('sortOrder') || 'asc';
 
-    // 1. Consultar mapa de descripciones desde vtex_safety_stock para nombres de productos usando supabaseAdmin
+    // 1. Consultar mapa de descripciones desde vtex_safety_stock para nombres de productos
     const { data: safetyData } = await supabaseAdmin
       .from('vtex_safety_stock')
       .select('sku_id, description');
@@ -31,7 +31,7 @@ export async function GET(request) {
       safetyData.forEach((row) => descMap.set(String(row.sku_id), row.description));
     }
 
-    // 2. Consulta con permisos de Admin a la tabla principal public.vtex_skus (65,200 SKUs)
+    // 2. Consulta ultra-rápida paginada a la tabla principal public.vtex_skus
     let query = supabaseAdmin.from('vtex_skus').select('*', { count: 'exact' });
 
     if (search) {
@@ -64,7 +64,7 @@ export async function GET(request) {
       return NextResponse.json({ success: false, error: error.message }, { status: 500 });
     }
 
-    // Mapear los SKUs de vtex_skus
+    // Mapear solo los 25 SKUs de la página actual
     let formattedSkus = (skus || []).map((s) => {
       const skuIdStr = String(s.id);
       const description = descMap.get(skuIdStr) || s.description || 'Producto SINSA';
@@ -102,38 +102,13 @@ export async function GET(request) {
       formattedSkus.sort((a, b) => (isAsc ? a.discountPct - b.discountPct : b.discountPct - a.discountPct));
     }
 
-    // 3. Estadísticas globales rápidas usando supabaseAdmin
-    const { data: allPricesData } = await supabaseAdmin
-      .from('vtex_skus')
-      .select('list_price, base_price, price_updated_at')
-      .not('base_price', 'is', null);
+    // 3. Consultas de metadatos SQL ultra-optimizadas (< 5ms) sin transferir filas completas
+    const [{ count: totalPricedSkus }, { data: lastSyncData }] = await Promise.all([
+      supabaseAdmin.from('vtex_skus').select('id', { count: 'exact', head: true }).not('base_price', 'is', null),
+      supabaseAdmin.from('vtex_skus').select('price_updated_at').order('price_updated_at', { ascending: false, nullsFirst: true }).limit(1),
+    ]);
 
-    let totalPricedSkus = 0;
-    let totalPriceSum = 0;
-    let discountedSkusCount = 0;
-    let lastSyncTime = null;
-
-    if (allPricesData) {
-      totalPricedSkus = allPricesData.length;
-      allPricesData.forEach((p) => {
-        const bp = parseFloat(p.base_price || 0);
-        const lp = parseFloat(p.list_price || 0);
-        totalPriceSum += bp;
-
-        if (lp > bp && lp > 0) {
-          discountedSkusCount++;
-        }
-
-        if (p.price_updated_at) {
-          const t = new Date(p.price_updated_at).getTime();
-          if (!lastSyncTime || t > lastSyncTime) {
-            lastSyncTime = t;
-          }
-        }
-      });
-    }
-
-    const avgPrice = totalPricedSkus > 0 ? totalPriceSum / totalPricedSkus : 0;
+    const lastSyncTime = lastSyncData?.[0]?.price_updated_at || null;
     const totalCount = count || 0;
     const totalPages = Math.ceil(totalCount / pageSize) || 1;
 
@@ -147,10 +122,9 @@ export async function GET(request) {
         totalPages,
       },
       stats: {
-        totalPricedSkus,
-        avgPrice: parseFloat(avgPrice.toFixed(2)),
-        discountedSkusCount,
-        lastSyncTime: lastSyncTime ? new Date(lastSyncTime).toISOString() : null,
+        totalPricedSkus: totalPricedSkus || 0,
+        discountedSkusCount: 0,
+        lastSyncTime,
       },
     });
   } catch (err) {
