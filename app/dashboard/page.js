@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import AppLayout from '@/components/AppLayout';
+import { getNicaraguaNow } from '@/lib/dateUtils';
 import {
   TrendingUp,
   TrendingDown,
@@ -21,23 +22,40 @@ import {
 } from 'lucide-react';
 
 export default function DashboardPage() {
+  const nicNow = getNicaraguaNow();
+
+  // Período A por defecto: Mes Actual (inicio de mes hasta hoy)
+  const [startDateA, setStartDateA] = useState(nicNow.firstDayStr);
+  const [endDateA, setEndDateA] = useState(nicNow.todayStr);
+
+  // Período B por defecto: Mes Anterior Completo
+  let pY = nicNow.year;
+  let pM = nicNow.month - 1;
+  if (pM < 0) {
+    pM = 11;
+    pY -= 1;
+  }
+  const pMStr = String(pM + 1).padStart(2, '0');
+  const lastDayPM = new Date(pY, pM + 1, 0).getDate();
+  const defaultStartB = `${pY}-${pMStr}-01`;
+  const defaultEndB = `${pY}-${pMStr}-${String(lastDayPM).padStart(2, '0')}`;
+
+  const [startDateB, setStartDateB] = useState(defaultStartB);
+  const [endDateB, setEndDateB] = useState(defaultEndB);
+
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
-  const [compareMode, setCompareMode] = useState('previous_month');
-  const [compareRange, setCompareRange] = useState('full_month');
-  const [customYear, setCustomYear] = useState('2026');
-  const [customMonth, setCustomMonth] = useState('5');
 
-  const fetchAnalytics = async (mode = compareMode, range = compareRange, year = customYear, month = customMonth) => {
+  const fetchAnalytics = async (sA = startDateA, eA = endDateA, sB = startDateB, eB = endDateB) => {
     setLoading(true);
     setError(null);
     try {
       const params = new URLSearchParams({
-        compareMode: mode,
-        compareRange: range,
-        compareYear: year,
-        compareMonth: month,
+        startDateA: sA,
+        endDateA: eA,
+        startDateB: sB,
+        endDateB: eB,
       });
       const res = await fetch(`/api/analytics?${params.toString()}`);
       const json = await res.json();
@@ -54,8 +72,50 @@ export default function DashboardPage() {
   };
 
   useEffect(() => {
-    fetchAnalytics(compareMode, customYear, customMonth);
-  }, [compareMode, customYear, customMonth]);
+    fetchAnalytics(startDateA, endDateA, startDateB, endDateB);
+  }, []);
+
+  // Función para aplicar presets rápidos de fecha
+  const applyPreset = (presetKey) => {
+    let sA = nicNow.firstDayStr;
+    let eA = nicNow.todayStr;
+    let sB = defaultStartB;
+    let eB = defaultEndB;
+
+    if (presetKey === 'current_vs_prev_full') {
+      sA = nicNow.firstDayStr;
+      eA = nicNow.todayStr;
+      sB = defaultStartB;
+      eB = defaultEndB;
+    } else if (presetKey === 'current_vs_prev_mtd') {
+      sA = nicNow.firstDayStr;
+      eA = nicNow.todayStr;
+      sB = defaultStartB;
+      eB = `${pY}-${pMStr}-${String(Math.min(nicNow.day, lastDayPM)).padStart(2, '0')}`;
+    } else if (presetKey === 'prev_vs_two_ago') {
+      // Mes Pasado vs Antepasado
+      sA = defaultStartB;
+      eA = defaultEndB;
+
+      let pY2 = pY;
+      let pM2 = pM - 1;
+      if (pM2 < 0) {
+        pM2 = 11;
+        pY2 -= 1;
+      }
+      const pM2Str = String(pM2 + 1).padStart(2, '0');
+      const lastDayPM2 = new Date(pY2, pM2 + 1, 0).getDate();
+      sB = `${pY2}-${pM2Str}-01`;
+      eB = `${pY2}-${pM2Str}-${String(lastDayPM2).padStart(2, '0')}`;
+    }
+
+    setStartDateA(sA);
+    setEndDateA(eA);
+    setStartDateB(sB);
+    setEndDateB(eB);
+
+    fetchAnalytics(sA, eA, sB, eB);
+  };
 
   const renderTrendBadge = (changePct, isInverse = false) => {
     const isPositive = isInverse ? changePct < 0 : changePct >= 0;
@@ -98,116 +158,146 @@ export default function DashboardPage() {
               Dashboard Ejecutivo de Ventas & Analytics Comparativo
             </h1>
             <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
-              Comparación en tiempo real: <strong style={{ color: 'var(--accent-primary)' }}>{periods?.current?.label || 'Mes Actual'}</strong> vs. <span style={{ color: '#38bdf8', fontWeight: 600 }}>{periods?.previous?.label || 'Período Comparativo'}</span>.
+              Comparación en tiempo real: <strong style={{ color: 'var(--accent-primary)' }}>{periods?.current?.label || 'Período A'}</strong> vs. <span style={{ color: '#38bdf8', fontWeight: 600 }}>{periods?.previous?.label || 'Período B'}</span>.
             </p>
           </div>
 
-          <button onClick={() => fetchAnalytics(compareMode, customYear, customMonth)} disabled={loading} className="btn-secondary" style={{ padding: '0.45rem 0.85rem', fontSize: '0.82rem' }}>
+          <button onClick={() => fetchAnalytics()} disabled={loading} className="btn-secondary" style={{ padding: '0.45rem 0.85rem', fontSize: '0.82rem' }}>
             <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
             Actualizar Métricas
           </button>
         </div>
 
-        {/* Period Selector & Comparison Settings Bar */}
-        <div className="glass-card" style={{ padding: '1.25rem', marginBottom: '1.5rem' }}>
-          <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '1rem', justifyContent: 'space-between' }}>
+        {/* Dynamic Compact Dual Date Range Picker Bar */}
+        <div className="glass-card" style={{ padding: '0.85rem 1.15rem', marginBottom: '1.5rem' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
             
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              <Calendar size={16} color="var(--accent-primary)" />
-              <span style={{ fontSize: '0.85rem', fontWeight: 600, color: '#ffffff' }}>Modo de Comparación:</span>
+            {/* Row 1: Header Title & Quick Preset Pills */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.5rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.82rem', fontWeight: 700, color: '#ffffff' }}>
+                <Calendar size={15} color="var(--accent-primary)" />
+                <span>Comparar Rangos de Fechas:</span>
+              </div>
+
+              {/* Botones de Presets Rápidos en formato Píldoras Compactas */}
+              <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap' }}>
+                <button
+                  onClick={() => applyPreset('current_vs_prev_full')}
+                  className="btn-secondary"
+                  style={{ padding: '0.2rem 0.55rem', fontSize: '0.72rem', color: '#38bdf8', borderColor: 'rgba(56, 189, 248, 0.3)', borderRadius: '999px' }}
+                >
+                  ⚡ Mes Actual vs. Mes Anterior Completo
+                </button>
+                <button
+                  onClick={() => applyPreset('current_vs_prev_mtd')}
+                  className="btn-secondary"
+                  style={{ padding: '0.2rem 0.55rem', fontSize: '0.72rem', color: '#34d399', borderColor: 'rgba(52, 211, 153, 0.3)', borderRadius: '999px' }}
+                >
+                  ⚡ Mes Actual vs. Mismísimos Días (MTD)
+                </button>
+                <button
+                  onClick={() => applyPreset('prev_vs_two_ago')}
+                  className="btn-secondary"
+                  style={{ padding: '0.2rem 0.55rem', fontSize: '0.72rem', color: '#a5b4fc', borderColor: 'rgba(165, 180, 252, 0.3)', borderRadius: '999px' }}
+                >
+                  ⚡ Mes Anterior vs. Antepasado
+                </button>
+              </div>
             </div>
 
-            <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap', flex: 1, justifyContent: 'flex-end' }}>
+            {/* Row 2: Compact Inline Date Pickers (Período A vs Período B) */}
+            <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem', justifyContent: 'space-between' }}>
               
-              <select
-                className="glass-input"
-                style={{ fontSize: '0.85rem', minWidth: '220px', padding: '0.4rem 0.75rem' }}
-                value={compareMode}
-                onChange={(e) => {
-                  setCompareMode(e.target.value);
-                  fetchAnalytics(e.target.value, compareRange, customYear, customMonth);
-                }}
-              >
-                <option value="previous_month">Mes Anterior (Mes Inmediatamente Anterior)</option>
-                <option value="same_month_last_year">Mismo Mes del Año Anterior (Año Pasado)</option>
-                <option value="custom">Mes y Año Personalizado...</option>
-              </select>
-
-              <select
-                className="glass-input"
-                style={{ fontSize: '0.85rem', minWidth: '220px', padding: '0.4rem 0.75rem' }}
-                value={compareRange}
-                onChange={(e) => {
-                  setCompareRange(e.target.value);
-                  fetchAnalytics(compareMode, e.target.value, customYear, customMonth);
-                }}
-                title="Selecciona si deseas comparar contra el mes completo o sólo los mismos días acumulados"
-              >
-                <option value="full_month">📅 Comparar vs. Mes Completo (31 Días)</option>
-                <option value="mtd">⏱️ Comparar vs. Mismos Días Acumulados (MTD)</option>
-              </select>
-
-              {compareMode === 'custom' && (
-                <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-                  <select
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flexWrap: 'wrap', flex: 1 }}>
+                
+                {/* Período A */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', background: 'rgba(56, 189, 248, 0.08)', padding: '0.3rem 0.6rem', borderRadius: '10px', border: '1px solid rgba(56, 189, 248, 0.25)' }}>
+                  <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#38bdf8', whiteSpace: 'nowrap' }}>
+                    🔵 Período A:
+                  </span>
+                  <input
+                    type="date"
                     className="glass-input"
-                    style={{ fontSize: '0.85rem', padding: '0.4rem 0.75rem' }}
-                    value={customMonth}
-                    onChange={(e) => setCustomMonth(e.target.value)}
-                  >
-                    <option value="1">Enero</option>
-                    <option value="2">Febrero</option>
-                    <option value="3">Marzo</option>
-                    <option value="4">Abril</option>
-                    <option value="5">Mayo</option>
-                    <option value="6">Junio</option>
-                    <option value="7">Julio</option>
-                    <option value="8">Agosto</option>
-                    <option value="9">Septiembre</option>
-                    <option value="10">Octubre</option>
-                    <option value="11">Noviembre</option>
-                    <option value="12">Diciembre</option>
-                  </select>
-
-                  <select
+                    style={{ fontSize: '0.78rem', padding: '0.25rem 0.45rem', minHeight: '32px' }}
+                    value={startDateA}
+                    onChange={(e) => setStartDateA(e.target.value)}
+                  />
+                  <span style={{ color: 'var(--text-dim)', fontSize: '0.75rem' }}>a</span>
+                  <input
+                    type="date"
                     className="glass-input"
-                    style={{ fontSize: '0.85rem', padding: '0.4rem 0.75rem' }}
-                    value={customYear}
-                    onChange={(e) => setCustomYear(e.target.value)}
-                  >
-                    <option value="2026">2026</option>
-                    <option value="2025">2025</option>
-                    <option value="2024">2024</option>
-                  </select>
+                    style={{ fontSize: '0.78rem', padding: '0.25rem 0.45rem', minHeight: '32px' }}
+                    value={endDateA}
+                    onChange={(e) => setEndDateA(e.target.value)}
+                  />
                 </div>
-              )}
+
+                <span style={{ color: 'var(--text-dim)', fontWeight: 700, fontSize: '0.82rem', padding: '0 0.2rem' }}>vs.</span>
+
+                {/* Período B */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', background: 'rgba(129, 140, 248, 0.08)', padding: '0.3rem 0.6rem', borderRadius: '10px', border: '1px solid rgba(129, 140, 248, 0.25)' }}>
+                  <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#a5b4fc', whiteSpace: 'nowrap' }}>
+                    🟣 Período B:
+                  </span>
+                  <input
+                    type="date"
+                    className="glass-input"
+                    style={{ fontSize: '0.78rem', padding: '0.25rem 0.45rem', minHeight: '32px' }}
+                    value={startDateB}
+                    onChange={(e) => setStartDateB(e.target.value)}
+                  />
+                  <span style={{ color: 'var(--text-dim)', fontSize: '0.75rem' }}>a</span>
+                  <input
+                    type="date"
+                    className="glass-input"
+                    style={{ fontSize: '0.78rem', padding: '0.25rem 0.45rem', minHeight: '32px' }}
+                    value={endDateB}
+                    onChange={(e) => setEndDateB(e.target.value)}
+                  />
+                </div>
+
+              </div>
+
+              {/* Botón Aplicar Filtrado */}
+              <button
+                onClick={() => fetchAnalytics(startDateA, endDateA, startDateB, endDateB)}
+                disabled={loading}
+                className="btn-primary"
+                style={{ padding: '0.4rem 1.15rem', fontSize: '0.8rem', minHeight: '34px', flexShrink: 0 }}
+              >
+                <Filter size={14} />
+                {loading ? 'Consultando...' : 'Aplicar Comparación'}
+              </button>
 
             </div>
-
           </div>
         </div>
 
-        {loading && !data ? (
-          <div className="glass-card" style={{ padding: '4rem', textAlign: 'center', color: 'var(--text-muted)' }}>
-            <RefreshCw size={32} className="animate-spin" style={{ margin: '0 auto 1rem auto', color: 'var(--accent-primary)' }} />
-            <p style={{ fontWeight: 600, color: '#ffffff' }}>Calculando analíticas comparativas de VTEX OMS...</p>
-            <p style={{ fontSize: '0.82rem', color: 'var(--text-dim)' }}>Consultando órdenes del período seleccionado y excluyendo ventas canceladas.</p>
+        {/* Global Loading & Error Status Banners */}
+        {loading && (
+          <div className="glass-card" style={{ padding: '2rem', textAlign: 'center', marginBottom: '1.5rem', color: 'var(--text-muted)' }}>
+            <RefreshCw size={24} className="animate-spin" color="var(--accent-primary)" style={{ margin: '0 auto 0.75rem auto' }} />
+            Obteniendo analíticas y analizando 100% de órdenes del Período A y B...
           </div>
-        ) : error ? (
-          <div className="glass-card" style={{ padding: '2rem', border: '1px solid rgba(248, 113, 113, 0.4)', background: 'rgba(248, 113, 113, 0.08)', color: '#f87171' }}>
-            <AlertTriangle size={24} style={{ marginBottom: '0.5rem' }} />
-            <p style={{ fontWeight: 600 }}>Error consultando métricas: {error}</p>
+        )}
+
+        {error && (
+          <div style={{ padding: '1rem', borderRadius: '12px', background: 'rgba(248, 113, 113, 0.1)', border: '1px solid rgba(248, 113, 113, 0.3)', color: '#fb7185', marginBottom: '1.5rem', fontSize: '0.88rem' }}>
+            ⚠️ <strong>Error en métricas:</strong> {error}
           </div>
-        ) : (
+        )}
+
+        {/* Analytics Main Dashboard Grid */}
+        {data && !loading && (
           <>
-            {/* 4 Main Executive KPI Cards */}
+            {/* Top 4 Key Executive Performance Indicators (KPI Cards) */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '1.25rem', marginBottom: '1.5rem' }}>
               
-              {/* Ventas Totales (Excluye Canceladas) */}
+              {/* Ventas Totales */}
               <div className="glass-card" style={{ padding: '1.25rem' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
                   <span style={{ fontSize: '0.75rem', color: 'var(--text-dim)', textTransform: 'uppercase', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                    <DollarSign size={14} color="#34d399" /> Ventas Totales <span style={{ fontSize: '0.65rem', color: '#34d399', textTransform: 'none' }}>(excl. canceladas)</span>
+                    <DollarSign size={14} color="#34d399" /> Ventas Totales <span style={{ fontSize: '0.68rem', color: '#34d399' }}>(excl. canceladas)</span>
                   </span>
                   {renderTrendBadge(kpis?.totalRevenue?.changePct || 0)}
                 </div>
@@ -215,11 +305,11 @@ export default function DashboardPage() {
                   C$ {(kpis?.totalRevenue?.current || 0).toLocaleString('es-NI', { minimumFractionDigits: 2 })}
                 </div>
                 <div style={{ fontSize: '0.78rem', color: 'var(--text-dim)', marginTop: '0.4rem' }}>
-                  vs. C$ {(kpis?.totalRevenue?.previous || 0).toLocaleString('es-NI', { minimumFractionDigits: 2 })} <span style={{ opacity: 0.7 }}>({periods?.previous?.monthName || 'Período comparativo'})</span>
+                  vs. C$ {(kpis?.totalRevenue?.previous || 0).toLocaleString('es-NI', { minimumFractionDigits: 2 })} <span style={{ opacity: 0.7 }}>({periods?.previous?.label || 'Período B'})</span>
                 </div>
               </div>
 
-              {/* Total Órdenes */}
+              {/* Total de Órdenes */}
               <div className="glass-card" style={{ padding: '1.25rem' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
                   <span style={{ fontSize: '0.75rem', color: 'var(--text-dim)', textTransform: 'uppercase', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
@@ -228,14 +318,14 @@ export default function DashboardPage() {
                   {renderTrendBadge(kpis?.totalOrders?.changePct || 0)}
                 </div>
                 <div style={{ fontSize: '1.65rem', fontWeight: 700, color: '#ffffff', letterSpacing: '-0.02em' }}>
-                  {(kpis?.totalOrders?.current || 0).toLocaleString('es-NI')} órdenes
+                  {(kpis?.totalOrders?.current || 0).toLocaleString()} órdenes
                 </div>
                 <div style={{ fontSize: '0.78rem', color: 'var(--text-dim)', marginTop: '0.4rem' }}>
-                  vs. {(kpis?.totalOrders?.previous || 0).toLocaleString('es-NI')} órdenes <span style={{ opacity: 0.7 }}>({periods?.previous?.monthName || 'Período comparativo'})</span>
+                  vs. {(kpis?.totalOrders?.previous || 0).toLocaleString()} órdenes <span style={{ opacity: 0.7 }}>({periods?.previous?.label || 'Período B'})</span>
                 </div>
               </div>
 
-              {/* Ticket Promedio (Excluye Canceladas) */}
+              {/* Ticket Promedio */}
               <div className="glass-card" style={{ padding: '1.25rem' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
                   <span style={{ fontSize: '0.75rem', color: 'var(--text-dim)', textTransform: 'uppercase', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
@@ -247,7 +337,7 @@ export default function DashboardPage() {
                   C$ {(kpis?.avgTicket?.current || 0).toLocaleString('es-NI', { minimumFractionDigits: 2 })}
                 </div>
                 <div style={{ fontSize: '0.78rem', color: 'var(--text-dim)', marginTop: '0.4rem' }}>
-                  vs. C$ {(kpis?.avgTicket?.previous || 0).toLocaleString('es-NI', { minimumFractionDigits: 2 })} <span style={{ opacity: 0.7 }}>({periods?.previous?.monthName || 'Período comparativo'})</span>
+                  vs. C$ {(kpis?.avgTicket?.previous || 0).toLocaleString('es-NI', { minimumFractionDigits: 2 })} <span style={{ opacity: 0.7 }}>({periods?.previous?.label || 'Período B'})</span>
                 </div>
               </div>
 
@@ -263,7 +353,7 @@ export default function DashboardPage() {
                   {kpis?.cancelRate?.current || 0}%
                 </div>
                 <div style={{ fontSize: '0.78rem', color: 'var(--text-dim)', marginTop: '0.4rem' }}>
-                  vs. {kpis?.cancelRate?.previous || 0}% <span style={{ opacity: 0.7 }}>({periods?.previous?.monthName || 'Período comparativo'})</span>
+                  vs. {kpis?.cancelRate?.previous || 0}% <span style={{ opacity: 0.7 }}>({periods?.previous?.label || 'Período B'})</span>
                 </div>
               </div>
 
@@ -277,7 +367,7 @@ export default function DashboardPage() {
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', flexWrap: 'wrap', gap: '0.5rem' }}>
                   <h3 style={{ fontSize: '1rem', fontWeight: 700, color: '#ffffff', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                     <Share2 size={18} color="var(--accent-primary)" />
-                    Ventas por Canal: Mes Actual vs. {periods?.previous?.monthName || 'Comparativo'}
+                    Ventas por Canal: {periods?.current?.label} vs. {periods?.previous?.label}
                   </h3>
                 </div>
 
@@ -290,11 +380,11 @@ export default function DashboardPage() {
                     {renderTrendBadge(channels?.socialSelling?.changePct || 0)}
                   </div>
 
-                  {/* Mes Actual */}
+                  {/* Período A */}
                   <div style={{ marginBottom: '0.6rem' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.78rem', marginBottom: '0.2rem' }}>
                       <span style={{ color: 'var(--text-muted)' }}>
-                        <strong style={{ color: '#34d399' }}>Mes Actual:</strong> {channels?.socialSelling?.current?.count || 0} órdenes
+                        <strong style={{ color: '#34d399' }}>{periods?.current?.label}:</strong> {channels?.socialSelling?.current?.count || 0} órdenes
                       </span>
                       <span style={{ color: '#34d399', fontWeight: 700 }}>
                         {channels?.socialSelling?.current?.pct || 0}% (C$ {(channels?.socialSelling?.current?.revenue || 0).toLocaleString('es-NI', { minimumFractionDigits: 2 })})
@@ -305,11 +395,11 @@ export default function DashboardPage() {
                     </div>
                   </div>
 
-                  {/* Mes Comparativo */}
+                  {/* Período B */}
                   <div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.78rem', marginBottom: '0.2rem' }}>
                       <span style={{ color: 'var(--text-dim)' }}>
-                        <strong>{periods?.previous?.monthName || 'Comparativo'}:</strong> {channels?.socialSelling?.previous?.count || 0} órdenes
+                        <strong>{periods?.previous?.label}:</strong> {channels?.socialSelling?.previous?.count || 0} órdenes
                       </span>
                       <span style={{ color: 'var(--text-dim)', fontWeight: 600 }}>
                         {channels?.socialSelling?.previous?.pct || 0}% (C$ {(channels?.socialSelling?.previous?.revenue || 0).toLocaleString('es-NI', { minimumFractionDigits: 2 })})
@@ -330,11 +420,11 @@ export default function DashboardPage() {
                     {renderTrendBadge(channels?.webDirect?.changePct || 0)}
                   </div>
 
-                  {/* Mes Actual */}
+                  {/* Período A */}
                   <div style={{ marginBottom: '0.6rem' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.78rem', marginBottom: '0.2rem' }}>
                       <span style={{ color: 'var(--text-muted)' }}>
-                        <strong style={{ color: '#38bdf8' }}>Mes Actual:</strong> {channels?.webDirect?.current?.count || 0} órdenes
+                        <strong style={{ color: '#38bdf8' }}>{periods?.current?.label}:</strong> {channels?.webDirect?.current?.count || 0} órdenes
                       </span>
                       <span style={{ color: '#38bdf8', fontWeight: 700 }}>
                         {channels?.webDirect?.current?.pct || 0}% (C$ {(channels?.webDirect?.current?.revenue || 0).toLocaleString('es-NI', { minimumFractionDigits: 2 })})
@@ -345,11 +435,11 @@ export default function DashboardPage() {
                     </div>
                   </div>
 
-                  {/* Mes Comparativo */}
+                  {/* Período B */}
                   <div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.78rem', marginBottom: '0.2rem' }}>
                       <span style={{ color: 'var(--text-dim)' }}>
-                        <strong>{periods?.previous?.monthName || 'Comparativo'}:</strong> {channels?.webDirect?.previous?.count || 0} órdenes
+                        <strong>{periods?.previous?.label}:</strong> {channels?.webDirect?.previous?.count || 0} órdenes
                       </span>
                       <span style={{ color: 'var(--text-dim)', fontWeight: 600 }}>
                         {channels?.webDirect?.previous?.pct || 0}% (C$ {(channels?.webDirect?.previous?.revenue || 0).toLocaleString('es-NI', { minimumFractionDigits: 2 })})
@@ -362,68 +452,59 @@ export default function DashboardPage() {
                 </div>
 
                 <p style={{ fontSize: '0.78rem', color: 'var(--text-dim)', lineHeight: '1.5', marginTop: '1rem', borderTop: '1px solid var(--border-subtle)', paddingTop: '0.75rem' }}>
-                  💡 <strong style={{ color: '#ffffff' }}>Comparación Canal por Canal</strong>: Compara las ventas y el volumen de órdenes de <strong style={{ color: '#34d399' }}>Social Selling</strong> y <strong style={{ color: '#38bdf8' }}>Web Directa</strong> entre el Mes Actual y <span style={{ color: 'var(--accent-primary)' }}>{periods?.previous?.monthName}</span>.
+                  💡 <strong style={{ color: '#ffffff' }}>Atribución Estricta</strong>: Clasifica como <strong style={{ color: '#34d399' }}>Social Selling</strong> las órdenes que contienen el parámetro de código de vendedor <code style={{ color: '#34d399' }}>UTM icampaign</code>, y como <strong style={{ color: '#38bdf8' }}>Web Directa</strong> las demás.
                 </p>
               </div>
 
-              {/* Status & Fulfillment Pipeline */}
+              {/* Order Status Pipeline Breakdown */}
               <div className="glass-card" style={{ padding: '1.5rem' }}>
                 <h3 style={{ fontSize: '1rem', fontWeight: 700, color: '#ffffff', marginBottom: '1.25rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                   <Zap size={18} color="var(--accent-amber)" />
-                  Embudo de Cumplimiento de Órdenes (Fulfillment)
+                  Embudo de Cumplimiento de Órdenes (Fulfillment) - {periods?.current?.label}
                 </h3>
 
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
                   
-                  {/* Facturadas */}
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.65rem 0.85rem', background: 'rgba(52, 211, 153, 0.08)', border: '1px solid rgba(52, 211, 153, 0.25)', borderRadius: '10px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                      <CheckCircle2 size={16} color="#34d399" />
-                      <span style={{ fontSize: '0.85rem', color: '#ffffff', fontWeight: 600 }}>Facturadas (Invoiced)</span>
+                  {/* Invoiced */}
+                  <div style={{ background: 'rgba(52, 211, 153, 0.06)', border: '1px solid rgba(52, 211, 153, 0.25)', padding: '0.85rem 1rem', borderRadius: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                      <CheckCircle2 size={18} color="#34d399" />
+                      <span style={{ fontSize: '0.88rem', fontWeight: 600, color: '#ffffff' }}>Facturadas (Invoiced)</span>
                     </div>
-                    <span style={{ fontSize: '1.1rem', fontWeight: 700, color: '#34d399' }}>
-                      {pipeline?.invoiced || 0} <span style={{ fontSize: '0.75rem', fontWeight: 400, color: 'var(--text-muted)' }}>órdenes</span>
-                    </span>
+                    <strong style={{ fontSize: '1.1rem', color: '#34d399' }}>{pipeline?.invoiced || 0} <span style={{ fontSize: '0.75rem', fontWeight: 400, color: 'var(--text-muted)' }}>órdenes</span></strong>
                   </div>
 
-                  {/* Lista para Preparar */}
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.65rem 0.85rem', background: 'rgba(56, 189, 248, 0.08)', border: '1px solid rgba(56, 189, 248, 0.25)', borderRadius: '10px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                      <Clock size={16} color="#38bdf8" />
-                      <span style={{ fontSize: '0.85rem', color: '#ffffff', fontWeight: 600 }}>Lista para Preparar (Ready)</span>
+                  {/* Ready for Handling */}
+                  <div style={{ background: 'rgba(56, 189, 248, 0.06)', border: '1px solid rgba(56, 189, 248, 0.25)', padding: '0.85rem 1rem', borderRadius: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                      <Clock size={18} color="#38bdf8" />
+                      <span style={{ fontSize: '0.88rem', fontWeight: 600, color: '#ffffff' }}>Lista para Preparar (Ready)</span>
                     </div>
-                    <span style={{ fontSize: '1.1rem', fontWeight: 700, color: '#38bdf8' }}>
-                      {pipeline?.readyForHandling || 0} <span style={{ fontSize: '0.75rem', fontWeight: 400, color: 'var(--text-muted)' }}>órdenes</span>
-                    </span>
+                    <strong style={{ fontSize: '1.1rem', color: '#38bdf8' }}>{pipeline?.readyForHandling || 0} <span style={{ fontSize: '0.75rem', fontWeight: 400, color: 'var(--text-muted)' }}>órdenes</span></strong>
                   </div>
 
-                  {/* En Preparación */}
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.65rem 0.85rem', background: 'rgba(251, 191, 36, 0.08)', border: '1px solid rgba(251, 191, 36, 0.25)', borderRadius: '10px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                      <Clock size={16} color="#fbbf24" />
-                      <span style={{ fontSize: '0.85rem', color: '#ffffff', fontWeight: 600 }}>En Preparación (Handling)</span>
+                  {/* Handling */}
+                  <div style={{ background: 'rgba(251, 191, 36, 0.06)', border: '1px solid rgba(251, 191, 36, 0.25)', padding: '0.85rem 1rem', borderRadius: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                      <Clock size={18} color="#fbbf24" />
+                      <span style={{ fontSize: '0.88rem', fontWeight: 600, color: '#ffffff' }}>En Preparación (Handling)</span>
                     </div>
-                    <span style={{ fontSize: '1.1rem', fontWeight: 700, color: '#fbbf24' }}>
-                      {pipeline?.handling || 0} <span style={{ fontSize: '0.75rem', fontWeight: 400, color: 'var(--text-muted)' }}>órdenes</span>
-                    </span>
+                    <strong style={{ fontSize: '1.1rem', color: '#fbbf24' }}>{pipeline?.handling || 0} <span style={{ fontSize: '0.75rem', fontWeight: 400, color: 'var(--text-muted)' }}>órdenes</span></strong>
                   </div>
 
-                  {/* Canceladas */}
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.65rem 0.85rem', background: 'rgba(248, 113, 113, 0.08)', border: '1px solid rgba(248, 113, 113, 0.25)', borderRadius: '10px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                      <AlertTriangle size={16} color="#fb7185" />
-                      <span style={{ fontSize: '0.85rem', color: '#ffffff', fontWeight: 600 }}>Canceladas (Canceled)</span>
+                  {/* Canceled */}
+                  <div style={{ background: 'rgba(251, 113, 133, 0.06)', border: '1px solid rgba(251, 113, 133, 0.25)', padding: '0.85rem 1rem', borderRadius: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                      <AlertTriangle size={18} color="#fb7185" />
+                      <span style={{ fontSize: '0.88rem', fontWeight: 600, color: '#ffffff' }}>Canceladas (Canceled)</span>
                     </div>
-                    <span style={{ fontSize: '1.1rem', fontWeight: 700, color: '#fb7185' }}>
-                      {pipeline?.canceled || 0} <span style={{ fontSize: '0.75rem', fontWeight: 400, color: 'var(--text-muted)' }}>órdenes</span>
-                    </span>
+                    <strong style={{ fontSize: '1.1rem', color: '#fb7185' }}>{pipeline?.canceled || 0} <span style={{ fontSize: '0.75rem', fontWeight: 400, color: 'var(--text-muted)' }}>órdenes</span></strong>
                   </div>
 
                 </div>
               </div>
 
             </div>
-
           </>
         )}
 

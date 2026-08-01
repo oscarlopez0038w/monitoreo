@@ -60,6 +60,24 @@ async function analyzeSocialSellingOrders(orders) {
   return { count: socialCount, revenue: socialRevenue };
 }
 
+// Función para formatear fechas amigables en español (ej. "1 de Agosto 2026")
+function formatFriendlyDateRange(startStr, endStr) {
+  const monthNames = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+  
+  const [sY, sM, sD] = startStr.split('-').map(Number);
+  const [eY, eM, eD] = endStr.split('-').map(Number);
+
+  const startMonthName = monthNames[sM - 1] || '';
+  const endMonthName = monthNames[eM - 1] || '';
+
+  if (sY === eY && sM === eM) {
+    if (sD === eD) return `${sD} de ${startMonthName} ${sY}`;
+    return `${sD} al ${eD} de ${startMonthName} ${sY}`;
+  }
+
+  return `${sD} ${startMonthName} ${sY} al ${eD} ${endMonthName} ${eY}`;
+}
+
 export async function GET(request) {
   try {
     if (!isVtexConfigured()) {
@@ -70,54 +88,39 @@ export async function GET(request) {
     }
 
     const { searchParams } = new URL(request.url);
-    const compareMode = searchParams.get('compareMode') || 'previous_month';
-    const compareRange = searchParams.get('compareRange') || 'full_month'; // 'full_month' (Mes Completo) o 'mtd' (Mismos días)
-    const customYear = searchParams.get('compareYear');
-    const customMonth = searchParams.get('compareMonth');
-
     const nicNow = getNicaraguaNow();
-    
-    // Mes actual en Zona Horaria Nicaragua (UTC-6)
-    const currentYear = nicNow.year;
-    const currentMonth = nicNow.month;
-    const currentDay = nicNow.day;
 
-    const currentStartStr = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-01`;
-    const currentEndStr = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(currentDay).padStart(2, '0')}`;
+    // Calcular valores por defecto en zona horaria Nicaragua (UTC-6)
+    // Período A por defecto: Mes Actual (inicio del mes hasta hoy)
+    const defaultStartA = nicNow.firstDayStr;
+    const defaultEndA = nicNow.todayStr;
 
-    const currentStartIso = new Date(`${currentStartStr}T00:00:00-06:00`).toISOString();
-    const currentEndIso = new Date(`${currentEndStr}T23:59:59-06:00`).toISOString();
-
-    // Determinar período de comparación
-    let prevYear = currentYear;
-    let prevMonth = currentMonth - 1;
-
-    if (compareMode === 'same_month_last_year') {
-      prevYear = currentYear - 1;
-      prevMonth = currentMonth;
-    } else if (compareMode === 'custom' && customYear && customMonth) {
-      prevYear = parseInt(customYear);
-      prevMonth = parseInt(customMonth) - 1;
+    // Período B por defecto: Mes Anterior Completo
+    let prevYearVal = nicNow.year;
+    let prevMonthVal = nicNow.month - 1; // 0-indexed
+    if (prevMonthVal < 0) {
+      prevMonthVal = 11;
+      prevYearVal -= 1;
     }
 
-    // Ajuste de desbordamiento de año
-    const prevDateObj = new Date(prevYear, prevMonth, 1);
-    prevYear = prevDateObj.getFullYear();
-    prevMonth = prevDateObj.getMonth();
+    const prevMonthLastDay = new Date(prevYearVal, prevMonthVal + 1, 0).getDate();
+    const defaultStartB = `${prevYearVal}-${String(prevMonthVal + 1).padStart(2, '0')}-01`;
+    const defaultEndB = `${prevYearVal}-${String(prevMonthVal + 1).padStart(2, '0')}-${String(prevMonthLastDay).padStart(2, '0')}`;
 
-    const lastDayOfPrevMonth = new Date(prevYear, prevMonth + 1, 0).getDate();
-    
-    // Si compareRange es 'full_month', se compara contra todo el mes anterior completo (ej. 1 al 31 de Julio)
-    // Si es 'mtd', se compara contra los mismos días transcurridos (ej. 1 al 1 de Julio)
-    const targetPrevDay = compareRange === 'mtd' ? Math.min(currentDay, lastDayOfPrevMonth) : lastDayOfPrevMonth;
+    // Extraer parámetros explícitos de fecha enviados desde el cliente
+    const startDateA = searchParams.get('startDateA') || searchParams.get('startA') || defaultStartA;
+    const endDateA = searchParams.get('endDateA') || searchParams.get('endA') || defaultEndA;
 
-    const prevStartStr = `${prevYear}-${String(prevMonth + 1).padStart(2, '0')}-01`;
-    const prevEndStr = `${prevYear}-${String(prevMonth + 1).padStart(2, '0')}-${String(targetPrevDay).padStart(2, '0')}`;
+    const startDateB = searchParams.get('startDateB') || searchParams.get('startB') || defaultStartB;
+    const endDateB = searchParams.get('endDateB') || searchParams.get('endB') || defaultEndB;
 
-    const prevStartIso = new Date(`${prevStartStr}T00:00:00-06:00`).toISOString();
-    const prevEndIso = new Date(`${prevEndStr}T23:59:59-06:00`).toISOString();
+    const currentStartIso = new Date(`${startDateA}T00:00:00-06:00`).toISOString();
+    const currentEndIso = new Date(`${endDateA}T23:59:59-06:00`).toISOString();
 
-    // Consultar TODAS las órdenes del mes actual y del período de comparación en paralelo
+    const prevStartIso = new Date(`${startDateB}T00:00:00-06:00`).toISOString();
+    const prevEndIso = new Date(`${endDateB}T23:59:59-06:00`).toISOString();
+
+    // Consultar TODAS las órdenes del Período A y del Período B en paralelo
     const [
       currOrders,
       prevOrders,
@@ -149,13 +152,13 @@ export async function GET(request) {
     const prevTotalOrders = prevOrders.length;
     const prevAvgTicket = prevValidOrders.length > 0 ? prevTotalRevenue / prevValidOrders.length : 0;
 
-    // Conteo exacto por estados (Mes Actual)
+    // Conteo exacto por estados (Período A)
     const currInvoicedCount = currInvoicedRes?.paging?.total ?? 0;
     const currHandlingCount = currHandlingRes?.paging?.total ?? 0;
     const currReadyCount = currReadyRes?.paging?.total ?? 0;
     const currCanceledCount = currCanceledRes?.paging?.total ?? 0;
 
-    // Conteo exacto por estados (Mes Anterior / Comparativo)
+    // Conteo exacto por estados (Período B)
     const prevInvoicedCount = prevInvoicedRes?.paging?.total ?? 0;
     const prevCanceledCount = prevCanceledRes?.paging?.total ?? 0;
 
@@ -176,7 +179,7 @@ export async function GET(request) {
     const webDirectPct = 100 - socialSellingPct;
     const webDirectRevenue = Math.max(0, currTotalRevenue - socialSellingRevenue);
 
-    // Métricas del período comparativo
+    // Métricas del Período B
     const prevSocialSellingOrdersCount = prevSocialAnalysis.count;
     const prevSocialSellingRevenue = prevSocialAnalysis.revenue;
     const prevSocialSellingPct = prevValidOrders.length > 0 ? (prevSocialSellingOrdersCount / prevValidOrders.length) * 100 : 0;
@@ -190,20 +193,23 @@ export async function GET(request) {
       return parseFloat((((curr - prev) / prev) * 100).toFixed(1));
     };
 
-    const monthNames = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
-    const prevMonthLabel = `${monthNames[prevMonth]} ${prevYear}`;
+    const labelA = formatFriendlyDateRange(startDateA, endDateA);
+    const labelB = formatFriendlyDateRange(startDateB, endDateB);
 
     return NextResponse.json({
       success: true,
-      compareMode,
-      compareRange,
       periods: {
-        current: { label: `1 al ${currentDay} de ${monthNames[currentMonth]} ${currentYear}`, start: currentStartStr, end: currentEndStr },
+        current: {
+          label: labelA,
+          start: startDateA,
+          end: endDateA,
+          monthName: labelA,
+        },
         previous: {
-          label: compareRange === 'full_month' ? `1 al ${targetPrevDay} de ${prevMonthLabel} (Mes Completo)` : `1 al ${targetPrevDay} de ${prevMonthLabel} (Días Transcurridos MTD)`,
-          start: prevStartStr,
-          end: prevEndStr,
-          monthName: prevMonthLabel,
+          label: labelB,
+          start: startDateB,
+          end: endDateB,
+          monthName: labelB,
         },
       },
       kpis: {
