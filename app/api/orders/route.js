@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { isVtexConfigured, fetchVtexOrders, fetchVtexOrderDetail } from '@/lib/vtex';
+import { getNicaraguaNow } from '@/lib/dateUtils';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -28,12 +29,11 @@ export async function GET(request) {
       return NextResponse.json({ success: true, order: orderDetail });
     }
 
-    // Filtros de fecha (Por defecto: inicio de este mes hasta hoy)
-    const now = new Date();
-    const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    // Filtros de fecha en Zona Horaria Nicaragua (America/Managua UTC-6)
+    const nicNow = getNicaraguaNow();
     
-    const startDateParam = searchParams.get('startDate') || firstDayOfMonth.toISOString().slice(0, 10);
-    const endDateParam = searchParams.get('endDate') || now.toISOString().slice(0, 10);
+    const startDateParam = searchParams.get('startDate') || nicNow.firstDayStr;
+    const endDateParam = searchParams.get('endDate') || nicNow.todayStr;
     const statusParam = searchParams.get('status') || '';
     const searchParam = searchParams.get('search') || '';
     const pageParam = parseInt(searchParams.get('page') || '1', 10);

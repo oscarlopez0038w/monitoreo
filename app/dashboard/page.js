@@ -25,8 +25,8 @@ export default function DashboardPage() {
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
   const [compareMode, setCompareMode] = useState('previous_month');
-  const [customYear, setCustomYear] = useState('2025');
-  const [customMonth, setCustomMonth] = useState('7');
+  const [customYear, setCustomYear] = useState('2026');
+  const [customMonth, setCustomMonth] = useState('5');
 
   const fetchAnalytics = async (mode = compareMode, year = customYear, month = customMonth) => {
     setLoading(true);
@@ -255,43 +255,95 @@ export default function DashboardPage() {
               
               {/* Channel Attribution: Social Selling vs Web */}
               <div className="glass-card" style={{ padding: '1.5rem' }}>
-                <h3 style={{ fontSize: '1rem', fontWeight: 700, color: '#ffffff', marginBottom: '1.25rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                  <Share2 size={18} color="var(--accent-primary)" />
-                  Ventas por Canal: Social Selling vs. Web Directa
-                </h3>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+                  <h3 style={{ fontSize: '1rem', fontWeight: 700, color: '#ffffff', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <Share2 size={18} color="var(--accent-primary)" />
+                    Ventas por Canal: Mes Actual vs. {periods?.previous?.monthName || 'Comparativo'}
+                  </h3>
+                </div>
 
-                {/* Social Selling Progress Bar */}
-                <div style={{ marginBottom: '1.25rem' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', marginBottom: '0.35rem' }}>
-                    <span style={{ color: '#ffffff', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                      <Users size={14} color="#34d399" /> Social Selling / Vendedores <span style={{ fontSize: '0.72rem', color: '#34d399', fontWeight: 500 }}>({channels?.socialSelling?.count || 0} órdenes)</span>
+                {/* --- Social Selling Section --- */}
+                <div style={{ marginBottom: '1.25rem', background: 'rgba(52, 211, 153, 0.04)', padding: '0.95rem 1rem', borderRadius: '12px', border: '1px solid rgba(52, 211, 153, 0.18)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                    <span style={{ color: '#ffffff', fontWeight: 700, fontSize: '0.88rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                      <Users size={15} color="#34d399" /> Social Selling / Vendedores
                     </span>
-                    <span style={{ color: '#34d399', fontWeight: 700 }}>
-                      {channels?.socialSelling?.pct || 0}% (C$ {(channels?.socialSelling?.revenue || 0).toLocaleString('es-NI', { minimumFractionDigits: 2 })})
-                    </span>
+                    {renderTrendBadge(channels?.socialSelling?.changePct || 0)}
                   </div>
-                  <div style={{ width: '100%', height: '10px', borderRadius: '5px', background: 'rgba(255, 255, 255, 0.08)', overflow: 'hidden' }}>
-                    <div style={{ width: `${channels?.socialSelling?.pct || 0}%`, height: '100%', background: 'linear-gradient(to right, #34d399, #059669)', borderRadius: '5px', transition: 'width 0.6s ease' }} />
+
+                  {/* Mes Actual */}
+                  <div style={{ marginBottom: '0.6rem' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.78rem', marginBottom: '0.2rem' }}>
+                      <span style={{ color: 'var(--text-muted)' }}>
+                        <strong style={{ color: '#34d399' }}>Mes Actual:</strong> {channels?.socialSelling?.current?.count || 0} órdenes
+                      </span>
+                      <span style={{ color: '#34d399', fontWeight: 700 }}>
+                        {channels?.socialSelling?.current?.pct || 0}% (C$ {(channels?.socialSelling?.current?.revenue || 0).toLocaleString('es-NI', { minimumFractionDigits: 2 })})
+                      </span>
+                    </div>
+                    <div style={{ width: '100%', height: '8px', borderRadius: '4px', background: 'rgba(255, 255, 255, 0.08)', overflow: 'hidden' }}>
+                      <div style={{ width: `${channels?.socialSelling?.current?.pct || 0}%`, height: '100%', background: 'linear-gradient(to right, #34d399, #059669)', borderRadius: '4px', transition: 'width 0.6s ease' }} />
+                    </div>
+                  </div>
+
+                  {/* Mes Comparativo */}
+                  <div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.78rem', marginBottom: '0.2rem' }}>
+                      <span style={{ color: 'var(--text-dim)' }}>
+                        <strong>{periods?.previous?.monthName || 'Comparativo'}:</strong> {channels?.socialSelling?.previous?.count || 0} órdenes
+                      </span>
+                      <span style={{ color: 'var(--text-dim)', fontWeight: 600 }}>
+                        {channels?.socialSelling?.previous?.pct || 0}% (C$ {(channels?.socialSelling?.previous?.revenue || 0).toLocaleString('es-NI', { minimumFractionDigits: 2 })})
+                      </span>
+                    </div>
+                    <div style={{ width: '100%', height: '6px', borderRadius: '3px', background: 'rgba(255, 255, 255, 0.05)', overflow: 'hidden' }}>
+                      <div style={{ width: `${channels?.socialSelling?.previous?.pct || 0}%`, height: '100%', background: 'rgba(148, 163, 184, 0.45)', borderRadius: '3px', transition: 'width 0.6s ease' }} />
+                    </div>
                   </div>
                 </div>
 
-                {/* Web Direct Progress Bar */}
-                <div style={{ marginBottom: '1rem' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', marginBottom: '0.35rem' }}>
-                    <span style={{ color: '#ffffff', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                      <Globe size={14} color="#38bdf8" /> Web Directa / E-Commerce <span style={{ fontSize: '0.72rem', color: '#38bdf8', fontWeight: 500 }}>({channels?.webDirect?.count || 0} órdenes)</span>
+                {/* --- Web Directa Section --- */}
+                <div style={{ marginBottom: '1rem', background: 'rgba(56, 189, 248, 0.04)', padding: '0.95rem 1rem', borderRadius: '12px', border: '1px solid rgba(56, 189, 248, 0.18)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                    <span style={{ color: '#ffffff', fontWeight: 700, fontSize: '0.88rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                      <Globe size={15} color="#38bdf8" /> Web Directa / E-Commerce
                     </span>
-                    <span style={{ color: '#38bdf8', fontWeight: 700 }}>
-                      {channels?.webDirect?.pct || 0}% (C$ {(channels?.webDirect?.revenue || 0).toLocaleString('es-NI', { minimumFractionDigits: 2 })})
-                    </span>
+                    {renderTrendBadge(channels?.webDirect?.changePct || 0)}
                   </div>
-                  <div style={{ width: '100%', height: '10px', borderRadius: '5px', background: 'rgba(255, 255, 255, 0.08)', overflow: 'hidden' }}>
-                    <div style={{ width: `${channels?.webDirect?.pct || 0}%`, height: '100%', background: 'linear-gradient(to right, #38bdf8, #0284c7)', borderRadius: '5px', transition: 'width 0.6s ease' }} />
+
+                  {/* Mes Actual */}
+                  <div style={{ marginBottom: '0.6rem' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.78rem', marginBottom: '0.2rem' }}>
+                      <span style={{ color: 'var(--text-muted)' }}>
+                        <strong style={{ color: '#38bdf8' }}>Mes Actual:</strong> {channels?.webDirect?.current?.count || 0} órdenes
+                      </span>
+                      <span style={{ color: '#38bdf8', fontWeight: 700 }}>
+                        {channels?.webDirect?.current?.pct || 0}% (C$ {(channels?.webDirect?.current?.revenue || 0).toLocaleString('es-NI', { minimumFractionDigits: 2 })})
+                      </span>
+                    </div>
+                    <div style={{ width: '100%', height: '8px', borderRadius: '4px', background: 'rgba(255, 255, 255, 0.08)', overflow: 'hidden' }}>
+                      <div style={{ width: `${channels?.webDirect?.current?.pct || 0}%`, height: '100%', background: 'linear-gradient(to right, #38bdf8, #0284c7)', borderRadius: '4px', transition: 'width 0.6s ease' }} />
+                    </div>
+                  </div>
+
+                  {/* Mes Comparativo */}
+                  <div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.78rem', marginBottom: '0.2rem' }}>
+                      <span style={{ color: 'var(--text-dim)' }}>
+                        <strong>{periods?.previous?.monthName || 'Comparativo'}:</strong> {channels?.webDirect?.previous?.count || 0} órdenes
+                      </span>
+                      <span style={{ color: 'var(--text-dim)', fontWeight: 600 }}>
+                        {channels?.webDirect?.previous?.pct || 0}% (C$ {(channels?.webDirect?.previous?.revenue || 0).toLocaleString('es-NI', { minimumFractionDigits: 2 })})
+                      </span>
+                    </div>
+                    <div style={{ width: '100%', height: '6px', borderRadius: '3px', background: 'rgba(255, 255, 255, 0.05)', overflow: 'hidden' }}>
+                      <div style={{ width: `${channels?.webDirect?.previous?.pct || 0}%`, height: '100%', background: 'rgba(148, 163, 184, 0.45)', borderRadius: '3px', transition: 'width 0.6s ease' }} />
+                    </div>
                   </div>
                 </div>
 
                 <p style={{ fontSize: '0.78rem', color: 'var(--text-dim)', lineHeight: '1.5', marginTop: '1rem', borderTop: '1px solid var(--border-subtle)', paddingTop: '0.75rem' }}>
-                  💡 <strong style={{ color: '#ffffff' }}>Atribución Estricta</strong>: Clasifica como <strong style={{ color: '#34d399' }}>Social Selling</strong> las órdenes que contienen el parámetro de código de vendedor <code style={{ color: '#34d399' }}>UTM icampaign</code>, y como <strong style={{ color: '#38bdf8' }}>Web Directa</strong> las demás.
+                  💡 <strong style={{ color: '#ffffff' }}>Comparación Canal por Canal</strong>: Compara las ventas y el volumen de órdenes de <strong style={{ color: '#34d399' }}>Social Selling</strong> y <strong style={{ color: '#38bdf8' }}>Web Directa</strong> entre el Mes Actual y <span style={{ color: 'var(--accent-primary)' }}>{periods?.previous?.monthName}</span>.
                 </p>
               </div>
 

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { isVtexConfigured, fetchVtexOrders, fetchVtexOrderDetail } from '@/lib/vtex';
+import { getNicaraguaNow } from '@/lib/dateUtils';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -73,12 +74,12 @@ export async function GET(request) {
     const customYear = searchParams.get('compareYear');
     const customMonth = searchParams.get('compareMonth');
 
-    const now = new Date();
+    const nicNow = getNicaraguaNow();
     
-    // Mes actual (Julio)
-    const currentYear = now.getFullYear();
-    const currentMonth = now.getMonth();
-    const currentDay = now.getDate();
+    // Mes actual en Zona Horaria Nicaragua (UTC-6)
+    const currentYear = nicNow.year;
+    const currentMonth = nicNow.month;
+    const currentDay = nicNow.day;
 
     const currentStartStr = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-01`;
     const currentEndStr = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(currentDay).padStart(2, '0')}`;
@@ -158,14 +159,26 @@ export async function GET(request) {
     const currCancelRate = currTotalOrders > 0 ? (currCanceledCount / currTotalOrders) * 100 : 0;
     const prevCancelRate = prevTotalOrders > 0 ? (prevCanceledCount / prevTotalOrders) * 100 : 0;
 
-    // Análisis 100% preciso de Social Selling inspeccionando los detalles de las órdenes del mes (excluyendo canceladas)
-    const socialAnalysis = await analyzeSocialSellingOrders(currValidOrders);
-    const socialSellingOrdersCount = socialAnalysis.count;
-    const socialSellingRevenue = socialAnalysis.revenue;
+    // Análisis 100% preciso de Social Selling inspeccionando los detalles de las órdenes de AMBOS períodos
+    const [currSocialAnalysis, prevSocialAnalysis] = await Promise.all([
+      analyzeSocialSellingOrders(currValidOrders),
+      analyzeSocialSellingOrders(prevValidOrders),
+    ]);
 
+    const socialSellingOrdersCount = currSocialAnalysis.count;
+    const socialSellingRevenue = currSocialAnalysis.revenue;
     const socialSellingPct = currValidOrders.length > 0 ? (socialSellingOrdersCount / currValidOrders.length) * 100 : 0;
+
     const webDirectPct = 100 - socialSellingPct;
     const webDirectRevenue = Math.max(0, currTotalRevenue - socialSellingRevenue);
+
+    // Métricas del período comparativo
+    const prevSocialSellingOrdersCount = prevSocialAnalysis.count;
+    const prevSocialSellingRevenue = prevSocialAnalysis.revenue;
+    const prevSocialSellingPct = prevValidOrders.length > 0 ? (prevSocialSellingOrdersCount / prevValidOrders.length) * 100 : 0;
+
+    const prevWebDirectPct = 100 - prevSocialSellingPct;
+    const prevWebDirectRevenue = Math.max(0, prevTotalRevenue - prevSocialSellingRevenue);
 
     // Función auxiliar para calcular porcentaje de cambio
     const calcChange = (curr, prev) => {
@@ -212,14 +225,30 @@ export async function GET(request) {
       },
       channels: {
         socialSelling: {
-          count: socialSellingOrdersCount,
-          pct: parseFloat(socialSellingPct.toFixed(1)),
-          revenue: parseFloat(socialSellingRevenue.toFixed(2)),
+          current: {
+            count: socialSellingOrdersCount,
+            pct: parseFloat(socialSellingPct.toFixed(1)),
+            revenue: parseFloat(socialSellingRevenue.toFixed(2)),
+          },
+          previous: {
+            count: prevSocialSellingOrdersCount,
+            pct: parseFloat(prevSocialSellingPct.toFixed(1)),
+            revenue: parseFloat(prevSocialSellingRevenue.toFixed(2)),
+          },
+          changePct: calcChange(socialSellingRevenue, prevSocialSellingRevenue),
         },
         webDirect: {
-          count: currValidOrders.length - socialSellingOrdersCount,
-          pct: parseFloat(webDirectPct.toFixed(1)),
-          revenue: parseFloat(webDirectRevenue.toFixed(2)),
+          current: {
+            count: currValidOrders.length - socialSellingOrdersCount,
+            pct: parseFloat(webDirectPct.toFixed(1)),
+            revenue: parseFloat(webDirectRevenue.toFixed(2)),
+          },
+          previous: {
+            count: prevValidOrders.length - prevSocialSellingOrdersCount,
+            pct: parseFloat(prevWebDirectPct.toFixed(1)),
+            revenue: parseFloat(prevWebDirectRevenue.toFixed(2)),
+          },
+          changePct: calcChange(webDirectRevenue, prevWebDirectRevenue),
         },
       },
       pipeline: {

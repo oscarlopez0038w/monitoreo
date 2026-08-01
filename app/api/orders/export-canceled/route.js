@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { isVtexConfigured, fetchVtexOrders, fetchVtexOrderDetail } from '@/lib/vtex';
+import { getNicaraguaNow } from '@/lib/dateUtils';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -23,12 +24,10 @@ export async function GET(request) {
     }
 
     const { searchParams } = new URL(request.url);
-    const now = new Date();
-    const firstDay = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10);
-    const today = now.toISOString().slice(0, 10);
+    const nicNow = getNicaraguaNow();
 
-    const startDate = searchParams.get('startDate') || firstDay;
-    const endDate = searchParams.get('endDate') || today;
+    const startDate = searchParams.get('startDate') || nicNow.firstDayStr;
+    const endDate = searchParams.get('endDate') || nicNow.todayStr;
 
     const startIso = new Date(`${startDate}T00:00:00-06:00`).toISOString();
     const endIso = new Date(`${endDate}T23:59:59-06:00`).toISOString();

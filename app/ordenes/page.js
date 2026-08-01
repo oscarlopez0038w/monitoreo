@@ -3,15 +3,14 @@
 import { useState, useEffect } from 'react';
 import AppLayout from '@/components/AppLayout';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
+import { getNicaraguaNow } from '@/lib/dateUtils';
 import { ShoppingCart, Calendar, Filter, Search, RefreshCw, ChevronDown, ChevronUp, Package, DollarSign, CheckCircle2, Clock, AlertTriangle, FileText, Zap, Radio, X, MessageSquare, Info, Download } from 'lucide-react';
 
 export default function OrdenesPage() {
-  const now = new Date();
-  const firstDay = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10);
-  const today = now.toISOString().slice(0, 10);
+  const nicNow = getNicaraguaNow();
 
-  const [startDate, setStartDate] = useState(firstDay);
-  const [endDate, setEndDate] = useState(today);
+  const [startDate, setStartDate] = useState(nicNow.firstDayStr);
+  const [endDate, setEndDate] = useState(nicNow.todayStr);
   const [statusFilter, setStatusFilter] = useState('');
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(false);
