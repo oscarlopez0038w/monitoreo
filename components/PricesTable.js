@@ -109,6 +109,23 @@ export default function PricesTable() {
     }
   };
 
+  // Vincular Webhook de Precios automáticamente en VTEX
+  const handleRegisterWebhook = async () => {
+    setBanner(null);
+    try {
+      const res = await fetch('/api/webhooks/vtex-price/register', { method: 'POST' });
+      const data = await res.json();
+
+      if (data.success) {
+        setBanner({ type: 'success', text: `⚡ ${data.message}` });
+      } else {
+        setBanner({ type: 'error', text: `⚠️ ${data.error || 'Error al vincular webhook con VTEX'}` });
+      }
+    } catch (err) {
+      setBanner({ type: 'error', text: `⚠️ Error de red: ${err.message}` });
+    }
+  };
+
   // Refrescar precio de un solo SKU en tiempo real con actualización directa in-place (sin recargar el componente)
   const handleRefreshSingleSku = async (skuId) => {
     setUpdatingSkuId(skuId);
@@ -327,6 +344,16 @@ export default function PricesTable() {
                   <Play size={14} /> ⚡ Iniciar Sincronización en Segundo Plano
                 </>
               )}
+            </button>
+
+            {/* Auto Register Webhook Button */}
+            <button
+              onClick={handleRegisterWebhook}
+              className="btn-secondary"
+              style={{ padding: '0.45rem 0.95rem', fontSize: '0.82rem' }}
+              title="Vincular automáticamente las notificaciones de precios de VTEX con Supabase"
+            >
+              🔗 Vincular Webhook VTEX
             </button>
 
           </div>
