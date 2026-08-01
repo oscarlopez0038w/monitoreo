@@ -36,8 +36,8 @@ export default function PricesTable() {
   const [stats, setStats] = useState({ totalPricedSkus: 0, avgPrice: 0, discountedSkusCount: 0, lastSyncTime: null });
   const [banner, setBanner] = useState(null);
 
-  const fetchPrices = useCallback(async () => {
-    setLoading(true);
+  const fetchPrices = useCallback(async (showLoadingSpinner = true) => {
+    if (showLoadingSpinner) setLoading(true);
     try {
       const params = new URLSearchParams({
         page: String(page),
@@ -60,7 +60,7 @@ export default function PricesTable() {
     } catch (err) {
       console.error('Error cargando precios:', err);
     } finally {
-      setLoading(false);
+      if (showLoadingSpinner) setLoading(false);
     }
   }, [page, pageSize, search, discountFilter, sortBy, sortOrder]);
 
@@ -77,7 +77,7 @@ export default function PricesTable() {
   }, []);
 
   useEffect(() => {
-    fetchPrices();
+    fetchPrices(true);
     checkBgStatus();
     const interval = setInterval(checkBgStatus, 3000);
     return () => clearInterval(interval);
@@ -109,7 +109,7 @@ export default function PricesTable() {
     }
   };
 
-  // Refrescar precio de un solo SKU en tiempo real
+  // Refrescar precio de un solo SKU en tiempo real con actualización directa in-place (sin recargar el componente)
   const handleRefreshSingleSku = async (skuId) => {
     setUpdatingSkuId(skuId);
     try {
@@ -120,8 +120,34 @@ export default function PricesTable() {
       });
       const data = await res.json();
 
-      if (data.success) {
-        fetchPrices();
+      if (data.success && data.price) {
+        const fresh = data.price;
+        const listP = fresh.listPrice !== null && fresh.listPrice !== undefined ? parseFloat(fresh.listPrice) : null;
+        const baseP = fresh.basePrice !== null && fresh.basePrice !== undefined ? parseFloat(fresh.basePrice) : null;
+        let discPct = 0;
+        if (listP && baseP && listP > baseP) {
+          discPct = parseFloat((((listP - baseP) / listP) * 100).toFixed(1));
+        }
+
+        // Actualizar directamente la fila del estado local sin mostrar el loader de toda la tabla
+        setSkus((prevSkus) =>
+          prevSkus.map((item) => {
+            if (item.id === skuId) {
+              return {
+                ...item,
+                listPrice: listP,
+                basePrice: baseP,
+                costPrice: fresh.costPrice !== null && fresh.costPrice !== undefined ? parseFloat(fresh.costPrice) : null,
+                discountPct: discPct,
+                priceUpdatedAt: new Date().toISOString(),
+              };
+            }
+            return item;
+          })
+        );
+
+        // Actualizar silenciosamente el número de SKUs con precio en las tarjetas KPI
+        fetchPrices(false);
       }
     } catch (err) {
       console.error(`Error actualizando precio de SKU ${skuId}:`, err);
