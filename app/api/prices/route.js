@@ -27,8 +27,17 @@ export async function GET(request) {
       .select('sku_id, description');
 
     const descMap = new Map();
+    const matchingIdsFromDesc = [];
+
     if (safetyData) {
-      safetyData.forEach((row) => descMap.set(String(row.sku_id), row.description));
+      safetyData.forEach((row) => {
+        const skuStr = String(row.sku_id);
+        descMap.set(skuStr, row.description);
+
+        if (search && row.description && row.description.toLowerCase().includes(search.toLowerCase())) {
+          matchingIdsFromDesc.push(row.sku_id);
+        }
+      });
     }
 
     // 2. Consulta ultra-rápida paginada a la tabla principal public.vtex_skus
@@ -37,6 +46,8 @@ export async function GET(request) {
     if (search) {
       if (!isNaN(search)) {
         query = query.eq('id', parseInt(search, 10));
+      } else if (matchingIdsFromDesc.length > 0) {
+        query = query.in('id', matchingIdsFromDesc.slice(0, 100));
       }
     }
 
@@ -103,26 +114,29 @@ export async function GET(request) {
     }
 
     // 3. Consultas de metadatos SQL ultra-optimizadas (< 5ms) sin transferir filas completas
-    const [{ count: totalPricedSkus }, { data: lastSyncData }] = await Promise.all([
+    const [{ count: totalPricedSkus }, { data: lastSyncData }, { count: totalCatalogCount }] = await Promise.all([
       supabaseAdmin.from('vtex_skus').select('id', { count: 'exact', head: true }).not('base_price', 'is', null),
       supabaseAdmin.from('vtex_skus').select('price_updated_at').order('price_updated_at', { ascending: false, nullsFirst: true }).limit(1),
+      supabaseAdmin.from('vtex_skus').select('id', { count: 'exact', head: true }),
     ]);
 
     const lastSyncTime = lastSyncData?.[0]?.price_updated_at || null;
-    const totalCount = count || 0;
-    const totalPages = Math.ceil(totalCount / pageSize) || 1;
+    const realTotalCount = search ? (count || 0) : (totalCatalogCount || count || 0);
+    const totalPages = Math.ceil(realTotalCount / pageSize) || 1;
 
     return NextResponse.json({
       success: true,
       skus: formattedSkus,
       paging: {
-        total: totalCount,
+        total: realTotalCount,
+        totalCatalog: totalCatalogCount || 0,
         page,
         pageSize,
         totalPages,
       },
       stats: {
         totalPricedSkus: totalPricedSkus || 0,
+        totalCatalogCount: totalCatalogCount || 0,
         discountedSkusCount: 0,
         lastSyncTime,
       },

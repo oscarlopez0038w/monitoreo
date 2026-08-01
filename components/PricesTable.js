@@ -175,7 +175,8 @@ export default function PricesTable() {
     );
   };
 
-  const progressPct = totalCount > 0 ? ((stats.totalPricedSkus / totalCount) * 100).toFixed(1) : 0;
+  const catalogTotal = stats.totalCatalogCount || totalCount;
+  const progressPct = catalogTotal > 0 ? ((stats.totalPricedSkus / catalogTotal) * 100).toFixed(1) : 0;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
@@ -194,7 +195,7 @@ export default function PricesTable() {
             {stats.totalPricedSkus.toLocaleString('es-NI')}
           </div>
           <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
-            de {totalCount.toLocaleString('es-NI')} SKUs ({progressPct}%)
+            de {catalogTotal.toLocaleString('es-NI')} SKUs ({progressPct}%)
           </span>
         </div>
 
@@ -233,7 +234,7 @@ export default function PricesTable() {
             <Zap size={15} color="#38bdf8" /> Progreso de Sincronización del Catálogo
           </span>
           <span style={{ color: '#38bdf8', fontWeight: 700 }}>
-            {stats.totalPricedSkus.toLocaleString()} / {totalCount.toLocaleString()} SKUs ({progressPct}%)
+            {stats.totalPricedSkus.toLocaleString()} / {catalogTotal.toLocaleString()} SKUs ({progressPct}%)
           </span>
         </div>
         <div style={{ width: '100%', height: '10px', borderRadius: '5px', background: 'rgba(255, 255, 255, 0.08)', overflow: 'hidden' }}>
