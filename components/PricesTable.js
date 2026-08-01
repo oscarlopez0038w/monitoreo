@@ -154,8 +154,8 @@ export default function PricesTable() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
       
-      {/* 4 Summary KPI Cards */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1.25rem' }}>
+      {/* 3 Summary KPI Cards */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '1.25rem' }}>
         
         {/* Total SKUs con Precio */}
         <div className="glass-card" style={{ padding: '1.25rem' }}>
@@ -170,19 +170,6 @@ export default function PricesTable() {
           <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
             de {totalCount.toLocaleString('es-NI')} SKUs ({progressPct}%)
           </span>
-        </div>
-
-        {/* Precio Promedio Venta */}
-        <div className="glass-card" style={{ padding: '1.25rem' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
-            <span style={{ fontSize: '0.75rem', color: 'var(--text-dim)', textTransform: 'uppercase', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-              <DollarSign size={14} color="#38bdf8" /> Precio Promedio Venta
-            </span>
-          </div>
-          <div style={{ fontSize: '1.65rem', fontWeight: 700, color: '#ffffff', letterSpacing: '-0.02em' }}>
-            C$ {stats.avgPrice.toLocaleString('es-NI', { minimumFractionDigits: 2 })}
-          </div>
-          <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>Precio Base Promedio en Córdoas</span>
         </div>
 
         {/* SKUs con Descuento */}
