@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import Sidebar from '@/components/Sidebar';
+import GlobalSyncBanner from '@/components/GlobalSyncBanner';
 import { Menu, X, Zap } from 'lucide-react';
 
 export default function AppLayout({ children }) {
@@ -50,33 +51,47 @@ export default function AppLayout({ children }) {
               width: '34px',
               height: '34px',
               borderRadius: '10px',
-              background: 'var(--gradient-btn)',
+              background: 'linear-gradient(135deg, #38bdf8, #3b82f6)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              boxShadow: '0 4px 12px rgba(56, 189, 248, 0.35)',
             }}
           >
             <Zap size={18} color="#ffffff" />
           </div>
           <div>
-            <span style={{ fontSize: '0.95rem', fontWeight: 700, color: '#ffffff' }}>SINSA VTEX</span>
-            <span style={{ fontSize: '0.7rem', color: 'var(--accent-primary)', display: 'block', marginTop: '-2px' }}>Monitoring Platform</span>
+            <span style={{ fontSize: '0.95rem', fontWeight: 800, color: '#ffffff', letterSpacing: '-0.01em', display: 'block', lineHeight: '1.1' }}>
+              SINSA OMS
+            </span>
+            <span style={{ fontSize: '0.68rem', color: 'var(--accent-primary)', fontWeight: 600 }}>
+              Monitoreo Ejecutivo
+            </span>
           </div>
         </div>
 
         <button
           onClick={() => setMobileOpen(!mobileOpen)}
-          className="btn-secondary"
-          style={{ padding: '0.4rem 0.65rem', minHeight: '40px', minWidth: '40px', justifyContent: 'center' }}
-          aria-label="Abrir Menú de Navegación"
+          style={{
+            background: 'rgba(255, 255, 255, 0.08)',
+            border: '1px solid var(--border-subtle)',
+            borderRadius: '10px',
+            color: '#ffffff',
+            padding: '0.45rem',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            cursor: 'pointer',
+            minWidth: '44px',
+            minHeight: '44px',
+          }}
+          aria-label="Abrir menú"
         >
-          {mobileOpen ? <X size={20} color="var(--accent-primary)" /> : <Menu size={20} color="#ffffff" />}
+          {mobileOpen ? <X size={22} /> : <Menu size={22} />}
         </button>
       </header>
 
-      {/* Main Container: Sidebar + Content */}
-      <div style={{ display: 'flex', flex: 1, minWidth: 0, position: 'relative' }}>
+      {/* Main Body Container */}
+      <div style={{ display: 'flex', flex: 1, position: 'relative' }}>
         
         {/* Responsive Sidebar (Desktop sticky sidebar + Mobile Drawer Overlay) */}
         <Sidebar
@@ -99,6 +114,9 @@ export default function AppLayout({ children }) {
           {children}
         </div>
       </div>
+
+      {/* Global Background Pricing Sync Floating Banner */}
+      <GlobalSyncBanner />
 
       <style jsx global>{`
         @media (max-width: 768px) {

@@ -18,7 +18,7 @@ CREATE POLICY "Permitir acceso total vtex_safety_stock" ON public.vtex_safety_st
 
 
 -- ==============================================================================
--- ACTUALIZACIÓN DE TABLA VTEX_SKUS: AGREGAR COLUMNAS DE DESGLOSE DE INVENTARIO
+-- ACTUALIZACIÓN DE TABLA VTEX_SKUS: AGREGAR COLUMNAS DE DESGLOSE DE INVENTARIO Y PRECIOS
 -- ==============================================================================
 
 ALTER TABLE public.vtex_skus 
@@ -28,12 +28,18 @@ ALTER TABLE public.vtex_skus
   ADD COLUMN IF NOT EXISTS wh2_total INT DEFAULT 0,
   ADD COLUMN IF NOT EXISTS wh2_reserved INT DEFAULT 0,
   ADD COLUMN IF NOT EXISTS total_quantity INT DEFAULT 0,
-  ADD COLUMN IF NOT EXISTS total_reserved INT DEFAULT 0;
+  ADD COLUMN IF NOT EXISTS total_reserved INT DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS list_price NUMERIC(12,2) DEFAULT NULL,
+  ADD COLUMN IF NOT EXISTS base_price NUMERIC(12,2) DEFAULT NULL,
+  ADD COLUMN IF NOT EXISTS cost_price NUMERIC(12,2) DEFAULT NULL,
+  ADD COLUMN IF NOT EXISTS price_updated_at TIMESTAMPTZ DEFAULT NULL;
 
 -- Crear índices de apoyo para consultas rápidas
 CREATE INDEX IF NOT EXISTS idx_vtex_skus_is_active ON public.vtex_skus(is_active);
 CREATE INDEX IF NOT EXISTS idx_vtex_skus_wh1_reserved ON public.vtex_skus(wh1_reserved);
 CREATE INDEX IF NOT EXISTS idx_vtex_skus_wh2_reserved ON public.vtex_skus(wh2_reserved);
+CREATE INDEX IF NOT EXISTS idx_vtex_skus_base_price ON public.vtex_skus(base_price);
+CREATE INDEX IF NOT EXISTS idx_vtex_skus_list_price ON public.vtex_skus(list_price);
 
 
 -- ==============================================================================
