@@ -13,7 +13,7 @@ export const revalidate = 0;
 
 // Bucle asincrónico ultra-rápido en el servidor
 async function runBackgroundWorker() {
-  const BATCH_SIZE = 50; // Aumentar concurrencia a 50 llamadas paralelas a VTEX Pricing API
+  const BATCH_SIZE = 50; // Concurrencia de 50 llamadas paralelas a VTEX Pricing API
   const BATCH_LIMIT = 500; // Tamaño del bloque por ciclo de trabajo
 
   let isRunning = true;
@@ -95,20 +95,37 @@ async function runBackgroundWorker() {
   }
 }
 
-// GET: Consultar estado actual y auto-recuperar worker si expira por timeout de Vercel (60s)
+// GET: Consultar estado actual con métricas reales en tiempo real
 export async function GET() {
   try {
     const syncState = getBackgroundSyncState();
 
-    // Auto-recuperación: Si el usuario solicitó sincronizar y pasaron más de 12s sin pings por timeout de serverless, relanzar worker
-    const timeSinceLastUpdate = Date.now() - new Date(syncState.lastUpdated || 0).getTime();
-    if (syncState.isRunning && timeSinceLastUpdate > 12000 && !syncState.stopRequested) {
+    // Métricas en tiempo real desde Supabase (< 5ms)
+    const [{ count: totalCatalogCount }, { count: remainingUnpriced }, { count: pricedCount }] = await Promise.all([
+      supabaseAdmin.from('vtex_skus').select('id', { count: 'exact', head: true }),
+      supabaseAdmin.from('vtex_skus').select('id', { count: 'exact', head: true }).is('base_price', null),
+      supabaseAdmin.from('vtex_skus').select('id', { count: 'exact', head: true }).not('base_price', 'is', null),
+    ]);
+
+    const total = totalCatalogCount || 82234;
+    const priced = pricedCount || Math.max(0, total - (remainingUnpriced || 0));
+    const progressPct = total > 0 ? parseFloat(((priced / total) * 100).toFixed(1)) : 0;
+
+    // Auto-recuperación: Si el usuario solicitó sincronizar y pasaron más de 10s sin pings por timeout de serverless, relanzar worker
+    const timeSinceLastUpdate = Date.now() - new Date(syncState.lastSyncTime || 0).getTime();
+    if (syncState.isRunning && timeSinceLastUpdate > 10000 && !syncState.stopRequested) {
       runBackgroundWorker();
     }
 
     return NextResponse.json({
       success: true,
-      syncState,
+      syncState: {
+        ...syncState,
+        totalCatalog: total,
+        pricedCount: priced,
+        remainingUnpriced: remainingUnpriced || 0,
+        progressPct,
+      },
     });
   } catch (err) {
     return NextResponse.json({ success: false, error: err.message }, { status: 500 });

@@ -69,17 +69,23 @@ export default function PricesTable() {
       const res = await fetch('/api/prices/sync/background');
       const data = await res.json();
       if (data.success && data.syncState) {
-        setBgSyncRunning(Boolean(data.syncState.isRunning));
+        const isRunning = Boolean(data.syncState.isRunning);
+        setBgSyncRunning(isRunning);
+
+        // Si el worker está activo en segundo plano, refrescar la tabla y estadísticas silenciosamente
+        if (isRunning) {
+          fetchPrices(false);
+        }
       }
     } catch (err) {
       console.error('Error consultando estado de background sync:', err);
     }
-  }, []);
+  }, [fetchPrices]);
 
   useEffect(() => {
     fetchPrices(true);
     checkBgStatus();
-    const interval = setInterval(checkBgStatus, 3000);
+    const interval = setInterval(checkBgStatus, 2000);
     return () => clearInterval(interval);
   }, [fetchPrices, checkBgStatus]);
 
