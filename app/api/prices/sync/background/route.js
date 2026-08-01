@@ -11,12 +11,13 @@ import {
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
-// Bucle asincrónico ultra-rápido en el servidor
-async function runBackgroundWorker() {
-  const BATCH_SIZE = 50; // Concurrencia de 50 llamadas paralelas a VTEX Pricing API
-  const BATCH_LIMIT = 500; // Tamaño del bloque por ciclo de trabajo
+// Bucle asincrónico ultra-rápido en el servidor que resincroniza todo el catálogo desde cero
+async function runBackgroundWorker(startOffset = 0) {
+  const BATCH_SIZE = 100; // Concurrencia masiva: 100 llamadas paralelas por sub-lote a VTEX
+  const BATCH_LIMIT = 500; // Tamaño del bloque por consulta SQL
 
   let isRunning = true;
+  let offset = startOffset;
 
   while (isRunning) {
     const currentState = getBackgroundSyncState();
@@ -26,23 +27,23 @@ async function runBackgroundWorker() {
     }
 
     try {
-      // 1. Obtener SKUs pendientes de precio
-      const { data: unpricedSkus, error: queryErr } = await supabaseAdmin
+      // 1. Obtener SKUs ordenados por ID desde el offset actual (desde cero hasta el final)
+      const { data: catalogSkus, error: queryErr } = await supabaseAdmin
         .from('vtex_skus')
         .select('id')
-        .is('base_price', null)
-        .limit(BATCH_LIMIT);
+        .order('id', { ascending: true })
+        .range(offset, offset + BATCH_LIMIT - 1);
 
-      if (queryErr || !unpricedSkus || unpricedSkus.length === 0) {
-        stopBackgroundSyncState('✅ Todo el catálogo de precios ha sido completado exitosamente.');
+      if (queryErr || !catalogSkus || catalogSkus.length === 0) {
+        stopBackgroundSyncState('🎉 ¡100% del catálogo de precios sincronizado con éxito desde cero!');
         break;
       }
 
-      const skuIds = unpricedSkus.map((s) => s.id);
+      const skuIds = catalogSkus.map((s) => s.id);
       let updatedCount = 0;
       const nowIso = new Date().toISOString();
 
-      // Procesar sub-lotes paralelos de 50 SKUs
+      // 2. Procesar en sub-lotes ultra-rápidos de 100 SKUs concurrentes
       for (let i = 0; i < skuIds.length; i += BATCH_SIZE) {
         const subState = getBackgroundSyncState();
         if (subState.stopRequested) break;
@@ -73,21 +74,11 @@ async function runBackgroundWorker() {
         }
       }
 
-      // Contar pendientes en Supabase
-      const { count: remainingUnpriced } = await supabaseAdmin
-        .from('vtex_skus')
-        .select('id', { count: 'exact', head: true })
-        .is('base_price', null);
+      offset += catalogSkus.length;
+      updateBackgroundSyncProgress(updatedCount, offset);
 
-      updateBackgroundSyncProgress(updatedCount, remainingUnpriced || 0);
-
-      if (!remainingUnpriced || remainingUnpriced === 0) {
-        stopBackgroundSyncState('🎉 ¡100% de SKUs sincronizados con éxito!');
-        break;
-      }
-
-      // Pausa ultracorta de 100ms para máxima velocidad
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      // Pausa ultracorta de 50ms para máxima aceleración
+      await new Promise((resolve) => setTimeout(resolve, 50));
     } catch (err) {
       console.error('Error en Worker de Sincronización en Segundo Plano:', err);
       await new Promise((resolve) => setTimeout(resolve, 2000));
@@ -101,20 +92,19 @@ export async function GET() {
     const syncState = getBackgroundSyncState();
 
     // Métricas en tiempo real desde Supabase (< 5ms)
-    const [{ count: totalCatalogCount }, { count: remainingUnpriced }, { count: pricedCount }] = await Promise.all([
+    const [{ count: totalCatalogCount }, { count: pricedCount }] = await Promise.all([
       supabaseAdmin.from('vtex_skus').select('id', { count: 'exact', head: true }),
-      supabaseAdmin.from('vtex_skus').select('id', { count: 'exact', head: true }).is('base_price', null),
       supabaseAdmin.from('vtex_skus').select('id', { count: 'exact', head: true }).not('base_price', 'is', null),
     ]);
 
     const total = totalCatalogCount || 82234;
-    const priced = pricedCount || Math.max(0, total - (remainingUnpriced || 0));
+    const priced = syncState.processedInSession || pricedCount || 0;
     const progressPct = total > 0 ? parseFloat(((priced / total) * 100).toFixed(1)) : 0;
 
     // Auto-recuperación: Si el usuario solicitó sincronizar y pasaron más de 10s sin pings por timeout de serverless, relanzar worker
     const timeSinceLastUpdate = Date.now() - new Date(syncState.lastSyncTime || 0).getTime();
     if (syncState.isRunning && timeSinceLastUpdate > 10000 && !syncState.stopRequested) {
-      runBackgroundWorker();
+      runBackgroundWorker(syncState.currentOffset || 0);
     }
 
     return NextResponse.json({
@@ -123,7 +113,6 @@ export async function GET() {
         ...syncState,
         totalCatalog: total,
         pricedCount: priced,
-        remainingUnpriced: remainingUnpriced || 0,
         progressPct,
       },
     });
@@ -132,21 +121,15 @@ export async function GET() {
   }
 }
 
-// POST: Iniciar o detener la sincronización en segundo plano
+// POST: Iniciar o detener la sincronización en segundo plano desde CERO
 export async function POST(request) {
   try {
     if (!isVtexConfigured()) {
-      return NextResponse.json(
-        { success: false, error: 'VTEX no está configurado.' },
-        { status: 400 }
-      );
+      return NextResponse.json({ success: false, error: 'VTEX no está configurado.' }, { status: 400 });
     }
 
     if (!isSupabaseConfigured()) {
-      return NextResponse.json(
-        { success: false, error: 'Supabase no está configurado.' },
-        { status: 400 }
-      );
+      return NextResponse.json({ success: false, error: 'Supabase no está configurado.' }, { status: 400 });
     }
 
     const body = await request.json().catch(() => ({}));
@@ -161,33 +144,19 @@ export async function POST(request) {
       });
     }
 
-    const currentState = getBackgroundSyncState();
-    if (currentState.isRunning && !currentState.stopRequested) {
-      return NextResponse.json({
-        success: true,
-        message: 'La sincronización en segundo plano ya se encuentra en ejecución.',
-        syncState: currentState,
-      });
-    }
-
-    // 1. Obtener conteo inicial de SKUs sin precio en Supabase
-    const { count: unpricedCount } = await supabaseAdmin
-      .from('vtex_skus')
-      .select('id', { count: 'exact', head: true })
-      .is('base_price', null);
-
     const { count: totalCatalogCount } = await supabaseAdmin
       .from('vtex_skus')
       .select('id', { count: 'exact', head: true });
 
-    startBackgroundSyncState(totalCatalogCount || 82234, unpricedCount || 0);
+    // Iniciar siempre desde CERO (Offset = 0) procesando todo el catálogo de 100 en 100
+    startBackgroundSyncState(totalCatalogCount || 82234, 0);
 
-    // 2. Iniciar worker asincrónico sin bloquear la respuesta HTTP
-    runBackgroundWorker();
+    // Iniciar worker asincrónico desde el inicio (Offset = 0)
+    runBackgroundWorker(0);
 
     return NextResponse.json({
       success: true,
-      message: '⚡ Sincronización ultra-rápida en segundo plano iniciada con éxito.',
+      message: '⚡ Sincronización masiva desde cero iniciada con éxito en segundo plano (100 SKUs concurrentes).',
       syncState: getBackgroundSyncState(),
     });
   } catch (err) {

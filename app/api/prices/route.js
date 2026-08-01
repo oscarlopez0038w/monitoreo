@@ -114,10 +114,11 @@ export async function GET(request) {
     }
 
     // 3. Consultas de metadatos SQL ultra-optimizadas (< 5ms) sin transferir filas completas
-    const [{ count: totalPricedSkus }, { data: lastSyncData }, { count: totalCatalogCount }] = await Promise.all([
+    const [{ count: totalPricedSkus }, { data: lastSyncData }, { count: totalCatalogCount }, { count: discountedSkusCount }] = await Promise.all([
       supabaseAdmin.from('vtex_skus').select('id', { count: 'exact', head: true }).not('base_price', 'is', null),
       supabaseAdmin.from('vtex_skus').select('price_updated_at').order('price_updated_at', { ascending: false, nullsFirst: true }).limit(1),
       supabaseAdmin.from('vtex_skus').select('id', { count: 'exact', head: true }),
+      supabaseAdmin.from('vtex_skus').select('id', { count: 'exact', head: true }).filter('list_price', 'gt', 'base_price'),
     ]);
 
     const lastSyncTime = lastSyncData?.[0]?.price_updated_at || null;
@@ -137,7 +138,7 @@ export async function GET(request) {
       stats: {
         totalPricedSkus: totalPricedSkus || 0,
         totalCatalogCount: totalCatalogCount || 0,
-        discountedSkusCount: 0,
+        discountedSkusCount: discountedSkusCount || 0,
         lastSyncTime,
       },
     });

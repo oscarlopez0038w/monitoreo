@@ -232,7 +232,7 @@ export default function PricesTable() {
           <div style={{ fontSize: '1.65rem', fontWeight: 700, color: '#34d399', letterSpacing: '-0.02em' }}>
             {stats.discountedSkusCount.toLocaleString('es-NI')} SKUs
           </div>
-          <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>Precio de Lista &gt; Precio Base</span>
+          <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>Precio de Lista &gt; Precio Base / Precio Fijo Promocional</span>
         </div>
 
         {/* Última Sincronización */}

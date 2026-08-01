@@ -1,9 +1,11 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Zap, Square, RefreshCw, CheckCircle2 } from 'lucide-react';
+import { usePathname } from 'next/navigation';
+import { Zap, Square, RefreshCw } from 'lucide-react';
 
 export default function GlobalSyncBanner() {
+  const pathname = usePathname();
   const [syncData, setSyncData] = useState(null);
   const [stopping, setStopping] = useState(false);
 
@@ -24,6 +26,11 @@ export default function GlobalSyncBanner() {
     const interval = setInterval(fetchStatus, 2000); // Polling ligero en tiempo real cada 2s
     return () => clearInterval(interval);
   }, []);
+
+  // Ocultar el popup flotante cuando el usuario está dentro de la página /precios
+  if (pathname === '/precios' || pathname === '/precios/') {
+    return null;
+  }
 
   if (!syncData || !syncData.syncState?.isRunning) {
     return null; // Si no hay sincronización activa en segundo plano, no se muestra nada
