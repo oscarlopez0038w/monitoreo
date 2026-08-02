@@ -10,13 +10,14 @@ import {
   ArrowUpDown,
   ArrowUp,
   ArrowDown,
-  DollarSign,
-  TrendingDown,
   Percent,
   Clock,
   Zap,
   Play,
   Square,
+  Terminal,
+  Database,
+  CheckCircle2,
 } from 'lucide-react';
 
 export default function PricesTable() {
@@ -24,6 +25,7 @@ export default function PricesTable() {
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [bgSyncRunning, setBgSyncRunning] = useState(false);
+  const [syncProgress, setSyncProgress] = useState(null);
   const [updatingSkuId, setUpdatingSkuId] = useState(null);
   const [search, setSearch] = useState('');
   const [discountFilter, setDiscountFilter] = useState('all');
@@ -33,8 +35,14 @@ export default function PricesTable() {
   const [totalCount, setTotalCount] = useState(0);
   const [sortBy, setSortBy] = useState('id');
   const [sortOrder, setSortOrder] = useState('asc');
-  const [stats, setStats] = useState({ totalPricedSkus: 0, avgPrice: 0, discountedSkusCount: 0, lastSyncTime: null });
+  const [stats, setStats] = useState({ totalPricedSkus: 0, totalCatalogCount: 82234, avgPrice: 0, discountedSkusCount: 0, lastSyncTime: null });
   const [banner, setBanner] = useState(null);
+  const [logs, setLogs] = useState([]);
+
+  const addLog = (msg) => {
+    const timestamp = new Date().toLocaleTimeString('es-NI');
+    setLogs((prev) => [`[${timestamp}] ${msg}`, ...prev.slice(0, 49)]);
+  };
 
   const fetchPrices = useCallback(async (showLoadingSpinner = true) => {
     if (showLoadingSpinner) setLoading(true);
@@ -71,10 +79,12 @@ export default function PricesTable() {
       if (data.success && data.syncState) {
         const isRunning = Boolean(data.syncState.isRunning);
         setBgSyncRunning(isRunning);
+        setSyncProgress(data.syncState);
 
         // Si el worker está activo en segundo plano, refrescar la tabla y estadísticas silenciosamente
         if (isRunning) {
           fetchPrices(false);
+          addLog(data.syncState.message || 'Sincronizando precios en segundo plano...');
         }
       }
     } catch (err) {
@@ -89,12 +99,19 @@ export default function PricesTable() {
     return () => clearInterval(interval);
   }, [fetchPrices, checkBgStatus]);
 
-  // Iniciar/Detener Sincronización en Segundo Plano en el Servidor
+  // Iniciar/Detener Sincronización Masiva en Segundo Plano desde CERO
   const handleToggleBackgroundSync = async () => {
     setSyncing(true);
     setBanner(null);
     try {
       const action = bgSyncRunning ? 'stop' : 'start';
+      if (action === 'start') {
+        setLogs([]);
+        addLog('🚀 Iniciando extracción masiva de precios desde cero (100 SKUs concurrentes por lote)...');
+      } else {
+        addLog('⏹️ Deteniendo proceso de sincronización masiva...');
+      }
+
       const res = await fetch('/api/prices/sync/background', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -104,6 +121,7 @@ export default function PricesTable() {
 
       if (data.success) {
         setBanner({ type: 'success', text: `⚡ ${data.message}` });
+        addLog(data.message);
         checkBgStatus();
       } else {
         setBanner({ type: 'error', text: `⚠️ ${data.error || 'Error al modificar estado de sincronización en segundo plano'}` });
@@ -118,12 +136,14 @@ export default function PricesTable() {
   // Vincular Webhook de Precios automáticamente en VTEX
   const handleRegisterWebhook = async () => {
     setBanner(null);
+    addLog('🔗 Conectando con VTEX APIs para vincular webhook en tiempo real...');
     try {
       const res = await fetch('/api/webhooks/vtex-price/register', { method: 'POST' });
       const data = await res.json();
 
       if (data.success) {
         setBanner({ type: 'success', text: `⚡ ${data.message}` });
+        addLog('✓ Webhook de precios de VTEX vinculado exitosamente.');
       } else {
         setBanner({ type: 'error', text: `⚠️ ${data.error || 'Error al vincular webhook con VTEX'}` });
       }
@@ -132,7 +152,7 @@ export default function PricesTable() {
     }
   };
 
-  // Refrescar precio de un solo SKU en tiempo real con actualización directa in-place (sin recargar el componente)
+  // Refrescar precio de un solo SKU en tiempo real in-place
   const handleRefreshSingleSku = async (skuId) => {
     setUpdatingSkuId(skuId);
     try {
@@ -152,7 +172,6 @@ export default function PricesTable() {
           discPct = parseFloat((((listP - baseP) / listP) * 100).toFixed(1));
         }
 
-        // Actualizar directamente la fila del estado local sin mostrar el loader de toda la tabla
         setSkus((prevSkus) =>
           prevSkus.map((item) => {
             if (item.id === skuId) {
@@ -169,7 +188,6 @@ export default function PricesTable() {
           })
         );
 
-        // Actualizar silenciosamente el número de SKUs con precio en las tarjetas KPI
         fetchPrices(false);
       }
     } catch (err) {
@@ -198,13 +216,161 @@ export default function PricesTable() {
     );
   };
 
-  const catalogTotal = stats.totalCatalogCount || totalCount;
-  const progressPct = catalogTotal > 0 ? ((stats.totalPricedSkus / catalogTotal) * 100).toFixed(1) : 0;
+  const catalogTotal = stats.totalCatalogCount || 82234;
+  const progressPct = syncProgress?.progressPct || (catalogTotal > 0 ? parseFloat(((stats.totalPricedSkus / catalogTotal) * 100).toFixed(1)) : 0);
+  const pricedCount = syncProgress?.pricedCount || stats.totalPricedSkus || 0;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
       
-      {/* 3 Summary KPI Cards */}
+      {/* 1. Centro de Extracción & Sincronización Masiva (Estilo Panel de Inventario) */}
+      <div className="glass-card" style={{ padding: '1.5rem' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', flexWrap: 'wrap', gap: '1rem' }}>
+          <div>
+            <h2 style={{ fontSize: '1.15rem', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#ffffff' }}>
+              <RefreshCw size={19} className={bgSyncRunning ? 'animate-spin' : ''} color="var(--accent-primary)" />
+              Centro de Extracción & Sincronización Masiva de Precios VTEX
+            </h2>
+            <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+              Extrae y actualiza masivamente los precios de lista (MSRP), precios base de venta y precios fijos promocionales desde VTEX.
+            </p>
+          </div>
+
+          <div style={{ display: 'flex', gap: '0.65rem', flexWrap: 'wrap', width: '100%', maxWidth: 'max-content' }}>
+            <button
+              onClick={handleToggleBackgroundSync}
+              disabled={syncing}
+              className={bgSyncRunning ? 'btn-secondary' : 'btn-primary'}
+              style={{
+                background: bgSyncRunning ? 'rgba(248, 113, 113, 0.2)' : undefined,
+                borderColor: bgSyncRunning ? '#fb7185' : undefined,
+                color: bgSyncRunning ? '#fb7185' : undefined,
+              }}
+            >
+              {bgSyncRunning ? <Square size={16} className="animate-pulse" /> : <Play size={16} />}
+              {bgSyncRunning ? 'Detener Sincronización' : '⚡ 1. Sincronizar Precios Masivos'}
+            </button>
+
+            <button
+              onClick={handleRegisterWebhook}
+              className="btn-secondary"
+              title="Vincular automáticamente las notificaciones de precios de VTEX con Supabase"
+            >
+              🔗 Vincular Webhook VTEX
+            </button>
+          </div>
+        </div>
+
+        {/* 4 Summary Stat Boxes Grid */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '1rem', marginBottom: bgSyncRunning || logs.length > 0 ? '1.25rem' : '0' }}>
+          
+          <div style={{ background: 'rgba(15, 23, 42, 0.6)', border: '1px solid var(--border-subtle)', borderRadius: '12px', padding: '1rem' }}>
+            <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 600, marginBottom: '0.3rem' }}>
+              TOTAL SKUS EN BD
+            </div>
+            <div style={{ fontSize: '1.4rem', fontWeight: 700, color: '#38bdf8', fontFamily: 'var(--font-mono)' }}>
+              {catalogTotal.toLocaleString('es-NI')}
+            </div>
+          </div>
+
+          <div style={{ background: 'rgba(15, 23, 42, 0.6)', border: '1px solid var(--border-subtle)', borderRadius: '12px', padding: '1rem' }}>
+            <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 600, marginBottom: '0.3rem' }}>
+              SKUS CON PRECIO
+            </div>
+            <div style={{ fontSize: '1.4rem', fontWeight: 700, color: '#ffffff', fontFamily: 'var(--font-mono)' }}>
+              {pricedCount.toLocaleString('es-NI')}
+            </div>
+            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{progressPct}% completado</span>
+          </div>
+
+          <div style={{ background: 'rgba(15, 23, 42, 0.6)', border: '1px solid var(--border-subtle)', borderRadius: '12px', padding: '1rem' }}>
+            <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 600, marginBottom: '0.3rem' }}>
+              ÚLTIMA SINCRONIZACIÓN
+            </div>
+            <div style={{ fontSize: '0.9rem', fontWeight: 700, color: '#ffffff', marginTop: '0.3rem' }}>
+              {stats.lastSyncTime ? new Date(stats.lastSyncTime).toLocaleString('es-NI') : 'Sin sincronización previa'}
+            </div>
+          </div>
+
+          <div style={{ background: 'rgba(15, 23, 42, 0.6)', border: '1px solid var(--border-subtle)', borderRadius: '12px', padding: '1rem' }}>
+            <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 600, marginBottom: '0.3rem' }}>
+              ESTADO DE AVANCE
+            </div>
+            <div style={{ fontSize: '0.9rem', fontWeight: 700, color: bgSyncRunning ? '#38bdf8' : '#fbbf24', display: 'flex', alignItems: 'center', gap: '0.4rem', marginTop: '0.3rem' }}>
+              {bgSyncRunning ? (
+                <>
+                  <RefreshCw size={14} className="animate-spin" /> Procesando en segundo plano...
+                </>
+              ) : (
+                'Listo para operar.'
+              )}
+            </div>
+          </div>
+
+        </div>
+
+        {/* Progress Bar - Se muestra cuando la sincronización está activa */}
+        {bgSyncRunning && (
+          <div style={{ marginTop: '1rem', marginBottom: '1rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.4rem', fontSize: '0.82rem' }}>
+              <span style={{ color: '#ffffff', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                <Zap size={15} color="#38bdf8" /> Progreso de Extracción de Precios desde Cero
+              </span>
+              <span style={{ color: '#38bdf8', fontWeight: 700, fontFamily: 'var(--font-mono)' }}>
+                {pricedCount.toLocaleString('es-NI')} / {catalogTotal.toLocaleString('es-NI')} SKUs ({progressPct}%)
+              </span>
+            </div>
+            <div style={{ width: '100%', height: '10px', borderRadius: '5px', background: 'rgba(255, 255, 255, 0.08)', overflow: 'hidden' }}>
+              <div style={{ width: `${progressPct}%`, height: '100%', background: 'linear-gradient(to right, #38bdf8, #34d399)', borderRadius: '5px', transition: 'width 0.4s ease' }} />
+            </div>
+          </div>
+        )}
+
+        {/* Terminal Log Console */}
+        {logs.length > 0 && (
+          <div
+            style={{
+              background: '#090d16',
+              border: '1px solid rgba(255, 255, 255, 0.1)',
+              borderRadius: '12px',
+              padding: '0.85rem 1.15rem',
+              fontFamily: 'var(--font-mono)',
+              fontSize: '0.78rem',
+              color: '#a5b4fc',
+              maxHeight: '130px',
+              overflowY: 'auto',
+            }}
+          >
+            <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '0.4rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+              <Terminal size={12} color="#38bdf8" /> REGISTRO DE OPERACIÓN DE PRECIOS
+            </div>
+            {logs.map((log, i) => (
+              <div key={i} style={{ opacity: i === 0 ? 1 : 0.7, marginBottom: '0.2rem' }}>
+                &gt; {log}
+              </div>
+            ))}
+          </div>
+        )}
+
+      </div>
+
+      {/* Action Notification Banner */}
+      {banner && (
+        <div
+          style={{
+            padding: '0.85rem 1.15rem',
+            borderRadius: '12px',
+            fontSize: '0.86rem',
+            background: banner.type === 'success' ? 'rgba(52, 211, 153, 0.1)' : 'rgba(248, 113, 113, 0.1)',
+            border: `1px solid ${banner.type === 'success' ? 'rgba(52, 211, 153, 0.3)' : 'rgba(248, 113, 113, 0.3)'}`,
+            color: banner.type === 'success' ? '#34d399' : '#fb7185',
+          }}
+        >
+          {banner.text}
+        </div>
+      )}
+
+      {/* 2. Tarjetas KPI de Resumen */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '1.25rem' }}>
         
         {/* Total SKUs con Precio */}
@@ -222,7 +388,7 @@ export default function PricesTable() {
           </span>
         </div>
 
-        {/* SKUs con Descuento */}
+        {/* SKUs con Descuento / Precio Fijo */}
         <div className="glass-card" style={{ padding: '1.25rem' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
             <span style={{ fontSize: '0.75rem', color: 'var(--text-dim)', textTransform: 'uppercase', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
@@ -250,38 +416,7 @@ export default function PricesTable() {
 
       </div>
 
-      {/* Dynamic Catalog Progress Bar */}
-      <div className="glass-card" style={{ padding: '1rem 1.25rem' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem', fontSize: '0.82rem' }}>
-          <span style={{ color: '#ffffff', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-            <Zap size={15} color="#38bdf8" /> Progreso de Sincronización del Catálogo
-          </span>
-          <span style={{ color: '#38bdf8', fontWeight: 700 }}>
-            {stats.totalPricedSkus.toLocaleString()} / {catalogTotal.toLocaleString()} SKUs ({progressPct}%)
-          </span>
-        </div>
-        <div style={{ width: '100%', height: '10px', borderRadius: '5px', background: 'rgba(255, 255, 255, 0.08)', overflow: 'hidden' }}>
-          <div style={{ width: `${progressPct}%`, height: '100%', background: 'linear-gradient(to right, #38bdf8, #34d399)', borderRadius: '5px', transition: 'width 0.6s ease' }} />
-        </div>
-      </div>
-
-      {/* Action Notification Banner */}
-      {banner && (
-        <div
-          style={{
-            padding: '0.85rem 1.15rem',
-            borderRadius: '12px',
-            fontSize: '0.86rem',
-            background: banner.type === 'success' ? 'rgba(52, 211, 153, 0.1)' : 'rgba(248, 113, 113, 0.1)',
-            border: `1px solid ${banner.type === 'success' ? 'rgba(52, 211, 153, 0.3)' : 'rgba(248, 113, 113, 0.3)'}`,
-            color: banner.type === 'success' ? '#34d399' : '#fb7185',
-          }}
-        >
-          {banner.text}
-        </div>
-      )}
-
-      {/* Main Table Container */}
+      {/* 3. Tabla Principal de Precios */}
       <div className="glass-card" style={{ padding: '1.25rem' }}>
         
         {/* Header Controls Bar */}
@@ -327,41 +462,6 @@ export default function PricesTable() {
               <option value="with_discount">Solo con Descuento %</option>
               <option value="no_discount">Sin Descuento</option>
             </select>
-
-            {/* Server-side Background Worker Trigger Button */}
-            <button
-              onClick={handleToggleBackgroundSync}
-              disabled={syncing}
-              className={bgSyncRunning ? 'btn-secondary' : 'btn-primary'}
-              style={{
-                padding: '0.45rem 0.95rem',
-                fontSize: '0.82rem',
-                background: bgSyncRunning ? 'rgba(248, 113, 113, 0.2)' : undefined,
-                borderColor: bgSyncRunning ? '#fb7185' : undefined,
-                color: bgSyncRunning ? '#fb7185' : undefined,
-              }}
-            >
-              {bgSyncRunning ? (
-                <>
-                  <Square size={14} className="animate-pulse" /> Detener Segundo Plano
-                </>
-              ) : (
-                <>
-                  <Play size={14} /> ⚡ Iniciar Sincronización en Segundo Plano
-                </>
-              )}
-            </button>
-
-            {/* Auto Register Webhook Button */}
-            <button
-              onClick={handleRegisterWebhook}
-              className="btn-secondary"
-              style={{ padding: '0.45rem 0.95rem', fontSize: '0.82rem' }}
-              title="Vincular automáticamente las notificaciones de precios de VTEX con Supabase"
-            >
-              🔗 Vincular Webhook VTEX
-            </button>
-
           </div>
         </div>
 
@@ -432,7 +532,7 @@ export default function PricesTable() {
               ) : skus.length === 0 ? (
                 <tr>
                   <td colSpan={7} style={{ padding: '2.5rem', textAlign: 'center', color: 'var(--text-muted)' }}>
-                    No hay registros de precios en Supabase con los filtros seleccionados. Presiona <strong>"⚡ Iniciar Sincronización en Segundo Plano"</strong> para cargar los precios.
+                    No hay registros de precios en Supabase con los filtros seleccionados. Presiona <strong>"⚡ 1. Sincronizar Precios Masivos"</strong> para cargar los precios.
                   </td>
                 </tr>
               ) : (
