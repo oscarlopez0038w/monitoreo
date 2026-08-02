@@ -11,7 +11,6 @@ import {
   ArrowUp,
   ArrowDown,
   Percent,
-  Clock,
   Zap,
   Play,
   Square,
@@ -33,7 +32,7 @@ export default function PricesTable() {
   const [totalCount, setTotalCount] = useState(0);
   const [sortBy, setSortBy] = useState('id');
   const [sortOrder, setSortOrder] = useState('asc');
-  const [stats, setStats] = useState({ totalPricedSkus: 0, totalCatalogCount: 82234, avgPrice: 0, discountedSkusCount: 0, lastSyncTime: null });
+  const [stats, setStats] = useState({ totalPricedSkus: 0, totalCatalogCount: 82234, discountedSkusCount: 0 });
   const [banner, setBanner] = useState(null);
   const [logs, setLogs] = useState([]);
 
@@ -79,14 +78,12 @@ export default function PricesTable() {
   // Bucle de sincronización masiva ininterrumpido cliente-servidor
   const handleToggleSync = async () => {
     if (syncActive) {
-      // Detener sincronización
       syncRef.current = false;
       setSyncActive(false);
       addLog('⏹️ Sincronización pausada por el usuario.');
       return;
     }
 
-    // Iniciar sincronización ininterrumpida desde cero
     syncRef.current = true;
     setSyncActive(true);
     setLogs([]);
@@ -117,7 +114,6 @@ export default function PricesTable() {
           const pct = Math.min(100, parseFloat(((currentOffset / totalCat) * 100).toFixed(1)));
           addLog(`Procesando lote: ${currentOffset.toLocaleString('es-NI')} de ${totalCat.toLocaleString('es-NI')} SKUs (${pct}% completado).`);
 
-          // Actualizar tabla silenciosamente cada par de lotes
           fetchPrices(false);
 
           if (data.completed || currentOffset >= totalCat) {
@@ -132,7 +128,6 @@ export default function PricesTable() {
           await new Promise((r) => setTimeout(r, 3000));
         }
 
-        // Pequeña pausa entre lotes para rendimiento óptimo
         await new Promise((r) => setTimeout(r, 150));
       } catch (err) {
         if (!syncRef.current) break;
@@ -232,7 +227,7 @@ export default function PricesTable() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
       
-      {/* 1. Centro de Extracción & Sincronización Masiva (Estilo Panel de Inventario) */}
+      {/* 1. Centro de Extracción & Sincronización Masiva */}
       <div className="glass-card" style={{ padding: '1.5rem' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', flexWrap: 'wrap', gap: '1rem' }}>
           <div>
@@ -269,8 +264,8 @@ export default function PricesTable() {
           </div>
         </div>
 
-        {/* 4 Summary Stat Boxes Grid */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '1rem', marginBottom: syncActive || logs.length > 0 ? '1.25rem' : '0' }}>
+        {/* 3 Clean Summary Stat Boxes Grid (Sin ÚLTIMA SINCRONIZACIÓN) */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1rem', marginBottom: syncActive || logs.length > 0 ? '1.25rem' : '0' }}>
           
           <div style={{ background: 'rgba(15, 23, 42, 0.6)', border: '1px solid var(--border-subtle)', borderRadius: '12px', padding: '1rem' }}>
             <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 600, marginBottom: '0.3rem' }}>
@@ -293,15 +288,6 @@ export default function PricesTable() {
 
           <div style={{ background: 'rgba(15, 23, 42, 0.6)', border: '1px solid var(--border-subtle)', borderRadius: '12px', padding: '1rem' }}>
             <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 600, marginBottom: '0.3rem' }}>
-              ÚLTIMA SINCRONIZACIÓN
-            </div>
-            <div style={{ fontSize: '0.9rem', fontWeight: 700, color: '#ffffff', marginTop: '0.3rem' }}>
-              {stats.lastSyncTime ? new Date(stats.lastSyncTime).toLocaleString('es-NI') : 'Sin sincronización previa'}
-            </div>
-          </div>
-
-          <div style={{ background: 'rgba(15, 23, 42, 0.6)', border: '1px solid var(--border-subtle)', borderRadius: '12px', padding: '1rem' }}>
-            <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 600, marginBottom: '0.3rem' }}>
               ESTADO DE AVANCE
             </div>
             <div style={{ fontSize: '0.9rem', fontWeight: 700, color: syncActive ? '#38bdf8' : '#fbbf24', display: 'flex', alignItems: 'center', gap: '0.4rem', marginTop: '0.3rem' }}>
@@ -317,7 +303,7 @@ export default function PricesTable() {
 
         </div>
 
-        {/* Progress Bar - Se muestra cuando la sincronización está activa */}
+        {/* Progress Bar */}
         {syncActive && (
           <div style={{ marginTop: '1rem', marginBottom: '1rem' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.4rem', fontSize: '0.82rem' }}>
@@ -378,8 +364,8 @@ export default function PricesTable() {
         </div>
       )}
 
-      {/* 2. Tarjetas KPI de Resumen */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '1.25rem' }}>
+      {/* 2. Tarjetas KPI de Resumen (2 Tarjetas Limpias: Sin ÚLTIMA SINCRONIZACIÓN) */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1.25rem' }}>
         
         {/* Total SKUs con Precio */}
         <div className="glass-card" style={{ padding: '1.25rem' }}>
@@ -396,7 +382,7 @@ export default function PricesTable() {
           </span>
         </div>
 
-        {/* SKUs con Descuento / Precio Fijo */}
+        {/* SKUs con Descuento % */}
         <div className="glass-card" style={{ padding: '1.25rem' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
             <span style={{ fontSize: '0.75rem', color: 'var(--text-dim)', textTransform: 'uppercase', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
@@ -407,19 +393,6 @@ export default function PricesTable() {
             {stats.discountedSkusCount.toLocaleString('es-NI')} SKUs
           </div>
           <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>Precio de Lista &gt; Precio Base / Precio Fijo Promocional</span>
-        </div>
-
-        {/* Última Sincronización */}
-        <div className="glass-card" style={{ padding: '1.25rem' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
-            <span style={{ fontSize: '0.75rem', color: 'var(--text-dim)', textTransform: 'uppercase', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-              <Clock size={14} color="#fbbf24" /> Última Sincronización
-            </span>
-          </div>
-          <div style={{ fontSize: '1.1rem', fontWeight: 700, color: '#ffffff', marginTop: '0.2rem' }}>
-            {stats.lastSyncTime ? new Date(stats.lastSyncTime).toLocaleString('es-NI') : 'Sin sincronización previa'}
-          </div>
-          <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>Sincronizado desde VTEX Pricing API</span>
         </div>
 
       </div>

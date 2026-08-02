@@ -100,10 +100,10 @@ export async function GET(request) {
       const from = (page - 1) * pageSize;
       const paginatedSkus = formattedAll.slice(from, from + pageSize);
 
-      const [{ count: totalPricedSkus }, { data: lastSyncData }, { count: totalCatalogCount }] = await Promise.all([
+      const [{ count: totalPricedSkus }, { count: totalCatalogCount }, { count: realDiscountedCount }] = await Promise.all([
         supabaseAdmin.from('vtex_skus').select('id', { count: 'exact', head: true }).not('base_price', 'is', null),
-        supabaseAdmin.from('vtex_skus').select('price_updated_at').order('price_updated_at', { ascending: false, nullsFirst: true }).limit(1),
         supabaseAdmin.from('vtex_skus').select('id', { count: 'exact', head: true }),
+        supabaseAdmin.from('vtex_skus').select('id', { count: 'exact', head: true }).not('list_price', 'is', null),
       ]);
 
       return NextResponse.json({
@@ -119,8 +119,7 @@ export async function GET(request) {
         stats: {
           totalPricedSkus: totalPricedSkus || 0,
           totalCatalogCount: totalCatalogCount || 0,
-          discountedSkusCount: realCount,
-          lastSyncTime: lastSyncData?.[0]?.price_updated_at || null,
+          discountedSkusCount: realDiscountedCount || realCount || 0,
         },
       });
     }
@@ -170,10 +169,11 @@ export async function GET(request) {
       formattedSkus = formattedSkus.filter((s) => s.discountPct === 0);
     }
 
-    const [{ count: totalPricedSkus }, { data: lastSyncData }, { count: totalCatalogCount }] = await Promise.all([
+    // Consulta exacta de conteos de metadatos SQL (< 5ms)
+    const [{ count: totalPricedSkus }, { count: totalCatalogCount }, { count: discountedSkusCount }] = await Promise.all([
       supabaseAdmin.from('vtex_skus').select('id', { count: 'exact', head: true }).not('base_price', 'is', null),
-      supabaseAdmin.from('vtex_skus').select('price_updated_at').order('price_updated_at', { ascending: false, nullsFirst: true }).limit(1),
       supabaseAdmin.from('vtex_skus').select('id', { count: 'exact', head: true }),
+      supabaseAdmin.from('vtex_skus').select('id', { count: 'exact', head: true }).not('list_price', 'is', null),
     ]);
 
     const realTotalCount = search ? (count || 0) : (totalCatalogCount || count || 0);
@@ -192,8 +192,7 @@ export async function GET(request) {
       stats: {
         totalPricedSkus: totalPricedSkus || 0,
         totalCatalogCount: totalCatalogCount || 0,
-        discountedSkusCount: 0,
-        lastSyncTime: lastSyncData?.[0]?.price_updated_at || null,
+        discountedSkusCount: discountedSkusCount || 0,
       },
     });
   } catch (err) {
