@@ -53,18 +53,85 @@ export async function GET(request) {
 
     // Filtros de descuento
     if (filterDiscount === 'with_discount') {
-      query = query.not('list_price', 'is', null).not('base_price', 'is', null).gt('list_price', 0);
+      query = query.not('list_price', 'is', null).not('base_price', 'is', null);
     }
 
-    // Ordenamiento SQL
     const isAsc = sortOrder.toLowerCase() === 'asc';
+
+    // Caso A: Filtrar o ordenar por descuento % (se calcula y ordena dinámicamente)
+    if (sortBy === 'discount_pct' || filterDiscount === 'with_discount') {
+      const { data: rawSkus } = await query;
+
+      let formattedAll = (rawSkus || []).map((s) => {
+        const skuIdStr = String(s.id);
+        const description = descMap.get(skuIdStr) || s.description || 'Producto SINSA';
+        const listPrice = s.list_price !== null && s.list_price !== undefined ? parseFloat(s.list_price) : null;
+        const basePrice = s.base_price !== null && s.base_price !== undefined ? parseFloat(s.base_price) : null;
+        const costPrice = s.cost_price !== null && s.cost_price !== undefined ? parseFloat(s.cost_price) : null;
+
+        let discountPct = 0;
+        if (listPrice && basePrice && listPrice > basePrice) {
+          discountPct = parseFloat((((listPrice - basePrice) / listPrice) * 100).toFixed(1));
+        }
+
+        return {
+          id: s.id,
+          description,
+          listPrice,
+          basePrice,
+          costPrice,
+          discountPct,
+          priceUpdatedAt: s.price_updated_at || s.updated_at,
+          isActive: s.is_active ?? true,
+        };
+      });
+
+      if (filterDiscount === 'with_discount') {
+        formattedAll = formattedAll.filter((s) => s.discountPct > 0);
+      } else if (filterDiscount === 'no_discount') {
+        formattedAll = formattedAll.filter((s) => s.discountPct === 0);
+      }
+
+      // Ordenar por Descuento % (por defecto mayor descuento primero)
+      formattedAll.sort((a, b) => (isAsc ? a.discountPct - b.discountPct : b.discountPct - a.discountPct));
+
+      const realCount = formattedAll.length;
+      const totalPages = Math.ceil(realCount / pageSize) || 1;
+      const from = (page - 1) * pageSize;
+      const paginatedSkus = formattedAll.slice(from, from + pageSize);
+
+      const [{ count: totalPricedSkus }, { data: lastSyncData }, { count: totalCatalogCount }] = await Promise.all([
+        supabaseAdmin.from('vtex_skus').select('id', { count: 'exact', head: true }).not('base_price', 'is', null),
+        supabaseAdmin.from('vtex_skus').select('price_updated_at').order('price_updated_at', { ascending: false, nullsFirst: true }).limit(1),
+        supabaseAdmin.from('vtex_skus').select('id', { count: 'exact', head: true }),
+      ]);
+
+      return NextResponse.json({
+        success: true,
+        skus: paginatedSkus,
+        paging: {
+          total: realCount,
+          totalCatalog: totalCatalogCount || 0,
+          page,
+          pageSize,
+          totalPages,
+        },
+        stats: {
+          totalPricedSkus: totalPricedSkus || 0,
+          totalCatalogCount: totalCatalogCount || 0,
+          discountedSkusCount: realCount,
+          lastSyncTime: lastSyncData?.[0]?.price_updated_at || null,
+        },
+      });
+    }
+
+    // Caso B: Consulta paginada estándar por ID, precio base o precio lista
     if (['base_price', 'list_price', 'price_updated_at', 'id'].includes(sortBy)) {
       query = query.order(sortBy, { ascending: isAsc, nullsFirst: false });
     } else {
       query = query.order('id', { ascending: isAsc });
     }
 
-    // Paginación SQL
     const from = (page - 1) * pageSize;
     const to = from + pageSize - 1;
     query = query.range(from, to);
@@ -75,11 +142,9 @@ export async function GET(request) {
       return NextResponse.json({ success: false, error: error.message }, { status: 500 });
     }
 
-    // Mapear solo los 25 SKUs de la página actual
     let formattedSkus = (skus || []).map((s) => {
       const skuIdStr = String(s.id);
       const description = descMap.get(skuIdStr) || s.description || 'Producto SINSA';
-
       const listPrice = s.list_price !== null && s.list_price !== undefined ? parseFloat(s.list_price) : null;
       const basePrice = s.base_price !== null && s.base_price !== undefined ? parseFloat(s.base_price) : null;
       const costPrice = s.cost_price !== null && s.cost_price !== undefined ? parseFloat(s.cost_price) : null;
@@ -101,27 +166,16 @@ export async function GET(request) {
       };
     });
 
-    // Filtros client-side por descuento si aplica
-    if (filterDiscount === 'with_discount') {
-      formattedSkus = formattedSkus.filter((s) => s.discountPct > 0);
-    } else if (filterDiscount === 'no_discount') {
+    if (filterDiscount === 'no_discount') {
       formattedSkus = formattedSkus.filter((s) => s.discountPct === 0);
     }
 
-    // Ordenamiento por discount_pct si aplica
-    if (sortBy === 'discount_pct') {
-      formattedSkus.sort((a, b) => (isAsc ? a.discountPct - b.discountPct : b.discountPct - a.discountPct));
-    }
-
-    // 3. Consultas de metadatos SQL ultra-optimizadas (< 5ms) sin transferir filas completas
-    const [{ count: totalPricedSkus }, { data: lastSyncData }, { count: totalCatalogCount }, { count: discountedSkusCount }] = await Promise.all([
+    const [{ count: totalPricedSkus }, { data: lastSyncData }, { count: totalCatalogCount }] = await Promise.all([
       supabaseAdmin.from('vtex_skus').select('id', { count: 'exact', head: true }).not('base_price', 'is', null),
       supabaseAdmin.from('vtex_skus').select('price_updated_at').order('price_updated_at', { ascending: false, nullsFirst: true }).limit(1),
       supabaseAdmin.from('vtex_skus').select('id', { count: 'exact', head: true }),
-      supabaseAdmin.from('vtex_skus').select('id', { count: 'exact', head: true }).filter('list_price', 'gt', 'base_price'),
     ]);
 
-    const lastSyncTime = lastSyncData?.[0]?.price_updated_at || null;
     const realTotalCount = search ? (count || 0) : (totalCatalogCount || count || 0);
     const totalPages = Math.ceil(realTotalCount / pageSize) || 1;
 
@@ -138,8 +192,8 @@ export async function GET(request) {
       stats: {
         totalPricedSkus: totalPricedSkus || 0,
         totalCatalogCount: totalCatalogCount || 0,
-        discountedSkusCount: discountedSkusCount || 0,
-        lastSyncTime,
+        discountedSkusCount: 0,
+        lastSyncTime: lastSyncData?.[0]?.price_updated_at || null,
       },
     });
   } catch (err) {
