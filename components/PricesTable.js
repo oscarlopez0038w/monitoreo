@@ -264,8 +264,8 @@ export default function PricesTable() {
           </div>
         </div>
 
-        {/* 3 Clean Summary Stat Boxes Grid (Sin ÚLTIMA SINCRONIZACIÓN) */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1rem', marginBottom: syncActive || logs.length > 0 ? '1.25rem' : '0' }}>
+        {/* 4 Stat Boxes en el Panel Principal (Sin duplicados abajo) */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '1rem', marginBottom: syncActive || logs.length > 0 ? '1.25rem' : '0' }}>
           
           <div style={{ background: 'rgba(15, 23, 42, 0.6)', border: '1px solid var(--border-subtle)', borderRadius: '12px', padding: '1rem' }}>
             <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 600, marginBottom: '0.3rem' }}>
@@ -284,6 +284,16 @@ export default function PricesTable() {
               {pricedCount.toLocaleString('es-NI')}
             </div>
             <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{progressPct}% completado</span>
+          </div>
+
+          <div style={{ background: 'rgba(15, 23, 42, 0.6)', border: '1px solid var(--border-subtle)', borderRadius: '12px', padding: '1rem' }}>
+            <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 600, marginBottom: '0.3rem' }}>
+              SKUS CON DESCUENTO %
+            </div>
+            <div style={{ fontSize: '1.4rem', fontWeight: 700, color: '#34d399', fontFamily: 'var(--font-mono)' }}>
+              {stats.discountedSkusCount.toLocaleString('es-NI')}
+            </div>
+            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Con Oferta o Precio Fijo</span>
           </div>
 
           <div style={{ background: 'rgba(15, 23, 42, 0.6)', border: '1px solid var(--border-subtle)', borderRadius: '12px', padding: '1rem' }}>
@@ -310,7 +320,7 @@ export default function PricesTable() {
               <span style={{ color: '#ffffff', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
                 <Zap size={15} color="#38bdf8" /> Progreso de Extracción de Precios desde Cero
               </span>
-              <span style={{ color: '#38bdf8', fontWeight: 700, fontFamily: 'var(--font-mono)' }}>
+              <span style={{ color: '#38bdf8', fontWeight 700, fontFamily: 'var(--font-mono)' }}>
                 {pricedCount.toLocaleString('es-NI')} / {catalogTotal.toLocaleString('es-NI')} SKUs ({progressPct}%)
               </span>
             </div>
@@ -364,40 +374,7 @@ export default function PricesTable() {
         </div>
       )}
 
-      {/* 2. Tarjetas KPI de Resumen (2 Tarjetas Limpias: Sin ÚLTIMA SINCRONIZACIÓN) */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1.25rem' }}>
-        
-        {/* Total SKUs con Precio */}
-        <div className="glass-card" style={{ padding: '1.25rem' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
-            <span style={{ fontSize: '0.75rem', color: 'var(--text-dim)', textTransform: 'uppercase', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-              <Tag size={14} color="#a5b4fc" /> SKUs con Precio
-            </span>
-          </div>
-          <div style={{ fontSize: '1.65rem', fontWeight: 700, color: '#ffffff', letterSpacing: '-0.02em' }}>
-            {stats.totalPricedSkus.toLocaleString('es-NI')}
-          </div>
-          <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
-            de {catalogTotal.toLocaleString('es-NI')} SKUs ({progressPct}%)
-          </span>
-        </div>
-
-        {/* SKUs con Descuento % */}
-        <div className="glass-card" style={{ padding: '1.25rem' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
-            <span style={{ fontSize: '0.75rem', color: 'var(--text-dim)', textTransform: 'uppercase', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-              <Percent size={14} color="#34d399" /> SKUs con Descuento %
-            </span>
-          </div>
-          <div style={{ fontSize: '1.65rem', fontWeight: 700, color: '#34d399', letterSpacing: '-0.02em' }}>
-            {stats.discountedSkusCount.toLocaleString('es-NI')} SKUs
-          </div>
-          <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>Precio de Lista &gt; Precio Base / Precio Fijo Promocional</span>
-        </div>
-
-      </div>
-
-      {/* 3. Tabla Principal de Precios */}
+      {/* 2. Tabla Principal de Precios */}
       <div className="glass-card" style={{ padding: '1.25rem' }}>
         
         {/* Header Controls Bar */}
