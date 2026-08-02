@@ -4,6 +4,71 @@ import { supabaseAdmin, isSupabaseConfigured } from '@/lib/supabase';
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
+// Cache en memoria para candidatos a descuento (TTL de 15 segundos)
+let candidateCache = null;
+let candidateCacheTime = 0;
+
+async function fetchCandidateSkus(search, matchingIdsFromDesc) {
+  const now = Date.now();
+  
+  // Si no hay búsqueda por texto, intentar usar cache en memoria
+  if (!search && candidateCache && now - candidateCacheTime < 15000) {
+    return candidateCache;
+  }
+
+  let countQuery = supabaseAdmin
+    .from('vtex_skus')
+    .select('id', { count: 'exact', head: true })
+    .not('list_price', 'is', null)
+    .not('base_price', 'is', null);
+
+  if (search) {
+    if (!isNaN(search)) {
+      countQuery = countQuery.eq('id', parseInt(search, 10));
+    } else if (matchingIdsFromDesc.length > 0) {
+      countQuery = countQuery.in('id', matchingIdsFromDesc.slice(0, 100));
+    }
+  }
+
+  const { count } = await countQuery;
+  const totalCandidates = count || 0;
+  if (totalCandidates === 0) return [];
+
+  const pageSize = 1000;
+  const pages = Math.ceil(totalCandidates / pageSize);
+
+  const promises = [];
+  for (let i = 0; i < pages; i++) {
+    const from = i * pageSize;
+    const to = from + pageSize - 1;
+    let pageQuery = supabaseAdmin
+      .from('vtex_skus')
+      .select('*')
+      .not('list_price', 'is', null)
+      .not('base_price', 'is', null)
+      .range(from, to);
+
+    if (search) {
+      if (!isNaN(search)) {
+        pageQuery = pageQuery.eq('id', parseInt(search, 10));
+      } else if (matchingIdsFromDesc.length > 0) {
+        pageQuery = pageQuery.in('id', matchingIdsFromDesc.slice(0, 100));
+      }
+    }
+    promises.push(pageQuery);
+  }
+
+  const results = await Promise.all(promises);
+  const allCandidates = results.flatMap((r) => r.data || []);
+
+  if (!search) {
+    candidateCache = allCandidates;
+    candidateCacheTime = now;
+  }
+
+  return allCandidates;
+}
+
 export async function GET(request) {
   try {
     if (!isSupabaseConfigured()) {
@@ -20,6 +85,7 @@ export async function GET(request) {
     const filterDiscount = searchParams.get('discount') || 'all'; // 'all', 'with_discount', 'no_discount'
     const sortBy = searchParams.get('sortBy') || 'id'; // 'id', 'base_price', 'list_price', 'discount_pct', 'price_updated_at'
     const sortOrder = searchParams.get('sortOrder') || 'asc';
+    const isAsc = sortOrder.toLowerCase() === 'asc';
 
     // 1. Consultar mapa de descripciones desde vtex_safety_stock para nombres de productos
     const { data: safetyData } = await supabaseAdmin
@@ -40,30 +106,11 @@ export async function GET(request) {
       });
     }
 
-    // 2. Consulta ultra-rápida paginada a la tabla principal public.vtex_skus sin límite artificial de PostgREST
-    let query = supabaseAdmin.from('vtex_skus').select('*', { count: 'exact' });
-
-    if (search) {
-      if (!isNaN(search)) {
-        query = query.eq('id', parseInt(search, 10));
-      } else if (matchingIdsFromDesc.length > 0) {
-        query = query.in('id', matchingIdsFromDesc.slice(0, 100));
-      }
-    }
-
-    // Filtros de descuento en SQL
-    if (filterDiscount === 'with_discount') {
-      query = query.not('list_price', 'is', null).not('base_price', 'is', null);
-    }
-
-    const isAsc = sortOrder.toLowerCase() === 'asc';
-
-    // Caso A: Filtrar o ordenar por descuento % (se omiten límites de PostgREST para analizar todo el catálogo)
+    // 2. Caso A: Filtrar o ordenar por descuento % (utiliza consulta paginada en paralelo para evaluar el catálogo completo)
     if (sortBy === 'discount_pct' || filterDiscount === 'with_discount') {
-      // Sobrescribir el límite por defecto de 1,000 filas de PostgREST
-      const { data: rawSkus } = await query.limit(100000);
+      const candidateSkus = await fetchCandidateSkus(search, matchingIdsFromDesc);
 
-      let formattedAll = (rawSkus || []).map((s) => {
+      let formattedAll = candidateSkus.map((s) => {
         const skuIdStr = String(s.id);
         const description = descMap.get(skuIdStr) || s.description || 'Producto SINSA';
         const listPrice = s.list_price !== null && s.list_price !== undefined ? parseFloat(s.list_price) : null;
@@ -93,8 +140,16 @@ export async function GET(request) {
         formattedAll = formattedAll.filter((s) => s.discountPct === 0);
       }
 
-      // Ordenar por Descuento % (por defecto mayor descuento primero)
-      formattedAll.sort((a, b) => (isAsc ? a.discountPct - b.discountPct : b.discountPct - a.discountPct));
+      // Ordenar por Descuento % (por defecto mayor descuento primero si desc)
+      if (sortBy === 'discount_pct') {
+        formattedAll.sort((a, b) => (isAsc ? a.discountPct - b.discountPct : b.discountPct - a.discountPct));
+      } else {
+        formattedAll.sort((a, b) => {
+          const valA = a[sortBy] ?? 0;
+          const valB = b[sortBy] ?? 0;
+          return isAsc ? (valA > valB ? 1 : -1) : (valA < valB ? 1 : -1);
+        });
+      }
 
       const realCount = formattedAll.length;
       const totalPages = Math.ceil(realCount / pageSize) || 1;
@@ -124,7 +179,17 @@ export async function GET(request) {
       });
     }
 
-    // Caso B: Consulta paginada estándar por ID, precio base o precio lista
+    // Caso B: Consulta paginada estándar por ID, precio base, precio lista o fecha
+    let query = supabaseAdmin.from('vtex_skus').select('*', { count: 'exact' });
+
+    if (search) {
+      if (!isNaN(search)) {
+        query = query.eq('id', parseInt(search, 10));
+      } else if (matchingIdsFromDesc.length > 0) {
+        query = query.in('id', matchingIdsFromDesc.slice(0, 100));
+      }
+    }
+
     if (['base_price', 'list_price', 'price_updated_at', 'id'].includes(sortBy)) {
       query = query.order(sortBy, { ascending: isAsc, nullsFirst: false });
     } else {
@@ -175,12 +240,11 @@ export async function GET(request) {
       supabaseAdmin.from('vtex_skus').select('id', { count: 'exact', head: true }),
     ]);
 
-    // Para el conteo global de SKUs con descuento sin limitar a 1000
-    const { count: globalDiscountedCount } = await supabaseAdmin
-      .from('vtex_skus')
-      .select('id', { count: 'exact', head: true })
-      .not('list_price', 'is', null)
-      .not('base_price', 'is', null);
+    // Para el conteo global de SKUs con descuento
+    const globalCandidates = await fetchCandidateSkus('', []);
+    const globalDiscountedCount = globalCandidates.filter(
+      (s) => s.list_price !== null && s.base_price !== null && parseFloat(s.list_price) > parseFloat(s.base_price)
+    ).length;
 
     const realTotalCount = search ? (count || 0) : (totalCatalogCount || count || 0);
     const totalPages = Math.ceil(realTotalCount / pageSize) || 1;
