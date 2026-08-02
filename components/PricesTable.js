@@ -320,7 +320,7 @@ export default function PricesTable() {
               <span style={{ color: '#ffffff', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
                 <Zap size={15} color="#38bdf8" /> Progreso de Extracción de Precios desde Cero
               </span>
-              <span style={{ color: '#38bdf8', fontWeight 700, fontFamily: 'var(--font-mono)' }}>
+              <span style={{ color: '#38bdf8', fontWeight: 700, fontFamily: 'var(--font-mono)' }}>
                 {pricedCount.toLocaleString('es-NI')} / {catalogTotal.toLocaleString('es-NI')} SKUs ({progressPct}%)
               </span>
             </div>
