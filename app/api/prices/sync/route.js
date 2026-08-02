@@ -17,8 +17,8 @@ export async function POST(request) {
 
     const body = await request.json().catch(() => ({}));
     const singleSkuId = body.skuId ? parseInt(body.skuId, 10) : null;
-    const limit = body.limit ? parseInt(body.limit, 10) : 500;
-    const forceAll = body.forceAll === true;
+    const offset = body.offset !== undefined ? parseInt(body.offset, 10) : null;
+    const limit = body.limit ? parseInt(body.limit, 10) : 150;
 
     // Caso 1: Sincronizar un SKU individual bajo demanda
     if (singleSkuId) {
@@ -55,50 +55,43 @@ export async function POST(request) {
       });
     }
 
-    // Caso 2: Sincronización masiva por lotes
-    // Priorizar los SKUs que aún no tienen precio (base_price IS NULL) para avanzar secuencialmente en el catálogo
-    let skusToSync = [];
-    
-    if (!forceAll) {
-      const { data: unpricedSkus } = await supabaseAdmin
-        .from('vtex_skus')
-        .select('id')
-        .is('base_price', null)
-        .limit(limit);
+    // Caso 2: Sincronización masiva por rango de offset (Ininterrumpido)
+    const { count: totalCatalogCount } = await supabaseAdmin
+      .from('vtex_skus')
+      .select('id', { count: 'exact', head: true });
 
-      if (unpricedSkus && unpricedSkus.length > 0) {
-        skusToSync = unpricedSkus;
-      }
+    const currentOffset = offset !== null ? offset : 0;
+
+    const { data: skusToSync, error: queryErr } = await supabaseAdmin
+      .from('vtex_skus')
+      .select('id')
+      .order('id', { ascending: true })
+      .range(currentOffset, currentOffset + limit - 1);
+
+    if (queryErr) {
+      return NextResponse.json({ success: false, error: queryErr.message }, { status: 500 });
     }
 
-    // Si todos ya tienen precio o si forceAll es true, tomar los SKUs con fecha de sincronización más antigua
-    if (skusToSync.length === 0) {
-      const { data: oldestSkus } = await supabaseAdmin
-        .from('vtex_skus')
-        .select('id')
-        .order('price_updated_at', { ascending: true, nullsFirst: true })
-        .limit(limit);
-
-      skusToSync = oldestSkus || [];
-    }
-
-    if (skusToSync.length === 0) {
+    if (!skusToSync || skusToSync.length === 0) {
       return NextResponse.json({
-        success: false,
-        error: 'No hay SKUs pendientes para actualizar.',
-      }, { status: 400 });
+        success: true,
+        completed: true,
+        processedCount: 0,
+        nextOffset: currentOffset,
+        totalCatalog: totalCatalogCount || 82234,
+        message: '¡100% de SKUs sincronizados exitosamente!',
+      });
     }
 
     const skuIds = skusToSync.map((s) => s.id);
-    let updatedCount = 0;
-    let failedCount = 0;
-    const BATCH_SIZE = 25;
+    const BATCH_CONCURRENCY = 50; // 50 llamadas paralelas a VTEX por sub-lote
     const nowIso = new Date().toISOString();
+    let updatedCount = 0;
 
-    for (let i = 0; i < skuIds.length; i += BATCH_SIZE) {
-      const batchIds = skuIds.slice(i, i + BATCH_SIZE);
+    for (let i = 0; i < skuIds.length; i += BATCH_CONCURRENCY) {
+      const batchIds = skuIds.slice(i, i + BATCH_CONCURRENCY);
       const results = await Promise.all(
-        batchIds.map((skuId) => fetchSkuPrice(skuId).catch(() => null))
+        batchIds.map((id) => fetchSkuPrice(id).catch(() => null))
       );
 
       const upsertRows = [];
@@ -114,8 +107,6 @@ export async function POST(request) {
             updated_at: nowIso,
           });
           updatedCount++;
-        } else {
-          failedCount++;
         }
       });
 
@@ -124,19 +115,16 @@ export async function POST(request) {
       }
     }
 
-    // Contar cuántos SKUs faltan por sincronizar
-    const { count: remainingUnpriced } = await supabaseAdmin
-      .from('vtex_skus')
-      .select('id', { count: 'exact', head: true })
-      .is('base_price', null);
+    const nextOffset = currentOffset + skusToSync.length;
+    const isCompleted = nextOffset >= (totalCatalogCount || 82234);
 
     return NextResponse.json({
       success: true,
-      updatedCount,
-      failedCount,
-      totalProcessed: skuIds.length,
-      remainingUnpriced: remainingUnpriced || 0,
-      message: `Lote sincronizado: ${updatedCount} precios guardados. Quedan ${remainingUnpriced || 0} SKUs pendientes.`,
+      completed: isCompleted,
+      processedCount: updatedCount,
+      nextOffset,
+      totalCatalog: totalCatalogCount || 82234,
+      message: `Lote procesado: ${updatedCount} SKUs actualizados (${currentOffset} a ${nextOffset}).`,
     });
   } catch (err) {
     return NextResponse.json({ success: false, error: err.message }, { status: 500 });

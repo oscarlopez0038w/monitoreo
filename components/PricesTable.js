@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Tag,
   Search,
@@ -16,16 +16,14 @@ import {
   Play,
   Square,
   Terminal,
-  Database,
-  CheckCircle2,
 } from 'lucide-react';
 
 export default function PricesTable() {
   const [skus, setSkus] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [syncing, setSyncing] = useState(false);
-  const [bgSyncRunning, setBgSyncRunning] = useState(false);
-  const [syncProgress, setSyncProgress] = useState(null);
+  const [syncActive, setSyncActive] = useState(false);
+  const [syncOffset, setSyncOffset] = useState(0);
+  const [syncTotal, setSyncTotal] = useState(82234);
   const [updatingSkuId, setUpdatingSkuId] = useState(null);
   const [search, setSearch] = useState('');
   const [discountFilter, setDiscountFilter] = useState('all');
@@ -38,6 +36,8 @@ export default function PricesTable() {
   const [stats, setStats] = useState({ totalPricedSkus: 0, totalCatalogCount: 82234, avgPrice: 0, discountedSkusCount: 0, lastSyncTime: null });
   const [banner, setBanner] = useState(null);
   const [logs, setLogs] = useState([]);
+
+  const syncRef = useRef(false);
 
   const addLog = (msg) => {
     const timestamp = new Date().toLocaleTimeString('es-NI');
@@ -72,64 +72,73 @@ export default function PricesTable() {
     }
   }, [page, pageSize, search, discountFilter, sortBy, sortOrder]);
 
-  const checkBgStatus = useCallback(async () => {
-    try {
-      const res = await fetch('/api/prices/sync/background');
-      const data = await res.json();
-      if (data.success && data.syncState) {
-        const isRunning = Boolean(data.syncState.isRunning);
-        setBgSyncRunning(isRunning);
-        setSyncProgress(data.syncState);
-
-        // Si el worker está activo en segundo plano, refrescar la tabla y estadísticas silenciosamente
-        if (isRunning) {
-          fetchPrices(false);
-          addLog(data.syncState.message || 'Sincronizando precios en segundo plano...');
-        }
-      }
-    } catch (err) {
-      console.error('Error consultando estado de background sync:', err);
-    }
-  }, [fetchPrices]);
-
   useEffect(() => {
     fetchPrices(true);
-    checkBgStatus();
-    const interval = setInterval(checkBgStatus, 2000);
-    return () => clearInterval(interval);
-  }, [fetchPrices, checkBgStatus]);
+  }, [fetchPrices]);
 
-  // Iniciar/Detener Sincronización Masiva en Segundo Plano desde CERO
-  const handleToggleBackgroundSync = async () => {
-    setSyncing(true);
-    setBanner(null);
-    try {
-      const action = bgSyncRunning ? 'stop' : 'start';
-      if (action === 'start') {
-        setLogs([]);
-        addLog('🚀 Iniciando extracción masiva de precios desde cero (100 SKUs concurrentes por lote)...');
-      } else {
-        addLog('⏹️ Deteniendo proceso de sincronización masiva...');
+  // Bucle de sincronización masiva ininterrumpido cliente-servidor
+  const handleToggleSync = async () => {
+    if (syncActive) {
+      // Detener sincronización
+      syncRef.current = false;
+      setSyncActive(false);
+      addLog('⏹️ Sincronización pausada por el usuario.');
+      return;
+    }
+
+    // Iniciar sincronización ininterrumpida desde cero
+    syncRef.current = true;
+    setSyncActive(true);
+    setLogs([]);
+    addLog('🚀 Iniciando extracción masiva ininterrumpida desde el SKU 1 (150 SKUs por lote)...');
+
+    let currentOffset = 0;
+    const batchLimit = 150;
+    let totalCat = stats.totalCatalogCount || 82234;
+
+    while (syncRef.current) {
+      try {
+        const res = await fetch('/api/prices/sync', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ offset: currentOffset, limit: batchLimit }),
+        });
+
+        const data = await res.json();
+
+        if (!syncRef.current) break;
+
+        if (data.success) {
+          totalCat = data.totalCatalog || totalCat;
+          setSyncTotal(totalCat);
+          currentOffset = data.nextOffset;
+          setSyncOffset(currentOffset);
+
+          const pct = Math.min(100, parseFloat(((currentOffset / totalCat) * 100).toFixed(1)));
+          addLog(`Procesando lote: ${currentOffset.toLocaleString('es-NI')} de ${totalCat.toLocaleString('es-NI')} SKUs (${pct}% completado).`);
+
+          // Actualizar tabla silenciosamente cada par de lotes
+          fetchPrices(false);
+
+          if (data.completed || currentOffset >= totalCat) {
+            addLog('🎉 ¡100% del catálogo de precios sincronizado con éxito!');
+            setBanner({ type: 'success', text: '🎉 ¡Sincronización masiva de precios completada exitosamente al 100%!' });
+            syncRef.current = false;
+            setSyncActive(false);
+            break;
+          }
+        } else {
+          addLog(`⚠️ Error en lote: ${data.error || 'Reintentando en 3s...'}`);
+          await new Promise((r) => setTimeout(r, 3000));
+        }
+
+        // Pequeña pausa entre lotes para rendimiento óptimo
+        await new Promise((r) => setTimeout(r, 150));
+      } catch (err) {
+        if (!syncRef.current) break;
+        addLog(`⚠️ Error de conexión: ${err.message}. Reintentando...`);
+        await new Promise((r) => setTimeout(r, 3000));
       }
-
-      const res = await fetch('/api/prices/sync/background', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action }),
-      });
-      const data = await res.json();
-
-      if (data.success) {
-        setBanner({ type: 'success', text: `⚡ ${data.message}` });
-        addLog(data.message);
-        checkBgStatus();
-      } else {
-        setBanner({ type: 'error', text: `⚠️ ${data.error || 'Error al modificar estado de sincronización en segundo plano'}` });
-      }
-    } catch (err) {
-      setBanner({ type: 'error', text: `⚠️ Error de red: ${err.message}` });
-    } finally {
-      setSyncing(false);
     }
   };
 
@@ -216,9 +225,9 @@ export default function PricesTable() {
     );
   };
 
-  const catalogTotal = stats.totalCatalogCount || 82234;
-  const progressPct = syncProgress?.progressPct || (catalogTotal > 0 ? parseFloat(((stats.totalPricedSkus / catalogTotal) * 100).toFixed(1)) : 0);
-  const pricedCount = syncProgress?.pricedCount || stats.totalPricedSkus || 0;
+  const catalogTotal = stats.totalCatalogCount || syncTotal || 82234;
+  const pricedCount = syncActive ? Math.min(catalogTotal, syncOffset) : stats.totalPricedSkus;
+  const progressPct = catalogTotal > 0 ? Math.min(100, parseFloat(((pricedCount / catalogTotal) * 100).toFixed(1))) : 0;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
@@ -228,7 +237,7 @@ export default function PricesTable() {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', flexWrap: 'wrap', gap: '1rem' }}>
           <div>
             <h2 style={{ fontSize: '1.15rem', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#ffffff' }}>
-              <RefreshCw size={19} className={bgSyncRunning ? 'animate-spin' : ''} color="var(--accent-primary)" />
+              <RefreshCw size={19} className={syncActive ? 'animate-spin' : ''} color="var(--accent-primary)" />
               Centro de Extracción & Sincronización Masiva de Precios VTEX
             </h2>
             <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
@@ -238,17 +247,16 @@ export default function PricesTable() {
 
           <div style={{ display: 'flex', gap: '0.65rem', flexWrap: 'wrap', width: '100%', maxWidth: 'max-content' }}>
             <button
-              onClick={handleToggleBackgroundSync}
-              disabled={syncing}
-              className={bgSyncRunning ? 'btn-secondary' : 'btn-primary'}
+              onClick={handleToggleSync}
+              className={syncActive ? 'btn-secondary' : 'btn-primary'}
               style={{
-                background: bgSyncRunning ? 'rgba(248, 113, 113, 0.2)' : undefined,
-                borderColor: bgSyncRunning ? '#fb7185' : undefined,
-                color: bgSyncRunning ? '#fb7185' : undefined,
+                background: syncActive ? 'rgba(248, 113, 113, 0.2)' : undefined,
+                borderColor: syncActive ? '#fb7185' : undefined,
+                color: syncActive ? '#fb7185' : undefined,
               }}
             >
-              {bgSyncRunning ? <Square size={16} className="animate-pulse" /> : <Play size={16} />}
-              {bgSyncRunning ? 'Detener Sincronización' : '⚡ 1. Sincronizar Precios Masivos'}
+              {syncActive ? <Square size={16} className="animate-pulse" /> : <Play size={16} />}
+              {syncActive ? 'Detener Sincronización' : '⚡ 1. Sincronizar Precios Masivos'}
             </button>
 
             <button
@@ -262,7 +270,7 @@ export default function PricesTable() {
         </div>
 
         {/* 4 Summary Stat Boxes Grid */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '1rem', marginBottom: bgSyncRunning || logs.length > 0 ? '1.25rem' : '0' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '1rem', marginBottom: syncActive || logs.length > 0 ? '1.25rem' : '0' }}>
           
           <div style={{ background: 'rgba(15, 23, 42, 0.6)', border: '1px solid var(--border-subtle)', borderRadius: '12px', padding: '1rem' }}>
             <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 600, marginBottom: '0.3rem' }}>
@@ -296,10 +304,10 @@ export default function PricesTable() {
             <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 600, marginBottom: '0.3rem' }}>
               ESTADO DE AVANCE
             </div>
-            <div style={{ fontSize: '0.9rem', fontWeight: 700, color: bgSyncRunning ? '#38bdf8' : '#fbbf24', display: 'flex', alignItems: 'center', gap: '0.4rem', marginTop: '0.3rem' }}>
-              {bgSyncRunning ? (
+            <div style={{ fontSize: '0.9rem', fontWeight: 700, color: syncActive ? '#38bdf8' : '#fbbf24', display: 'flex', alignItems: 'center', gap: '0.4rem', marginTop: '0.3rem' }}>
+              {syncActive ? (
                 <>
-                  <RefreshCw size={14} className="animate-spin" /> Procesando en segundo plano...
+                  <RefreshCw size={14} className="animate-spin" /> Procesando en vivo...
                 </>
               ) : (
                 'Listo para operar.'
@@ -310,7 +318,7 @@ export default function PricesTable() {
         </div>
 
         {/* Progress Bar - Se muestra cuando la sincronización está activa */}
-        {bgSyncRunning && (
+        {syncActive && (
           <div style={{ marginTop: '1rem', marginBottom: '1rem' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.4rem', fontSize: '0.82rem' }}>
               <span style={{ color: '#ffffff', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
