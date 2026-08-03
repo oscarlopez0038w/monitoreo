@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LayoutDashboard, Layers, ShieldAlert, Tag, ShoppingCart, Zap, ShieldCheck, X } from 'lucide-react';
+import { LayoutDashboard, Layers, ShieldAlert, Tag, ShoppingCart, Zap, ShieldCheck, X, Gift } from 'lucide-react';
 
 export default function Sidebar({ vtexStatus, supabaseStatus, mobileOpen, onCloseMobile }) {
   const pathname = usePathname();
@@ -31,6 +31,12 @@ export default function Sidebar({ vtexStatus, supabaseStatus, mobileOpen, onClos
       href: '/precios',
       icon: Tag,
       color: '#a5b4fc',
+    },
+    {
+      label: 'Simulador Carrito',
+      href: '/simulador',
+      icon: Gift,
+      color: '#e879f9',
     },
     {
       label: 'Órdenes VTEX OMS',
