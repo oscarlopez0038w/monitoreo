@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
+import * as XLSX from 'xlsx';
 import {
   Tag,
   Search,
@@ -15,11 +16,14 @@ import {
   Play,
   Square,
   Terminal,
+  Download,
+  Loader2,
 } from 'lucide-react';
 
 export default function PricesTable() {
   const [skus, setSkus] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [exporting, setExporting] = useState(false);
   const [syncActive, setSyncActive] = useState(false);
   const [syncOffset, setSyncOffset] = useState(0);
   const [syncTotal, setSyncTotal] = useState(82234);
@@ -220,6 +224,63 @@ export default function PricesTable() {
     );
   };
 
+  const handleExportExcel = async () => {
+    try {
+      setExporting(true);
+      addLog('📊 Consultando todos los SKUs con precios y descuentos desde Supabase...');
+
+      const res = await fetch('/api/prices/export');
+      const data = await res.json();
+
+      if (!data.success || !Array.isArray(data.skus)) {
+        alert('Error obteniendo el catálogo de precios: ' + (data.error || 'Error desconocido'));
+        return;
+      }
+
+      addLog(`✅ Formateando ${data.skus.length.toLocaleString('es-NI')} SKUs para reporte Excel...`);
+
+      const exportRows = data.skus.map((s) => ({
+        'SKU ID': s.id,
+        'Descripción / Nombre Producto': s.description || 'N/A',
+        'Estado SKU': s.isActive ? 'Activo' : 'Inactivo',
+        'Precio Lista MSRP (C$)': s.listPrice !== null ? s.listPrice : 0,
+        'Precio Base Venta (C$)': s.basePrice !== null ? s.basePrice : 0,
+        'Costo (C$)': s.costPrice !== null ? s.costPrice : 0,
+        'Monto Descuento (C$)': s.discountAmount || 0,
+        'Porcentaje Descuento (%)': s.discountPct ? `${s.discountPct}%` : '0%',
+        '¿Tiene Oferta / Descuento?': s.hasDiscount ? 'SÍ' : 'NO',
+        'Última Actualización': s.priceUpdatedAt ? new Date(s.priceUpdatedAt).toLocaleString('es-NI') : 'N/A',
+      }));
+
+      const worksheet = XLSX.utils.json_to_sheet(exportRows);
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, 'Precios VTEX SINSA');
+
+      worksheet['!cols'] = [
+        { wch: 15 },
+        { wch: 45 },
+        { wch: 15 },
+        { wch: 22 },
+        { wch: 22 },
+        { wch: 15 },
+        { wch: 24 },
+        { wch: 22 },
+        { wch: 24 },
+        { wch: 24 },
+      ];
+
+      const fileName = `Precios_VTEX_SINSA_${new Date().toISOString().slice(0, 10)}.xlsx`;
+      XLSX.writeFile(workbook, fileName);
+
+      addLog(`🎉 Reporte Excel exportado con éxito: ${fileName}`);
+    } catch (err) {
+      console.error('Error al exportar precios a Excel:', err);
+      alert('Error generando archivo Excel: ' + err.message);
+    } finally {
+      setExporting(false);
+    }
+  };
+
   const catalogTotal = stats.totalCatalogCount || syncTotal || 82234;
   const pricedCount = syncActive ? Math.min(catalogTotal, syncOffset) : stats.totalPricedSkus;
   const progressPct = catalogTotal > 0 ? Math.min(100, parseFloat(((pricedCount / catalogTotal) * 100).toFixed(1))) : 0;
@@ -241,6 +302,30 @@ export default function PricesTable() {
           </div>
 
           <div style={{ display: 'flex', gap: '0.65rem', flexWrap: 'wrap', width: '100%', maxWidth: 'max-content' }}>
+            <button
+              onClick={handleExportExcel}
+              disabled={exporting}
+              style={{
+                padding: '0.55rem 1.15rem',
+                borderRadius: '10px',
+                border: '1px solid rgba(52, 211, 153, 0.4)',
+                background: 'rgba(52, 211, 153, 0.14)',
+                color: '#34d399',
+                fontSize: '0.86rem',
+                fontWeight: 600,
+                cursor: exporting ? 'wait' : 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.5rem',
+                transition: 'all 0.2s ease',
+                boxShadow: '0 4px 15px rgba(52, 211, 153, 0.15)',
+              }}
+              title="Descargar reporte Excel (.xlsx) con todos los SKUs, precios de lista, precios de venta y porcentaje de descuento"
+            >
+              {exporting ? <Loader2 size={16} className="animate-spin" /> : <Download size={16} />}
+              {exporting ? 'Generando Excel...' : 'Exportar Precios a Excel (C$)'}
+            </button>
+
             <button
               onClick={handleToggleSync}
               className={syncActive ? 'btn-secondary' : 'btn-primary'}
@@ -420,6 +505,30 @@ export default function PricesTable() {
               <option value="with_discount">Solo con Descuento %</option>
               <option value="no_discount">Sin Descuento</option>
             </select>
+
+            {/* Export Excel Button in Table Controls */}
+            <button
+              onClick={handleExportExcel}
+              disabled={exporting}
+              style={{
+                padding: '0.45rem 0.9rem',
+                borderRadius: '8px',
+                border: '1px solid rgba(52, 211, 153, 0.4)',
+                background: 'rgba(52, 211, 153, 0.12)',
+                color: '#34d399',
+                fontSize: '0.82rem',
+                fontWeight: 600,
+                cursor: exporting ? 'wait' : 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.4rem',
+                transition: 'all 0.2s ease',
+              }}
+              title="Descargar Excel (.xlsx) con todos los SKUs y precios"
+            >
+              {exporting ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />}
+              {exporting ? 'Generando...' : 'Descargar Excel'}
+            </button>
           </div>
         </div>
 
