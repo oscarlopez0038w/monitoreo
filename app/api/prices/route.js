@@ -4,21 +4,12 @@ import { supabaseAdmin, isSupabaseConfigured } from '@/lib/supabase';
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
-// Cache en memoria para el catálogo completo de precios (TTL de 5 segundos)
-let catalogCache = null;
-let catalogCacheTime = 0;
-
-async function fetchAllSkusFromDb(search, matchingIdsFromDesc) {
-  const now = Date.now();
-  
-  // Si no hay búsqueda por texto, intentar usar cache en memoria (5s TTL)
-  if (!search && catalogCache && now - catalogCacheTime < 5000) {
-    return catalogCache;
-  }
-
+async function fetchCandidateSkus(search, matchingIdsFromDesc) {
   let countQuery = supabaseAdmin
     .from('vtex_skus')
-    .select('id', { count: 'exact', head: true });
+    .select('id', { count: 'exact', head: true })
+    .not('list_price', 'is', null)
+    .not('base_price', 'is', null);
 
   if (search) {
     if (!isNaN(search)) {
@@ -31,13 +22,11 @@ async function fetchAllSkusFromDb(search, matchingIdsFromDesc) {
   }
 
   const { count } = await countQuery;
-  const totalSkus = count || 0;
-  if (totalSkus === 0) return [];
+  const totalCandidates = count || 0;
+  if (totalCandidates === 0) return [];
 
-  // PostgREST limita las respuestas a un máximo de 1000 filas por petición.
-  // Es crítico usar pageSize = 1000 para no perder filas.
   const pageSize = 1000;
-  const pages = Math.ceil(totalSkus / pageSize);
+  const pages = Math.ceil(totalCandidates / pageSize);
 
   const promises = [];
   for (let i = 0; i < pages; i++) {
@@ -46,6 +35,8 @@ async function fetchAllSkusFromDb(search, matchingIdsFromDesc) {
     let pageQuery = supabaseAdmin
       .from('vtex_skus')
       .select('id, list_price, base_price, cost_price, price_updated_at, updated_at, is_active')
+      .not('list_price', 'is', null)
+      .not('base_price', 'is', null)
       .order('id', { ascending: true })
       .range(from, to);
 
@@ -60,14 +51,7 @@ async function fetchAllSkusFromDb(search, matchingIdsFromDesc) {
   }
 
   const results = await Promise.all(promises);
-  const allSkus = results.flatMap((r) => r.data || []);
-
-  if (!search) {
-    catalogCache = allSkus;
-    catalogCacheTime = now;
-  }
-
-  return allSkus;
+  return results.flatMap((r) => r.data || []);
 }
 
 export async function GET(request) {
@@ -107,11 +91,23 @@ export async function GET(request) {
       });
     }
 
-    // Caso A: Filtrar por descuento o calcular descuento % para ordenar por descuento %
-    if (sortBy === 'discount_pct' || filterDiscount === 'with_discount' || filterDiscount === 'no_discount') {
-      const allSkusFromDb = await fetchAllSkusFromDb(search, matchingIdsFromDesc);
+    // Conteos globales exactos de base de datos en paralelo (< 5ms)
+    const [{ count: totalPricedSkus }, { count: totalCatalogCount }] = await Promise.all([
+      supabaseAdmin.from('vtex_skus').select('id', { count: 'exact', head: true }).not('base_price', 'is', null),
+      supabaseAdmin.from('vtex_skus').select('id', { count: 'exact', head: true }),
+    ]);
 
-      let formattedAll = allSkusFromDb.map((s) => {
+    // Para conteo exacto y consistente de ofertas
+    const globalCandidates = await fetchCandidateSkus('', []);
+    const discountedSkusCountGlobal = globalCandidates.filter(
+      (s) => s.list_price !== null && s.base_price !== null && parseFloat(s.list_price) > parseFloat(s.base_price)
+    ).length;
+
+    // Caso A: Filtrar por descuento o calcular descuento % para ordenar por descuento %
+    if (sortBy === 'discount_pct' || filterDiscount === 'with_discount') {
+      const candidateSkus = search ? await fetchCandidateSkus(search, matchingIdsFromDesc) : globalCandidates;
+
+      let formattedCandidates = candidateSkus.map((s) => {
         const skuIdStr = String(s.id);
         const description = descMap.get(skuIdStr) || s.description || 'Producto SINSA';
         const listPrice = s.list_price !== null && s.list_price !== undefined ? parseFloat(s.list_price) : null;
@@ -135,18 +131,9 @@ export async function GET(request) {
         };
       });
 
-      // Conteos de KPI precisos basados en el escaneo completo
-      const globalCandidates = search ? await fetchAllSkusFromDb('', []) : allSkusFromDb;
-      const discountedSkusCountGlobal = globalCandidates.filter(
-        (s) => s.list_price !== null && s.base_price !== null && parseFloat(s.list_price) > parseFloat(s.base_price)
-      ).length;
-      const totalPricedSkusCountGlobal = globalCandidates.filter((s) => s.base_price !== null).length;
-
-      let filteredSkus = formattedAll;
+      let filteredSkus = formattedCandidates;
       if (filterDiscount === 'with_discount') {
-        filteredSkus = formattedAll.filter((s) => s.discountPct > 0);
-      } else if (filterDiscount === 'no_discount') {
-        filteredSkus = formattedAll.filter((s) => s.discountPct === 0);
+        filteredSkus = formattedCandidates.filter((s) => s.discountPct > 0);
       }
 
       // Ordenar resultados
@@ -165,14 +152,10 @@ export async function GET(request) {
         });
       }
 
-      const realCount = filteredSkus.length;
-      const totalPages = Math.ceil(realCount / pageSize) || 1;
+      const realCount = filterDiscount === 'with_discount' ? filteredSkus.length : (search ? filteredSkus.length : (totalCatalogCount || 82234));
+      const totalPages = Math.ceil(filteredSkus.length / pageSize) || 1;
       const from = (page - 1) * pageSize;
       const paginatedSkus = filteredSkus.slice(from, from + pageSize);
-
-      const { count: totalCatalogCount } = await supabaseAdmin
-        .from('vtex_skus')
-        .select('id', { count: 'exact', head: true });
 
       return NextResponse.json({
         success: true,
@@ -185,14 +168,14 @@ export async function GET(request) {
           totalPages,
         },
         stats: {
-          totalPricedSkus: totalPricedSkusCountGlobal,
+          totalPricedSkus: totalPricedSkus || 0,
           totalCatalogCount: totalCatalogCount || 82234,
-          discountedSkusCount: discountedSkusCountGlobal,
+          discountedSkusCount: discountedSkusCountGlobal || 0,
         },
       });
     }
 
-    // Caso B: Consulta paginada estándar por ID, precio base, precio lista o fecha (filterDiscount === 'all')
+    // Caso B: Consulta paginada estándar por ID, precio base, precio lista o fecha (filterDiscount === 'all' o 'no_discount')
     let query = supabaseAdmin.from('vtex_skus').select('*', { count: 'exact' });
 
     if (search) {
@@ -201,6 +184,10 @@ export async function GET(request) {
       } else if (matchingIdsFromDesc.length > 0) {
         query = query.in('id', matchingIdsFromDesc.slice(0, 100));
       }
+    }
+
+    if (filterDiscount === 'no_discount') {
+      query = query.or('list_price.is.null,base_price.is.null');
     }
 
     if (['base_price', 'list_price', 'price_updated_at', 'id'].includes(sortBy)) {
@@ -243,18 +230,7 @@ export async function GET(request) {
       };
     });
 
-    const [{ count: totalPricedSkus }, { count: totalCatalogCount }] = await Promise.all([
-      supabaseAdmin.from('vtex_skus').select('id', { count: 'exact', head: true }).not('base_price', 'is', null),
-      supabaseAdmin.from('vtex_skus').select('id', { count: 'exact', head: true }),
-    ]);
-
-    // Para estadísticas exactas globales de SKUs con descuento
-    const allSkusGlobal = await fetchAllSkusFromDb('', []);
-    const discountedSkusCountGlobal = allSkusGlobal.filter(
-      (s) => s.list_price !== null && s.base_price !== null && parseFloat(s.list_price) > parseFloat(s.base_price)
-    ).length;
-
-    const realTotalCount = search ? (count || 0) : (totalCatalogCount || count || 0);
+    const realTotalCount = search ? (count || 0) : (filterDiscount === 'no_discount' ? (count || 0) : (totalCatalogCount || count || 0));
     const totalPages = Math.ceil(realTotalCount / pageSize) || 1;
 
     return NextResponse.json({
