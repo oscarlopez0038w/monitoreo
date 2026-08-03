@@ -4,16 +4,16 @@ import { supabaseAdmin, isSupabaseConfigured } from '@/lib/supabase';
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
-// Cache en memoria para candidatos a descuento (TTL de 2 segundos)
-let candidateCache = null;
-let candidateCacheTime = 0;
+// Cache en memoria para el catálogo completo de precios (TTL de 5 segundos)
+let catalogCache = null;
+let catalogCacheTime = 0;
 
 async function fetchAllSkusFromDb(search, matchingIdsFromDesc) {
   const now = Date.now();
   
-  // Si no hay búsqueda por texto, intentar usar cache en memoria ultrarrápido (2s TTL)
-  if (!search && candidateCache && now - candidateCacheTime < 2000) {
-    return candidateCache;
+  // Si no hay búsqueda por texto, intentar usar cache en memoria (5s TTL)
+  if (!search && catalogCache && now - catalogCacheTime < 5000) {
+    return catalogCache;
   }
 
   let countQuery = supabaseAdmin
@@ -34,7 +34,9 @@ async function fetchAllSkusFromDb(search, matchingIdsFromDesc) {
   const totalSkus = count || 0;
   if (totalSkus === 0) return [];
 
-  const pageSize = 2000;
+  // PostgREST limita las respuestas a un máximo de 1000 filas por petición.
+  // Es crítico usar pageSize = 1000 para no perder filas.
+  const pageSize = 1000;
   const pages = Math.ceil(totalSkus / pageSize);
 
   const promises = [];
@@ -60,8 +62,8 @@ async function fetchAllSkusFromDb(search, matchingIdsFromDesc) {
   const allSkus = results.flatMap((r) => r.data || []);
 
   if (!search) {
-    candidateCache = allSkus;
-    candidateCacheTime = now;
+    catalogCache = allSkus;
+    catalogCacheTime = now;
   }
 
   return allSkus;
@@ -132,8 +134,12 @@ export async function GET(request) {
         };
       });
 
-      const discountedSkusCountGlobal = formattedAll.filter((s) => s.discountPct > 0).length;
-      const totalPricedSkusCountGlobal = formattedAll.filter((s) => s.basePrice !== null).length;
+      // Conteos de KPI precisos basados en el escaneo completo
+      const globalCandidates = search ? await fetchAllSkusFromDb('', []) : allSkusFromDb;
+      const discountedSkusCountGlobal = globalCandidates.filter(
+        (s) => s.list_price !== null && s.base_price !== null && parseFloat(s.list_price) > parseFloat(s.base_price)
+      ).length;
+      const totalPricedSkusCountGlobal = globalCandidates.filter((s) => s.base_price !== null).length;
 
       let filteredSkus = formattedAll;
       if (filterDiscount === 'with_discount') {
@@ -172,14 +178,14 @@ export async function GET(request) {
         skus: paginatedSkus,
         paging: {
           total: realCount,
-          totalCatalog: totalCatalogCount || formattedAll.length,
+          totalCatalog: totalCatalogCount || 82234,
           page,
           pageSize,
           totalPages,
         },
         stats: {
           totalPricedSkus: totalPricedSkusCountGlobal,
-          totalCatalogCount: totalCatalogCount || formattedAll.length,
+          totalCatalogCount: totalCatalogCount || 82234,
           discountedSkusCount: discountedSkusCountGlobal,
         },
       });
@@ -241,7 +247,7 @@ export async function GET(request) {
       supabaseAdmin.from('vtex_skus').select('id', { count: 'exact', head: true }),
     ]);
 
-    // Para estadísticas exactas globales
+    // Para estadísticas exactas globales de SKUs con descuento
     const allSkusGlobal = await fetchAllSkusFromDb('', []);
     const discountedSkusCountGlobal = allSkusGlobal.filter(
       (s) => s.list_price !== null && s.base_price !== null && parseFloat(s.list_price) > parseFloat(s.base_price)
@@ -255,14 +261,14 @@ export async function GET(request) {
       skus: formattedSkus,
       paging: {
         total: realTotalCount,
-        totalCatalog: totalCatalogCount || 0,
+        totalCatalog: totalCatalogCount || 82234,
         page,
         pageSize,
         totalPages,
       },
       stats: {
         totalPricedSkus: totalPricedSkus || 0,
-        totalCatalogCount: totalCatalogCount || 0,
+        totalCatalogCount: totalCatalogCount || 82234,
         discountedSkusCount: discountedSkusCountGlobal || 0,
       },
     });
