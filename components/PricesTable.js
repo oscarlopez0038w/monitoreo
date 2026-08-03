@@ -206,7 +206,7 @@ export default function PricesTable() {
       setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
     } else {
       setSortBy(column);
-      setSortOrder('asc');
+      setSortOrder(column === 'discount_pct' ? 'desc' : 'asc');
     }
     setPage(1);
   };
