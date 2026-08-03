@@ -46,6 +46,7 @@ async function fetchAllSkusFromDb(search, matchingIdsFromDesc) {
     let pageQuery = supabaseAdmin
       .from('vtex_skus')
       .select('id, list_price, base_price, cost_price, price_updated_at, updated_at, is_active')
+      .order('id', { ascending: true })
       .range(from, to);
 
     if (search) {
