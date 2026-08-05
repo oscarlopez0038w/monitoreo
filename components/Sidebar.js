@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LayoutDashboard, Layers, ShieldAlert, Tag, ShoppingCart, Zap, ShieldCheck, X, Gift, CreditCard } from 'lucide-react';
+import { LayoutDashboard, Layers, ShieldAlert, Tag, ShoppingCart, Zap, ShieldCheck, X, Gift, CreditCard, TrendingUp } from 'lucide-react';
 
 export default function Sidebar({ vtexStatus, supabaseStatus, mobileOpen, onCloseMobile, newTxCount = 0 }) {
   const pathname = usePathname();
@@ -13,6 +13,12 @@ export default function Sidebar({ vtexStatus, supabaseStatus, mobileOpen, onClos
       href: '/dashboard',
       icon: LayoutDashboard,
       color: '#38bdf8',
+    },
+    {
+      label: 'Tendencias E-Commerce',
+      href: '/tendencias',
+      icon: TrendingUp,
+      color: '#10b981',
     },
     {
       label: 'Inventario & SKUs',
