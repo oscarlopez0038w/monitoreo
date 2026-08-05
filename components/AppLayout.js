@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { usePathname } from 'next/navigation';
 import Sidebar from '@/components/Sidebar';
 import GlobalSyncBanner from '@/components/GlobalSyncBanner';
 import { Menu, X, Zap } from 'lucide-react';
@@ -8,6 +9,8 @@ import { Menu, X, Zap } from 'lucide-react';
 export default function AppLayout({ children }) {
   const [stats, setStats] = useState(null);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [newTxCount, setNewTxCount] = useState(0);
+  const pathname = usePathname();
 
   const fetchStats = async () => {
     try {
@@ -21,9 +24,57 @@ export default function AppLayout({ children }) {
     }
   };
 
+  const checkNewTransactions = async () => {
+    try {
+      const res = await fetch('/api/transactions?limit=15');
+      const data = await res.json();
+      if (data.success && Array.isArray(data.data) && data.data.length > 0) {
+        const latestTx = data.data[0];
+        const latestKey = String(latestTx.key || latestTx.transactionId || '');
+        const savedKey = typeof window !== 'undefined' ? localStorage.getItem('vtex_last_seen_tx_key') : null;
+
+        if (!savedKey) {
+          // Inicialización en la primera carga: guardar clave actual como vista
+          if (typeof window !== 'undefined') {
+            localStorage.setItem('vtex_last_seen_tx_key', latestKey);
+          }
+          setNewTxCount(0);
+        } else if (savedKey !== latestKey) {
+          // Contar transacciones nuevas en el lote
+          let unreadIndex = data.data.findIndex(
+            (tx) => String(tx.key || tx.transactionId || '') === savedKey
+          );
+          let count = unreadIndex === -1 ? data.data.length : unreadIndex;
+
+          if (pathname === '/transacciones') {
+            if (typeof window !== 'undefined') {
+              localStorage.setItem('vtex_last_seen_tx_key', latestKey);
+            }
+            setNewTxCount(0);
+          } else {
+            setNewTxCount(count);
+          }
+        } else {
+          if (pathname === '/transacciones') {
+            setNewTxCount(0);
+          }
+        }
+      }
+    } catch (err) {
+      console.error('Error verificando notificaciones de transacciones:', err);
+    }
+  };
+
   useEffect(() => {
     fetchStats();
   }, []);
+
+  useEffect(() => {
+    checkNewTransactions();
+    // Polling cada 20 segundos para detectar nuevas transacciones que caigan en VTEX
+    const interval = setInterval(checkNewTransactions, 20000);
+    return () => clearInterval(interval);
+  }, [pathname]);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', background: 'var(--bg-dark)' }}>
@@ -99,6 +150,7 @@ export default function AppLayout({ children }) {
           supabaseStatus={stats?.supabase}
           mobileOpen={mobileOpen}
           onCloseMobile={() => setMobileOpen(false)}
+          newTxCount={newTxCount}
         />
 
         {/* Main Content Area */}

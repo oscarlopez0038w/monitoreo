@@ -2,9 +2,9 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LayoutDashboard, Layers, ShieldAlert, Tag, ShoppingCart, Zap, ShieldCheck, X, Gift } from 'lucide-react';
+import { LayoutDashboard, Layers, ShieldAlert, Tag, ShoppingCart, Zap, ShieldCheck, X, Gift, CreditCard } from 'lucide-react';
 
-export default function Sidebar({ vtexStatus, supabaseStatus, mobileOpen, onCloseMobile }) {
+export default function Sidebar({ vtexStatus, supabaseStatus, mobileOpen, onCloseMobile, newTxCount = 0 }) {
   const pathname = usePathname();
 
   const navItems = [
@@ -44,7 +44,14 @@ export default function Sidebar({ vtexStatus, supabaseStatus, mobileOpen, onClos
       icon: ShoppingCart,
       color: '#34d399',
     },
+    {
+      label: 'Transacciones VTEX',
+      href: '/transacciones',
+      icon: CreditCard,
+      color: '#f43f5e',
+    },
   ];
+
 
   return (
     <>
@@ -131,6 +138,8 @@ export default function Sidebar({ vtexStatus, supabaseStatus, mobileOpen, onClos
             {navItems.map((item) => {
               const isActive = pathname === item.href;
               const IconComponent = item.icon;
+              const isTxItem = item.href === '/transacciones';
+              const showBadge = isTxItem && newTxCount > 0;
 
               return (
                 <Link
@@ -154,10 +163,51 @@ export default function Sidebar({ vtexStatus, supabaseStatus, mobileOpen, onClos
                     border: isActive ? '1px solid rgba(56, 189, 248, 0.25)' : '1px solid transparent',
                     boxShadow: isActive ? '0 4px 15px rgba(56, 189, 248, 0.15)' : 'none',
                     minHeight: '44px',
+                    position: 'relative',
                   }}
                 >
-                  <IconComponent size={19} color={isActive ? item.color : 'var(--text-dim)'} />
+                  <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                    <IconComponent size={19} color={isActive ? item.color : 'var(--text-dim)'} />
+                    {showBadge && (
+                      <span
+                        style={{
+                          position: 'absolute',
+                          top: '-4px',
+                          right: '-4px',
+                          width: '9px',
+                          height: '9px',
+                          borderRadius: '50%',
+                          backgroundColor: '#f43f5e',
+                          boxShadow: '0 0 10px #f43f5e',
+                          border: '2px solid rgba(11, 15, 25, 0.95)',
+                        }}
+                      />
+                    )}
+                  </div>
                   <span>{item.label}</span>
+
+                  {showBadge && (
+                    <span
+                      style={{
+                        marginLeft: 'auto',
+                        background: 'linear-gradient(135deg, #ef4444, #f43f5e)',
+                        color: '#ffffff',
+                        fontSize: '0.72rem',
+                        fontWeight: 800,
+                        padding: '0.15rem 0.55rem',
+                        borderRadius: '20px',
+                        boxShadow: '0 0 14px rgba(244, 63, 94, 0.6)',
+                        letterSpacing: '0.02em',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        minWidth: '22px',
+                        height: '20px',
+                      }}
+                    >
+                      {newTxCount > 99 ? '99+' : `+${newTxCount}`}
+                    </span>
+                  )}
                 </Link>
               );
             })}
