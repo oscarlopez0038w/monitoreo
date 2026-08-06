@@ -601,7 +601,7 @@ export default function TendenciasPage() {
                           alt={sku.name}
                           onError={(e) => {
                             e.target.onerror = null;
-                            e.target.src = 'https://b2csinsa.vteximg.com.br/arquivos/ids/960916-55-55/placeholder.jpg';
+                            e.target.src = '/placeholder-product.svg';
                           }}
                           style={{
                             width: '54px',

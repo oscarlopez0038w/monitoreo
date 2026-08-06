@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { isVtexConfigured, fetchVtexOrders, fetchVtexOrderDetail } from '@/lib/vtex';
+import { isVtexConfigured, fetchVtexOrders, fetchVtexOrderDetail, fetchSkuImageUrl } from '@/lib/vtex';
 import { getNicaraguaNow } from '@/lib/dateUtils';
 
 export const dynamic = 'force-dynamic';
@@ -109,8 +109,7 @@ export async function GET(request) {
         grandTotalUnits += qty;
         grandTotalRevenue += itemTotal;
 
-        const imageUrl =
-          it.imageUrl || `https://b2csinsa.vteximg.com.br/arquivos/ids/960916-55-55/${skuId}-0.jpg`;
+        const imageUrl = it.imageUrl || null;
         const brand = it.additionalInfo?.brandName || 'SINSA';
 
         // Determinar nombre de categoría principal
@@ -165,6 +164,13 @@ export async function GET(request) {
         brandMap[brand].skusSet.add(skuId);
       });
     });
+
+    // 3.5 Resolver URLs reales de imágenes de SKU desde Catálogo VTEX en paralelo
+    await Promise.all(
+      Object.values(skuMap).map(async (sku) => {
+        sku.imageUrl = await fetchSkuImageUrl(sku.id, sku.imageUrl);
+      })
+    );
 
     // 4. Ordenar y dar formato a los resultados
     const allSkusSortedByRevenue = Object.values(skuMap)

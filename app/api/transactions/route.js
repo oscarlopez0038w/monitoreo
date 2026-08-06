@@ -7,6 +7,7 @@ import {
   fetchVtexTransactionPayments,
   fetchVtexOrders,
   fetchVtexOrderDetail,
+  fetchSkuImageUrl,
 } from '@/lib/vtex';
 
 export const dynamic = 'force-dynamic';
@@ -320,7 +321,7 @@ export async function GET(request) {
           txId ? fetchVtexTransactionPayments(txId).catch(() => []) : Promise.resolve([]),
         ]);
 
-        return buildEnrichedTransaction(txDetail, orderDetail, interactions, payments);
+        return await buildEnrichedTransaction(txDetail, orderDetail, interactions, payments);
       })
     );
 
@@ -440,7 +441,7 @@ export async function GET(request) {
 /**
  * Función normalizadora que combina VTEX Payment Transaction + Payments Array + OMS Order Detail
  */
-function buildEnrichedTransaction(txDetail, orderDetail, interactions = [], payments = []) {
+async function buildEnrichedTransaction(txDetail, orderDetail, interactions = [], payments = []) {
   const getField = (name) => {
     const f = txDetail?.fields?.find((item) => item.name === name);
     if (!f || !f.value) return null;
@@ -597,27 +598,32 @@ function buildEnrichedTransaction(txDetail, orderDetail, interactions = [], paym
 
   // 7. Lista de SKUs / Productos
   let rawItems = orderDetail?.items || parsedCart?.items || [];
-  const items = rawItems.map((it) => {
-    const rawPrice = it.sellingPrice !== undefined ? it.sellingPrice : (it.price !== undefined ? it.price : (it.value || 0));
-    // Los precios de items en VTEX OMS y Payments API vienen expresados en centavos (ej: 38985 centavos = C$ 389.85)
-    let unitPrice = 0;
-    if (typeof rawPrice === 'number') {
-      unitPrice = rawPrice > 0 && (it.sellingPrice !== undefined || it.listPrice !== undefined || rawPrice >= 100) ? rawPrice / 100 : rawPrice;
-    } else {
-      unitPrice = Number(rawPrice) / 100 || 0;
-    }
-    const qty = it.quantity || 1;
-    return {
-      id: String(it.id || it.skuId || it.sellerSku),
-      name: it.name || it.skuName || `SKU ${it.id}`,
-      quantity: qty,
-      unitPrice: unitPrice,
-      totalPrice: unitPrice * qty,
-      imageUrl: it.imageUrl || (it.id ? `https://b2csinsa.vteximg.com.br/arquivos/ids/960916-55-55/${it.id}-0.jpg` : null),
-      brand: it.additionalInfo?.brandName || 'SINSA',
-      refId: it.refId || String(it.id),
-    };
-  });
+  const items = await Promise.all(
+    rawItems.map(async (it) => {
+      const rawPrice = it.sellingPrice !== undefined ? it.sellingPrice : (it.price !== undefined ? it.price : (it.value || 0));
+      // Los precios de items en VTEX OMS y Payments API vienen expresados en centavos (ej: 38985 centavos = C$ 389.85)
+      let unitPrice = 0;
+      if (typeof rawPrice === 'number') {
+        unitPrice = rawPrice > 0 && (it.sellingPrice !== undefined || it.listPrice !== undefined || rawPrice >= 100) ? rawPrice / 100 : rawPrice;
+      } else {
+        unitPrice = Number(rawPrice) / 100 || 0;
+      }
+      const qty = it.quantity || 1;
+      const skuId = String(it.id || it.skuId || it.sellerSku || '');
+      const imageUrl = await fetchSkuImageUrl(skuId, it.imageUrl);
+
+      return {
+        id: skuId,
+        name: it.name || it.skuName || `SKU ${skuId}`,
+        quantity: qty,
+        unitPrice: unitPrice,
+        totalPrice: unitPrice * qty,
+        imageUrl: imageUrl,
+        brand: it.additionalInfo?.brandName || 'SINSA',
+        refId: it.refId || skuId,
+      };
+    })
+  );
 
   // 8. Dirección de Entrega / Retiro
   const shippingAddress = orderDetail?.shippingData?.address || parsedShipping || {};
