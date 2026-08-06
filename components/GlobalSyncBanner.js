@@ -9,22 +9,31 @@ export default function GlobalSyncBanner() {
   const [syncData, setSyncData] = useState(null);
   const [stopping, setStopping] = useState(false);
 
-  const fetchStatus = async () => {
-    try {
-      const res = await fetch('/api/prices/sync/background');
-      const json = await res.json();
-      if (json.success) {
-        setSyncData(json);
-      }
-    } catch (err) {
-      console.error('Error consultando estado de sincronización:', err);
-    }
-  };
-
   useEffect(() => {
-    fetchStatus();
-    const interval = setInterval(fetchStatus, 2000); // Polling ligero en tiempo real cada 2s
-    return () => clearInterval(interval);
+    let timerId = null;
+
+    const checkAndSchedule = async () => {
+      try {
+        const res = await fetch('/api/prices/sync/background');
+        const json = await res.json();
+        if (json.success) {
+          setSyncData(json);
+          const isRunning = Boolean(json.syncState?.isRunning);
+          // Si está sincronizando, consultar cada 3s para mostrar avance.
+          // Si NO está sincronizando, pausar sondeo por 60s para mantener el Network tab limpio.
+          const delay = isRunning ? 3000 : 60000;
+          timerId = setTimeout(checkAndSchedule, delay);
+        }
+      } catch (err) {
+        timerId = setTimeout(checkAndSchedule, 60000);
+      }
+    };
+
+    checkAndSchedule();
+
+    return () => {
+      if (timerId) clearTimeout(timerId);
+    };
   }, []);
 
   // Ocultar el popup flotante cuando el usuario está dentro de la página /precios
@@ -44,12 +53,13 @@ export default function GlobalSyncBanner() {
   const handleStop = async () => {
     setStopping(true);
     try {
-      await fetch('/api/prices/sync/background', {
+      const res = await fetch('/api/prices/sync/background', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'stop' }),
       });
-      fetchStatus();
+      const json = await res.json();
+      if (json.success) setSyncData(json);
     } catch (err) {
       console.error('Error deteniendo sincronización:', err);
     } finally {
