@@ -28,7 +28,7 @@ export default function DashboardPage() {
   const [startDateA, setStartDateA] = useState(nicNow.firstDayStr);
   const [endDateA, setEndDateA] = useState(nicNow.todayStr);
 
-  // Período B por defecto: Mes Anterior Completo
+  // Período B por defecto: Mismísimos Días (MTD) para que la carga inicial sea ultra-rápida (1 al 5 vs. 1 al 5)
   let pY = nicNow.year;
   let pM = nicNow.month - 1;
   if (pM < 0) {
@@ -37,11 +37,14 @@ export default function DashboardPage() {
   }
   const pMStr = String(pM + 1).padStart(2, '0');
   const lastDayPM = new Date(pY, pM + 1, 0).getDate();
+  const sameDayPM = Math.min(nicNow.day, lastDayPM);
+
   const defaultStartB = `${pY}-${pMStr}-01`;
-  const defaultEndB = `${pY}-${pMStr}-${String(lastDayPM).padStart(2, '0')}`;
+  const defaultFullEndB = `${pY}-${pMStr}-${String(lastDayPM).padStart(2, '0')}`;
+  const defaultMtdEndB = `${pY}-${pMStr}-${String(sameDayPM).padStart(2, '0')}`;
 
   const [startDateB, setStartDateB] = useState(defaultStartB);
-  const [endDateB, setEndDateB] = useState(defaultEndB);
+  const [endDateB, setEndDateB] = useState(defaultMtdEndB);
 
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState(null);
@@ -80,22 +83,22 @@ export default function DashboardPage() {
     let sA = nicNow.firstDayStr;
     let eA = nicNow.todayStr;
     let sB = defaultStartB;
-    let eB = defaultEndB;
+    let eB = defaultMtdEndB;
 
     if (presetKey === 'current_vs_prev_full') {
       sA = nicNow.firstDayStr;
       eA = nicNow.todayStr;
       sB = defaultStartB;
-      eB = defaultEndB;
+      eB = defaultFullEndB;
     } else if (presetKey === 'current_vs_prev_mtd') {
       sA = nicNow.firstDayStr;
       eA = nicNow.todayStr;
       sB = defaultStartB;
-      eB = `${pY}-${pMStr}-${String(Math.min(nicNow.day, lastDayPM)).padStart(2, '0')}`;
+      eB = defaultMtdEndB;
     } else if (presetKey === 'prev_vs_two_ago') {
       // Mes Pasado vs Antepasado
       sA = defaultStartB;
-      eA = defaultEndB;
+      eA = defaultFullEndB;
 
       let pY2 = pY;
       let pM2 = pM - 1;

@@ -95,7 +95,7 @@ export async function GET(request) {
     const defaultStartA = nicNow.firstDayStr;
     const defaultEndA = nicNow.todayStr;
 
-    // Período B por defecto: Mes Anterior Completo
+    // Período B por defecto: Mismísimos Días (MTD - Month to Date) para una carga inicial ultra-rápida y comparación justa 1:1
     let prevYearVal = nicNow.year;
     let prevMonthVal = nicNow.month - 1; // 0-indexed
     if (prevMonthVal < 0) {
@@ -104,8 +104,9 @@ export async function GET(request) {
     }
 
     const prevMonthLastDay = new Date(prevYearVal, prevMonthVal + 1, 0).getDate();
+    const prevMonthSameDay = Math.min(nicNow.day, prevMonthLastDay);
     const defaultStartB = `${prevYearVal}-${String(prevMonthVal + 1).padStart(2, '0')}-01`;
-    const defaultEndB = `${prevYearVal}-${String(prevMonthVal + 1).padStart(2, '0')}-${String(prevMonthLastDay).padStart(2, '0')}`;
+    const defaultEndB = `${prevYearVal}-${String(prevMonthVal + 1).padStart(2, '0')}-${String(prevMonthSameDay).padStart(2, '0')}`;
 
     // Extraer parámetros explícitos de fecha enviados desde el cliente
     const startDateA = searchParams.get('startDateA') || searchParams.get('startA') || defaultStartA;
