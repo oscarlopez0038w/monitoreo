@@ -61,11 +61,12 @@ const ERROR_DICTIONARY = {
   '63': { code: '63', title: 'Violación de Seguridad (Code 63 - Security Violation)', description: 'Falló la validación de los protocolos de seguridad 3D Secure / OTP del banco emisor.' },
   '65': { code: '65', title: 'Límite de Intentos Superado (Code 65 - Activity Limit Exceeded)', description: 'Se superó el número máximo de compras o intentos permitidos por día en la tarjeta.' },
 
-  // CVV y Cuentas (75 - 85)
+  // CVV y Cuentas (75 - 85 & Redes Bancarias N7)
   '75': { code: '75', title: 'Intentos de Código CVV/PIN Excedidos (Code 75)', description: 'Se excedió el número de intentos fallidos al ingresar el código de seguridad o PIN de la tarjeta.' },
   '78': { code: '78', title: 'Cuenta Inexistente o Inactiva (Code 78 - No Account)', description: 'La cuenta bancaria asociada a la tarjeta se encuentra cancelada o inactiva.' },
-  '82': { code: '82', title: 'Código CVV/CVC Incorrecto (Code 82 - Invalid CVV)', description: 'El código de seguridad de 3 o 4 dígitos (CVV/CVC) no coincide con los registros del banco.' },
+  '82': { code: '82', title: 'Código CVV/CVC Incorrecto (Code 82 - Invalid / Negative CVV)', description: 'El código de seguridad (CVV/CVC físico, iCVV de chip o dCVV dinámico) no coincide con los registros del banco. Las pasarelas de pago suelen estandarizar respuestas de red (como N7) a este código 82.' },
   '85': { code: '85', title: 'Rechazo General por Validación de Cuenta (Code 85)', description: 'El banco emisor declinó la verificación de los datos de la cuenta.' },
+  'N7': { code: 'N7', title: 'Falla en CVV2 (Code N7 - Decline for CVV2 Failure)', description: 'Código de respuesta de bajo nivel originado en redes de procesamiento (VisaNet/ISO 8583) por falla específica en la verificación del CVV2 impreso en el reverso o frente de la tarjeta.' },
 
   // Errores de Red y Sistema (91 - 96)
   '91': { code: '91', title: 'Banco Emisor Fuera de Línea (Code 91 - Timeout)', description: 'El banco emisor no respondió la solicitud de autorización a tiempo (Tiempo de espera agotado).' },
@@ -78,20 +79,28 @@ function translateError(rawCode, rawMsg, interactions = []) {
 
   if (!cleanCode && interactions.length > 0) {
     const rawLogs = interactions.map((i) => i.Message || '').join(' ');
-    const codeMatch = rawLogs.match(/"code":"(\d+)"/i) || rawLogs.match(/"returnCode":"(\d+)"/i);
+    const codeMatch = rawLogs.match(/"code":"([A-Za-z0-9]+)"/i) || rawLogs.match(/"returnCode":"([A-Za-z0-9]+)"/i);
     if (codeMatch) cleanCode = codeMatch[1];
   }
 
   // Normalizar código de 1 dígito a 2 dígitos (ej: '3' -> '03', '5' -> '05')
   const paddedCode = cleanCode && cleanCode.length === 1 ? `0${cleanCode}` : cleanCode;
+  const upperCode = cleanCode ? cleanCode.toUpperCase() : null;
+  const upperPadded = paddedCode ? paddedCode.toUpperCase() : null;
   const fullText = (rawMsg || '') + ' ' + interactions.map((i) => i.Message || '').join(' ');
 
-  // 1. Coincidencia Directa en el Diccionario Oficial de Errores Tilopay / Bancarios
+  // 1. Coincidencia Directa en el Diccionario Oficial de Errores Tilopay / Bancarios / Redes (ISO 8583 / VisaNet)
   if (cleanCode && ERROR_DICTIONARY[cleanCode]) {
     return ERROR_DICTIONARY[cleanCode];
   }
+  if (upperCode && ERROR_DICTIONARY[upperCode]) {
+    return ERROR_DICTIONARY[upperCode];
+  }
   if (paddedCode && ERROR_DICTIONARY[paddedCode]) {
     return ERROR_DICTIONARY[paddedCode];
+  }
+  if (upperPadded && ERROR_DICTIONARY[upperPadded]) {
+    return ERROR_DICTIONARY[upperPadded];
   }
 
   // 2. Errores Técnicos de Configuración de VTEX / Pasarela (ej: Afiliación o Cuenta Inexistente)
