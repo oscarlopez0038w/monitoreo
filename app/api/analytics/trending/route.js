@@ -167,9 +167,13 @@ export async function GET(request) {
     });
 
     // 4. Ordenar y dar formato a los resultados
-    const topSkus = Object.values(skuMap)
-      .sort((a, b) => b.quantity - a.quantity || b.revenue - a.revenue)
-      .slice(0, limit);
+    const allSkusSortedByRevenue = Object.values(skuMap)
+      .sort((a, b) => b.revenue - a.revenue || b.quantity - a.quantity);
+
+    const allSkusSortedByQuantity = Object.values(skuMap)
+      .sort((a, b) => b.quantity - a.quantity || b.revenue - a.revenue);
+
+    const topSkus = allSkusSortedByQuantity.slice(0, limit);
 
     const topCategories = Object.values(categoryMap)
       .map((c) => ({
@@ -207,7 +211,9 @@ export async function GET(request) {
         distinctSkus: Object.keys(skuMap).length,
         distinctCategories: Object.keys(categoryMap).length,
         distinctBrands: Object.keys(brandMap).length,
-        topProduct: topSkus[0] || null,
+        topProduct: allSkusSortedByRevenue[0] || null, // Por defecto el producto líder comercial en ingresos (Revenue)
+        topProductByRevenue: allSkusSortedByRevenue[0] || null,
+        topProductByQuantity: allSkusSortedByQuantity[0] || null,
         topCategory: topCategories[0] || null,
         topBrand: topBrands[0] || null,
       },

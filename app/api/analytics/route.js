@@ -188,6 +188,89 @@ export async function GET(request) {
     const prevWebDirectPct = 100 - prevSocialSellingPct;
     const prevWebDirectRevenue = Math.max(0, prevTotalRevenue - prevSocialSellingRevenue);
 
+    const BCN_EXCHANGE_RATE = 36.6243;
+
+    // Generar desglose diario para el Período A (Mes Actual)
+    const dailyMap = {};
+    const startDateObj = new Date(`${startDateA}T00:00:00-06:00`);
+    const endDateObj = new Date(`${endDateA}T00:00:00-06:00`);
+
+    for (let d = new Date(startDateObj); d <= endDateObj; d.setDate(d.getDate() + 1)) {
+      const dayStr = d.toISOString().split('T')[0];
+      const dayNum = d.getDate();
+      const monthNamesShort = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+      const dayLabel = `${String(dayNum).padStart(2, '0')} ${monthNamesShort[d.getMonth()]}`;
+
+      dailyMap[dayStr] = {
+        date: dayStr,
+        dayNum,
+        dayLabel,
+        approvedOrders: 0,
+        canceledOrders: 0,
+        salesNio: 0,
+        salesUsd: 0,
+        refundsNio: 0,
+        refundsUsd: 0,
+        avgTicketNio: 0,
+        avgTicketUsd: 0,
+      };
+    }
+
+    currOrders.forEach((o) => {
+      if (!o.creationDate) return;
+      const dateObj = new Date(o.creationDate);
+      const nicDate = new Date(dateObj.getTime() - 6 * 3600 * 1000);
+      const dayStr = nicDate.toISOString().split('T')[0];
+
+      if (!dailyMap[dayStr]) {
+        const dayNum = nicDate.getDate();
+        const monthNamesShort = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+        const dayLabel = `${String(dayNum).padStart(2, '0')} ${monthNamesShort[nicDate.getMonth()]}`;
+        dailyMap[dayStr] = {
+          date: dayStr,
+          dayNum,
+          dayLabel,
+          approvedOrders: 0,
+          canceledOrders: 0,
+          salesNio: 0,
+          salesUsd: 0,
+          refundsNio: 0,
+          refundsUsd: 0,
+          avgTicketNio: 0,
+          avgTicketUsd: 0,
+        };
+      }
+
+      const valNio = o.totalValue ? o.totalValue / 100 : 0;
+      const valUsd = valNio / BCN_EXCHANGE_RATE;
+
+      if (o.status === 'canceled') {
+        dailyMap[dayStr].canceledOrders += 1;
+        dailyMap[dayStr].refundsNio += valNio;
+        dailyMap[dayStr].refundsUsd += valUsd;
+      } else {
+        dailyMap[dayStr].approvedOrders += 1;
+        dailyMap[dayStr].salesNio += valNio;
+        dailyMap[dayStr].salesUsd += valUsd;
+      }
+    });
+
+    const dailyBreakdown = Object.values(dailyMap)
+      .map((d) => {
+        const avgN = d.approvedOrders > 0 ? d.salesNio / d.approvedOrders : 0;
+        const avgU = d.approvedOrders > 0 ? d.salesUsd / d.approvedOrders : 0;
+        return {
+          ...d,
+          salesNio: parseFloat(d.salesNio.toFixed(2)),
+          salesUsd: parseFloat(d.salesUsd.toFixed(2)),
+          refundsNio: parseFloat(d.refundsNio.toFixed(2)),
+          refundsUsd: parseFloat(d.refundsUsd.toFixed(2)),
+          avgTicketNio: parseFloat(avgN.toFixed(2)),
+          avgTicketUsd: parseFloat(avgU.toFixed(2)),
+        };
+      })
+      .sort((a, b) => a.date.localeCompare(b.date));
+
     // Función auxiliar para calcular porcentaje de cambio
     const calcChange = (curr, prev) => {
       if (!prev || prev === 0) return curr > 0 ? 100 : 0;
@@ -199,6 +282,7 @@ export async function GET(request) {
 
     return NextResponse.json({
       success: true,
+      bcnExchangeRate: BCN_EXCHANGE_RATE,
       periods: {
         current: {
           label: labelA,
@@ -215,6 +299,10 @@ export async function GET(request) {
       },
       kpis: {
         totalRevenue: {
+          currentNio: parseFloat(currTotalRevenue.toFixed(2)),
+          currentUsd: parseFloat((currTotalRevenue / BCN_EXCHANGE_RATE).toFixed(2)),
+          previousNio: parseFloat(prevTotalRevenue.toFixed(2)),
+          previousUsd: parseFloat((prevTotalRevenue / BCN_EXCHANGE_RATE).toFixed(2)),
           current: parseFloat(currTotalRevenue.toFixed(2)),
           previous: parseFloat(prevTotalRevenue.toFixed(2)),
           changePct: calcChange(currTotalRevenue, prevTotalRevenue),
@@ -225,6 +313,10 @@ export async function GET(request) {
           changePct: calcChange(currTotalOrders, prevTotalOrders),
         },
         avgTicket: {
+          currentNio: parseFloat(currAvgTicket.toFixed(2)),
+          currentUsd: parseFloat((currAvgTicket / BCN_EXCHANGE_RATE).toFixed(2)),
+          previousNio: parseFloat(prevAvgTicket.toFixed(2)),
+          previousUsd: parseFloat((prevAvgTicket / BCN_EXCHANGE_RATE).toFixed(2)),
           current: parseFloat(currAvgTicket.toFixed(2)),
           previous: parseFloat(prevAvgTicket.toFixed(2)),
           changePct: calcChange(currAvgTicket, prevAvgTicket),
@@ -245,11 +337,15 @@ export async function GET(request) {
           current: {
             count: socialSellingOrdersCount,
             pct: parseFloat(socialSellingPct.toFixed(1)),
+            revenueNio: parseFloat(socialSellingRevenue.toFixed(2)),
+            revenueUsd: parseFloat((socialSellingRevenue / BCN_EXCHANGE_RATE).toFixed(2)),
             revenue: parseFloat(socialSellingRevenue.toFixed(2)),
           },
           previous: {
             count: prevSocialSellingOrdersCount,
             pct: parseFloat(prevSocialSellingPct.toFixed(1)),
+            revenueNio: parseFloat(prevSocialSellingRevenue.toFixed(2)),
+            revenueUsd: parseFloat((prevSocialSellingRevenue / BCN_EXCHANGE_RATE).toFixed(2)),
             revenue: parseFloat(prevSocialSellingRevenue.toFixed(2)),
           },
           changePct: calcChange(socialSellingRevenue, prevSocialSellingRevenue),
@@ -258,11 +354,15 @@ export async function GET(request) {
           current: {
             count: currValidOrders.length - socialSellingOrdersCount,
             pct: parseFloat(webDirectPct.toFixed(1)),
+            revenueNio: parseFloat(webDirectRevenue.toFixed(2)),
+            revenueUsd: parseFloat((webDirectRevenue / BCN_EXCHANGE_RATE).toFixed(2)),
             revenue: parseFloat(webDirectRevenue.toFixed(2)),
           },
           previous: {
             count: prevValidOrders.length - prevSocialSellingOrdersCount,
             pct: parseFloat(prevWebDirectPct.toFixed(1)),
+            revenueNio: parseFloat(prevWebDirectRevenue.toFixed(2)),
+            revenueUsd: parseFloat((prevWebDirectRevenue / BCN_EXCHANGE_RATE).toFixed(2)),
             revenue: parseFloat(prevWebDirectRevenue.toFixed(2)),
           },
           changePct: calcChange(webDirectRevenue, prevWebDirectRevenue),
@@ -274,6 +374,7 @@ export async function GET(request) {
         handling: currHandlingCount,
         canceled: currCanceledCount,
       },
+      dailyBreakdown,
     });
   } catch (err) {
     return NextResponse.json({ success: false, error: err.message }, { status: 500 });

@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import AppLayout from '@/components/AppLayout';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import { getNicaraguaNow } from '@/lib/dateUtils';
-import { ShoppingCart, Calendar, Filter, Search, RefreshCw, ChevronDown, ChevronUp, Package, DollarSign, CheckCircle2, Clock, AlertTriangle, FileText, Zap, Radio, X, MessageSquare, Info, Download } from 'lucide-react';
+import { ShoppingCart, Calendar, Filter, Search, RefreshCw, ChevronDown, ChevronUp, Package, DollarSign, CheckCircle2, Clock, AlertTriangle, FileText, Zap, Radio, X, MessageSquare, Info, Download, Truck, Store } from 'lucide-react';
 
 export default function OrdenesPage() {
   const nicNow = getNicaraguaNow();
@@ -21,7 +21,8 @@ export default function OrdenesPage() {
   const [orderDetails, setOrderDetails] = useState({});
   const [loadingDetailId, setLoadingDetailId] = useState(null);
   const [liveBanner, setLiveBanner] = useState(null);
-  const [globalStats, setGlobalStats] = useState({ total: 0, invoiced: 0, handling: 0, readyForHandling: 0, canceled: 0 });
+  const [showAllStores, setShowAllStores] = useState(false);
+  const [globalStats, setGlobalStats] = useState({ total: 0, invoiced: 0, handling: 0, readyForHandling: 0, canceled: 0, pickupCount: 0, deliveryCount: 0, pickupPct: 0, deliveryPct: 0, pickupStores: [] });
 
   const fetchOrders = async (page = 1) => {
     setLoading(true);
@@ -176,36 +177,53 @@ export default function OrdenesPage() {
 
   const renderStatusBadge = (status, statusDescription) => {
     const s = String(status || '').toLowerCase();
+    const commonBadgeStyle = {
+      display: 'inline-flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: '0.35rem',
+      width: '210px',
+      height: '28px',
+      borderRadius: '20px',
+      fontSize: '0.73rem',
+      fontWeight: 700,
+      whiteSpace: 'nowrap',
+      overflow: 'hidden',
+      textOverflow: 'ellipsis',
+      boxSizing: 'border-box',
+      padding: '0 0.6rem',
+    };
+
     if (s === 'invoiced') {
       return (
-        <span className="badge badge-emerald" style={{ padding: '0.2rem 0.55rem', fontSize: '0.75rem' }}>
-          <CheckCircle2 size={12} /> Facturada (invoiced)
+        <span className="badge badge-emerald" style={commonBadgeStyle}>
+          <CheckCircle2 size={13} style={{ flexShrink: 0 }} /> Facturada (invoiced)
         </span>
       );
     }
     if (s === 'ready-for-handling') {
       return (
-        <span className="badge" style={{ background: 'rgba(56, 189, 248, 0.15)', color: '#38bdf8', border: '1px solid rgba(56, 189, 248, 0.3)', padding: '0.2rem 0.55rem', fontSize: '0.75rem' }}>
-          <Clock size={12} /> Lista para preparar (ready-for-handling)
+        <span className="badge" style={{ ...commonBadgeStyle, background: 'rgba(56, 189, 248, 0.15)', color: '#38bdf8', border: '1px solid rgba(56, 189, 248, 0.3)' }}>
+          <Clock size={13} style={{ flexShrink: 0 }} /> Lista para preparar
         </span>
       );
     }
     if (s === 'handling') {
       return (
-        <span className="badge badge-amber" style={{ padding: '0.2rem 0.55rem', fontSize: '0.75rem' }}>
-          <Clock size={12} /> En Preparación (handling)
+        <span className="badge badge-amber" style={commonBadgeStyle}>
+          <Clock size={13} style={{ flexShrink: 0 }} /> En Preparación (handling)
         </span>
       );
     }
     if (s === 'canceled') {
       return (
-        <span className="badge badge-rose" style={{ padding: '0.2rem 0.55rem', fontSize: '0.75rem' }}>
-          <AlertTriangle size={12} /> Cancelada
+        <span className="badge badge-rose" style={commonBadgeStyle}>
+          <AlertTriangle size={13} style={{ flexShrink: 0 }} /> Cancelada (canceled)
         </span>
       );
     }
     return (
-      <span className="badge" style={{ background: 'rgba(148, 163, 184, 0.12)', color: '#94a3b8', border: '1px solid rgba(148, 163, 184, 0.25)', padding: '0.2rem 0.55rem', fontSize: '0.75rem' }}>
+      <span className="badge" style={{ ...commonBadgeStyle, background: 'rgba(148, 163, 184, 0.12)', color: '#94a3b8', border: '1px solid rgba(148, 163, 184, 0.25)' }}>
         {statusDescription || status}
       </span>
     );
@@ -355,59 +373,221 @@ export default function OrdenesPage() {
           </form>
         </div>
 
-        {/* Metric Cards Summary */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '1rem', marginBottom: '1.5rem' }}>
+        {/* Metric Cards Summary - Alineación Uniforme & Z-Index Elevado */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '0.75rem', marginBottom: '1.25rem', alignItems: 'stretch', position: 'relative', zIndex: 50 }}>
           
-          <div className="glass-card" style={{ padding: '1rem' }}>
-            <span style={{ fontSize: '0.75rem', color: 'var(--text-dim)', textTransform: 'uppercase', fontWeight: 600 }}>Total Órdenes</span>
-            <div style={{ fontSize: '1.4rem', fontWeight: 700, color: 'var(--accent-primary)', marginTop: '0.2rem' }}>
+          {/* Card 1: Total Órdenes */}
+          <div className="glass-card" style={{ padding: '0.75rem 0.85rem', display: 'flex', flexDirection: 'column', justifyContent: 'center', textAlign: 'center', minHeight: '115px' }}>
+            <span style={{ fontSize: '0.7rem', color: 'var(--text-dim)', textTransform: 'uppercase', fontWeight: 700, letterSpacing: '0.02em' }}>Total Órdenes</span>
+            <div style={{ fontSize: '1.45rem', fontWeight: 800, color: 'var(--accent-primary)', marginTop: '0.25rem', lineHeight: 1.1 }}>
               {totalOrdersCount.toLocaleString()}
             </div>
           </div>
 
-          <div className="glass-card" style={{ padding: '1rem' }}>
-            <span style={{ fontSize: '0.75rem', color: 'var(--text-dim)', textTransform: 'uppercase', fontWeight: 600 }}>Facturadas (Invoiced)</span>
-            <div style={{ fontSize: '1.4rem', fontWeight: 700, color: '#34d399', marginTop: '0.2rem' }}>
+          {/* Card 2: Facturadas (Invoiced) */}
+          <div className="glass-card" style={{ padding: '0.75rem 0.85rem', display: 'flex', flexDirection: 'column', justifyContent: 'center', textAlign: 'center', minHeight: '115px' }}>
+            <span style={{ fontSize: '0.7rem', color: 'var(--text-dim)', textTransform: 'uppercase', fontWeight: 700, letterSpacing: '0.02em' }}>Facturadas</span>
+            <div style={{ fontSize: '1.45rem', fontWeight: 800, color: '#34d399', marginTop: '0.25rem', lineHeight: 1.1 }}>
               {invoicedCount.toLocaleString()}
             </div>
           </div>
 
-          <div className="glass-card" style={{ padding: '1rem' }}>
-            <span style={{ fontSize: '0.75rem', color: 'var(--text-dim)', textTransform: 'uppercase', fontWeight: 600 }}>Lista para Preparar</span>
-            <div style={{ fontSize: '1.4rem', fontWeight: 700, color: '#38bdf8', marginTop: '0.2rem' }}>
+          {/* Card 3: Lista para Preparar */}
+          <div className="glass-card" style={{ padding: '0.75rem 0.85rem', display: 'flex', flexDirection: 'column', justifyContent: 'center', textAlign: 'center', minHeight: '115px' }}>
+            <span style={{ fontSize: '0.7rem', color: 'var(--text-dim)', textTransform: 'uppercase', fontWeight: 700, letterSpacing: '0.02em' }}>Lista p/ Preparar</span>
+            <div style={{ fontSize: '1.45rem', fontWeight: 800, color: '#38bdf8', marginTop: '0.25rem', lineHeight: 1.1 }}>
               {readyCount.toLocaleString()}
             </div>
           </div>
 
-          <div className="glass-card" style={{ padding: '1rem' }}>
-            <span style={{ fontSize: '0.75rem', color: 'var(--text-dim)', textTransform: 'uppercase', fontWeight: 600 }}>En Preparación</span>
-            <div style={{ fontSize: '1.4rem', fontWeight: 700, color: '#fbbf24', marginTop: '0.2rem' }}>
+          {/* Card 4: En Preparación */}
+          <div className="glass-card" style={{ padding: '0.75rem 0.85rem', display: 'flex', flexDirection: 'column', justifyContent: 'center', textAlign: 'center', minHeight: '115px' }}>
+            <span style={{ fontSize: '0.7rem', color: 'var(--text-dim)', textTransform: 'uppercase', fontWeight: 700, letterSpacing: '0.02em' }}>En Preparación</span>
+            <div style={{ fontSize: '1.45rem', fontWeight: 800, color: '#fbbf24', marginTop: '0.25rem', lineHeight: 1.1 }}>
               {handlingCount.toLocaleString()}
             </div>
           </div>
 
-          <div className="glass-card" style={{ padding: '1rem', position: 'relative' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span style={{ fontSize: '0.75rem', color: 'var(--text-dim)', textTransform: 'uppercase', fontWeight: 600 }}>Canceladas</span>
+          {/* Card 5: Canceladas */}
+          <div className="glass-card" style={{ padding: '0.75rem 0.85rem', display: 'flex', flexDirection: 'column', justifyContent: 'center', textAlign: 'center', position: 'relative', minHeight: '115px' }}>
+            <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '0.4rem' }}>
+              <span style={{ fontSize: '0.7rem', color: 'var(--text-dim)', textTransform: 'uppercase', fontWeight: 700, letterSpacing: '0.02em' }}>Canceladas</span>
               <a
                 href={`/api/orders/export-canceled?startDate=${startDate}&endDate=${endDate}`}
                 target="_blank"
                 rel="noopener noreferrer"
-                style={{ fontSize: '0.7rem', color: '#fb7185', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '0.2rem', fontWeight: 600 }}
-                title="Descargar reporte Excel / CSV de órdenes canceladas"
+                style={{ fontSize: '0.65rem', color: '#fb7185', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '0.15rem', fontWeight: 700 }}
+                title="Descargar reporte Excel / CSV"
               >
-                <Download size={12} /> CSV Excel
+                <Download size={11} /> CSV
               </a>
             </div>
-            <div style={{ fontSize: '1.4rem', fontWeight: 700, color: '#fb7185', marginTop: '0.2rem' }}>
+            <div style={{ fontSize: '1.45rem', fontWeight: 800, color: '#fb7185', marginTop: '0.25rem', lineHeight: 1.1 }}>
               {canceledCount.toLocaleString()}
             </div>
           </div>
 
+          {/* Card 6: Tipo de Entrega (Pickup vs Delivery) */}
+          <div className="glass-card" style={{ padding: '0.65rem 0.85rem', background: 'linear-gradient(135deg, rgba(15, 23, 42, 0.9), rgba(30, 41, 59, 0.95))', border: '1px solid rgba(56, 189, 248, 0.3)', gridColumn: 'span 1', minWidth: '210px', display: 'flex', flexDirection: 'column', justifyContent: 'center', minHeight: '115px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.3rem' }}>
+              <span style={{ fontSize: '0.7rem', color: 'var(--text-dim)', textTransform: 'uppercase', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+                <Truck size={12} color="#38bdf8" /> Tipo de Entrega
+              </span>
+              <span style={{ fontSize: '0.65rem', color: '#38bdf8', fontWeight: 600 }}>
+                {(globalStats.pickupCount || 0) + (globalStats.deliveryCount || 0)} ord.
+              </span>
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.35rem' }}>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.25rem' }}>
+                <span style={{ fontSize: '1.1rem', fontWeight: 800, color: '#38bdf8' }}>
+                  🏬 {globalStats.pickupPct || 0}%
+                </span>
+                <span style={{ fontSize: '0.68rem', color: '#94a3b8' }}>
+                  Pickup ({globalStats.pickupCount || 0})
+                </span>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.25rem' }}>
+                <span style={{ fontSize: '1.1rem', fontWeight: 800, color: '#34d399' }}>
+                  🚚 {globalStats.deliveryPct || 0}%
+                </span>
+                <span style={{ fontSize: '0.68rem', color: '#94a3b8' }}>
+                  Delivery ({globalStats.deliveryCount || 0})
+                </span>
+              </div>
+            </div>
+
+            {/* Visual Dual Progress Bar */}
+            <div style={{ width: '100%', height: '5px', borderRadius: '3px', background: 'rgba(255, 255, 255, 0.1)', overflow: 'hidden', display: 'flex' }}>
+              <div style={{ width: `${globalStats.pickupPct || 0}%`, height: '100%', background: '#38bdf8', transition: 'width 0.5s ease' }} title={`Pickup: ${globalStats.pickupPct}%`} />
+              <div style={{ width: `${globalStats.deliveryPct || 0}%`, height: '100%', background: '#34d399', transition: 'width 0.5s ease' }} title={`Delivery: ${globalStats.deliveryPct}%`} />
+            </div>
+          </div>
+
+          {/* Card 7: Top Tiendas Pickup (Superpuesta con Z-Index Máximo) */}
+          <div className="glass-card" style={{ padding: '0.65rem 0.85rem', background: 'linear-gradient(135deg, rgba(15, 23, 42, 0.95), rgba(30, 41, 59, 0.98))', border: '1px solid rgba(129, 140, 248, 0.35)', gridColumn: 'span 1', minWidth: '220px', position: 'relative', zIndex: 100, minHeight: '115px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+            <div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.3rem' }}>
+                <span style={{ fontSize: '0.7rem', color: 'var(--text-dim)', textTransform: 'uppercase', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+                  <Store size={12} color="#818cf8" /> Top Tiendas Pickup
+                </span>
+                <span style={{ fontSize: '0.65rem', color: '#818cf8', fontWeight: 600 }}>
+                  {(globalStats.pickupStores || []).length} tiendas
+                </span>
+              </div>
+
+              {/* Lista de Top 3 Tiendas Visibles */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                {!(globalStats.pickupStores && globalStats.pickupStores.length > 0) ? (
+                  <span style={{ fontSize: '0.72rem', color: 'var(--text-dim)', fontStyle: 'italic', display: 'block', textAlign: 'center', padding: '0.5rem 0' }}>
+                    Sin datos de retiro
+                  </span>
+                ) : (
+                  globalStats.pickupStores.slice(0, 3).map((item, idx) => (
+                    <div key={idx} style={{ fontSize: '0.72rem' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.1rem' }}>
+                        <span style={{ color: '#e2e8f0', fontWeight: 600, maxWidth: '130px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={item.store}>
+                          {idx + 1}. {item.store}
+                        </span>
+                        <span style={{ color: '#818cf8', fontWeight: 700, fontSize: '0.7rem' }}>
+                          {item.pct}% <span style={{ color: '#94a3b8', fontWeight: 400 }}>({item.count})</span>
+                        </span>
+                      </div>
+                      <div style={{ width: '100%', height: '3px', borderRadius: '2px', background: 'rgba(255, 255, 255, 0.08)', overflow: 'hidden' }}>
+                        <div style={{ width: `${item.pct}%`, height: '100%', background: 'linear-gradient(90deg, #6366f1, #818cf8)', borderRadius: '2px' }} />
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+
+            {/* Botón para abrir/cerrar el menú flotante superpuesto */}
+            {globalStats.pickupStores && globalStats.pickupStores.length > 3 && (
+              <button
+                onClick={() => setShowAllStores(!showAllStores)}
+                style={{
+                  marginTop: '0.35rem',
+                  background: showAllStores ? 'rgba(129, 140, 248, 0.25)' : 'rgba(129, 140, 248, 0.1)',
+                  border: '1px solid rgba(129, 140, 248, 0.35)',
+                  borderRadius: '6px',
+                  color: '#818cf8',
+                  fontSize: '0.66rem',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '0.2rem',
+                  padding: '0.2rem 0.4rem',
+                  transition: 'all 0.2s ease',
+                  width: '100%',
+                }}
+              >
+                {showAllStores ? (
+                  <>Cerrar menú <ChevronUp size={12} /></>
+                ) : (
+                  <>Ver todas las tiendas (+{globalStats.pickupStores.length - 3}) <ChevronDown size={12} /></>
+                )}
+              </button>
+            )}
+
+            {/* MENÚ FLOTANTE SUPERPUESTO (Z-INDEX 9999 EN FRENTE DE TODO) */}
+            {showAllStores && globalStats.pickupStores && (
+              <div
+                style={{
+                  position: 'absolute',
+                  top: 'calc(100% + 8px)',
+                  right: 0,
+                  left: 0,
+                  zIndex: 99999,
+                  background: '#0b1120',
+                  border: '1px solid rgba(129, 140, 248, 0.5)',
+                  borderRadius: '12px',
+                  padding: '0.85rem',
+                  boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.95), 0 0 25px rgba(99, 102, 241, 0.3)',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '0.45rem',
+                  maxHeight: '320px',
+                  overflowY: 'auto',
+                }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.25rem', paddingBottom: '0.35rem', borderBottom: '1px solid rgba(255, 255, 255, 0.1)' }}>
+                  <span style={{ fontSize: '0.72rem', color: '#818cf8', fontWeight: 700, textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+                    <Store size={13} /> Desglose Tiendas ({globalStats.pickupStores.length})
+                  </span>
+                  <button
+                    onClick={() => setShowAllStores(false)}
+                    style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', display: 'inline-flex', padding: 0 }}
+                  >
+                    <X size={14} />
+                  </button>
+                </div>
+
+                {globalStats.pickupStores.map((item, idx) => (
+                  <div key={idx} style={{ fontSize: '0.73rem' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.15rem' }}>
+                      <span style={{ color: '#e2e8f0', fontWeight: 600, maxWidth: '140px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={item.store}>
+                        {idx + 1}. {item.store}
+                      </span>
+                      <span style={{ color: '#818cf8', fontWeight: 700, fontSize: '0.72rem' }}>
+                        {item.pct}% <span style={{ color: '#94a3b8', fontWeight: 400 }}>({item.count})</span>
+                      </span>
+                    </div>
+                    <div style={{ width: '100%', height: '4px', borderRadius: '2px', background: 'rgba(255, 255, 255, 0.08)', overflow: 'hidden' }}>
+                      <div style={{ width: `${item.pct}%`, height: '100%', background: 'linear-gradient(90deg, #6366f1, #818cf8)', borderRadius: '2px' }} />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
         </div>
 
-        {/* Orders Table */}
-        <div className="glass-card" style={{ padding: '1.25rem' }}>
+        {/* Orders Table Container con Z-Index Bajo */}
+        <div className="glass-card" style={{ padding: '1.25rem', position: 'relative', zIndex: 1 }}>
           <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch', borderRadius: '12px', border: '1px solid var(--border-subtle)', width: '100%' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.8rem', tableLayout: 'auto' }}>
               <thead>
@@ -416,6 +596,7 @@ export default function OrdenesPage() {
                   <th style={{ padding: '0.55rem 0.6rem' }}>ID de Orden</th>
                   <th style={{ padding: '0.55rem 0.6rem' }}>Fecha Creación</th>
                   <th style={{ padding: '0.55rem 0.6rem' }}>Cliente</th>
+                  <th style={{ padding: '0.55rem 0.6rem', textAlign: 'center' }}>Método Entrega</th>
                   <th style={{ padding: '0.55rem 0.6rem', textAlign: 'right' }}>Total (C$)</th>
                   <th style={{ padding: '0.55rem 0.6rem', textAlign: 'center' }}>Estado OMS</th>
                   <th style={{ padding: '0.55rem 0.6rem', textAlign: 'center' }}>Acción</th>
@@ -424,14 +605,14 @@ export default function OrdenesPage() {
               <tbody>
                 {loading && orders.length === 0 ? (
                   <tr>
-                    <td colSpan={7} style={{ padding: '3rem', textAlign: 'center', color: 'var(--text-muted)' }}>
+                    <td colSpan={8} style={{ padding: '3rem', textAlign: 'center', color: 'var(--text-muted)' }}>
                       <RefreshCw size={24} className="animate-spin" style={{ margin: '0 auto 0.5rem auto', color: 'var(--accent-primary)' }} />
                       Consultando órdenes en VTEX OMS...
                     </td>
                   </tr>
                 ) : orders.length === 0 ? (
                   <tr>
-                    <td colSpan={7} style={{ padding: '3rem', textAlign: 'center', color: 'var(--text-muted)' }}>
+                    <td colSpan={8} style={{ padding: '3rem', textAlign: 'center', color: 'var(--text-muted)' }}>
                       <Package size={32} style={{ margin: '0 auto 0.75rem auto', opacity: 0.4 }} />
                       <p style={{ fontWeight: 500, color: 'var(--text-main)' }}>No se encontraron órdenes en el rango seleccionado</p>
                       <p style={{ fontSize: '0.8rem', color: 'var(--text-dim)' }}>Prueba ampliando el rango de fechas.</p>
@@ -467,6 +648,63 @@ export default function OrdenesPage() {
                           <td style={{ padding: '0.55rem 0.6rem', color: 'var(--text-main)', maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                             {order.clientName || 'Cliente General'}
                           </td>
+                          <td style={{ padding: '0.55rem 0.6rem', textAlign: 'center' }}>
+                            {order.fulfillmentType === 'pickup' ? (
+                              <span
+                                style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  gap: '0.35rem',
+                                  width: '210px',
+                                  height: '28px',
+                                  borderRadius: '20px',
+                                  fontSize: '0.73rem',
+                                  fontWeight: 700,
+                                  whiteSpace: 'nowrap',
+                                  overflow: 'hidden',
+                                  textOverflow: 'ellipsis',
+                                  boxSizing: 'border-box',
+                                  padding: '0 0.6rem',
+                                  background: 'rgba(56, 189, 248, 0.12)',
+                                  color: '#38bdf8',
+                                  border: '1px solid rgba(56, 189, 248, 0.3)',
+                                }}
+                                title={order.pickupStore ? `Tienda: ${order.pickupStore}` : 'Retiro en Tienda'}
+                              >
+                                <Store size={13} style={{ flexShrink: 0 }} />
+                                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                  {order.pickupStore ? `Pickup (${order.pickupStore})` : 'Pickup Store'}
+                                </span>
+                              </span>
+                            ) : (
+                              <span
+                                style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  gap: '0.35rem',
+                                  width: '210px',
+                                  height: '28px',
+                                  borderRadius: '20px',
+                                  fontSize: '0.73rem',
+                                  fontWeight: 700,
+                                  whiteSpace: 'nowrap',
+                                  overflow: 'hidden',
+                                  textOverflow: 'ellipsis',
+                                  boxSizing: 'border-box',
+                                  padding: '0 0.6rem',
+                                  background: 'rgba(52, 211, 153, 0.12)',
+                                  color: '#34d399',
+                                  border: '1px solid rgba(52, 211, 153, 0.3)',
+                                }}
+                                title="Envío a Domicilio"
+                              >
+                                <Truck size={13} style={{ flexShrink: 0 }} />
+                                Delivery
+                              </span>
+                            )}
+                          </td>
                           <td style={{ padding: '0.55rem 0.6rem', textAlign: 'right', fontFamily: 'var(--font-mono)', fontWeight: 700, color: 'var(--accent-primary)' }}>
                             C$ {totalFormatted}
                           </td>
@@ -487,7 +725,7 @@ export default function OrdenesPage() {
                         {/* Expanded Item Breakdown Row */}
                         {isExpanded && (
                           <tr key={`${order.orderId}-detail`} style={{ background: 'rgba(15, 23, 42, 0.7)', borderBottom: '2px solid var(--border-subtle)' }}>
-                            <td colSpan={7} style={{ padding: '1rem 1.25rem' }}>
+                            <td colSpan={8} style={{ padding: '1rem 1.25rem' }}>
                               {loadingDetailId === order.orderId ? (
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--text-muted)', fontSize: '0.8rem' }}>
                                   <RefreshCw size={14} className="animate-spin" color="var(--accent-primary)" />

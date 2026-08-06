@@ -9,17 +9,416 @@ import {
   DollarSign,
   ShoppingCart,
   Receipt,
+  AlertTriangle,
   Users,
-  Share2,
   Globe,
-  RefreshCw,
+  Share2,
   Calendar,
+  RefreshCw,
   CheckCircle2,
   Clock,
-  AlertTriangle,
   Zap,
   Filter,
+  CircleDollarSign,
 } from 'lucide-react';
+
+// Generador de curvas Bezier suaves para SVG
+function buildSvgPath(points) {
+  if (!points || points.length === 0) return '';
+  if (points.length === 1) return `M ${points[0].x} ${points[0].y}`;
+
+  let d = `M ${points[0].x} ${points[0].y}`;
+  for (let i = 0; i < points.length - 1; i++) {
+    const p0 = points[i];
+    const p1 = points[i + 1];
+    const cp1x = p0.x + (p1.x - p0.x) / 2;
+    const cp1y = p0.y;
+    const cp2x = p0.x + (p1.x - p0.x) / 2;
+    const cp2y = p1.y;
+    d += ` C ${cp1x} ${cp1y}, ${cp2x} ${cp2y}, ${p1.x} ${p1.y}`;
+  }
+  return d;
+}
+
+// Componente Ejecutivo de Gráfica de Tendencia Diaria con Puntos Interactivos (Hover Ampliado)
+function DailyInteractiveTrendChart({ dailyBreakdown = [], formatCurrency, bcnRate = 36.6243, periodLabel = '' }) {
+  const [hoveredIdx, setHoveredIdx] = useState(null);
+
+  if (!dailyBreakdown || dailyBreakdown.length === 0) return null;
+
+  // Dimensiones del canvas SVG (Modo Compacto Ejecutivo)
+  const svgWidth = 1000;
+  const svgHeight = 200;
+  const paddingLeft = 50;
+  const paddingRight = 40;
+  const paddingTop = 22;
+  const paddingBottom = 24;
+
+  const chartW = svgWidth - paddingLeft - paddingRight;
+  const chartH = svgHeight - paddingTop - paddingBottom;
+
+  const maxVal = Math.max(...dailyBreakdown.map((d) => Math.max(d.salesNio, d.refundsNio)), 1000);
+
+  // Calcular puntos de coordenadas (X, Y) para Ventas y Devoluciones
+  const pointsSales = dailyBreakdown.map((d, i) => {
+    const x = paddingLeft + (i / (dailyBreakdown.length - 1 || 1)) * chartW;
+    const y = paddingTop + chartH - (d.salesNio / maxVal) * chartH;
+    return { x, y, day: d, index: i };
+  });
+
+  const pointsRefunds = dailyBreakdown.map((d, i) => {
+    const x = paddingLeft + (i / (dailyBreakdown.length - 1 || 1)) * chartW;
+    const y = paddingTop + chartH - (d.refundsNio / maxVal) * chartH;
+    return { x, y, day: d, index: i };
+  });
+
+  const pathSales = buildSvgPath(pointsSales);
+  const pathRefunds = buildSvgPath(pointsRefunds);
+
+  // Paths de área para degradados inferiores
+  const areaSales = pointsSales.length > 0
+    ? `${pathSales} L ${pointsSales[pointsSales.length - 1].x} ${paddingTop + chartH} L ${pointsSales[0].x} ${paddingTop + chartH} Z`
+    : '';
+
+  const activeDay = hoveredIdx !== null ? dailyBreakdown[hoveredIdx] : null;
+  const activeSalesPt = hoveredIdx !== null ? pointsSales[hoveredIdx] : null;
+
+  // Días con órdenes válidas para determinar Ticket Promedio más alto y más bajo
+  const daysWithTicket = dailyBreakdown
+    .map((d, idx) => ({ ...d, idx }))
+    .filter((d) => (d.approvedOrders || 0) > 0 && (d.avgTicketNio || 0) > 0);
+
+  let highestTicketIdx = null;
+  let lowestTicketIdx = null;
+  let highestTicketDay = null;
+  let lowestTicketDay = null;
+
+  if (daysWithTicket.length > 0) {
+    let maxD = daysWithTicket[0];
+    let minD = daysWithTicket[0];
+    for (const d of daysWithTicket) {
+      if (d.avgTicketNio > maxD.avgTicketNio) maxD = d;
+      if (d.avgTicketNio < minD.avgTicketNio) minD = d;
+    }
+    highestTicketIdx = maxD.idx;
+    highestTicketDay = maxD;
+    if (minD.idx !== maxD.idx) {
+      lowestTicketIdx = minD.idx;
+      lowestTicketDay = minD;
+    }
+  }
+
+  // Posicionamiento 100% Inmune a Recortes (Anclado al Contenedor Principal de la Tarjeta)
+  const xPct = activeSalesPt ? (activeSalesPt.x / svgWidth) * 100 : 50;
+  const isRightSide = xPct > 50;
+
+  return (
+    <div style={{ background: 'rgba(15, 23, 42, 0.8)', borderRadius: '14px', border: '1px solid rgba(255, 255, 255, 0.1)', padding: '0.9rem 1.15rem', position: 'relative', marginBottom: '0.9rem', overflow: 'visible' }}>
+      
+      {/* Encabezado y Leyenda de Gráfica */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem', marginBottom: '0.5rem' }}>
+        <div>
+          <h3 style={{ fontSize: '0.95rem', fontWeight: 700, color: '#ffffff', display: 'flex', alignItems: 'center', gap: '0.4rem', margin: 0 }}>
+            <TrendingUp size={16} color="#10b981" />
+            Tendencia Diaria de Ventas & Devoluciones ({periodLabel || 'Período Seleccionado'})
+          </h3>
+          <p style={{ margin: '0.15rem 0 0 0', fontSize: '0.75rem', color: '#94a3b8' }}>
+            Pasa el cursor sobre los nodos/puntos para ampliar los detalles de cada día en tiempo real.
+          </p>
+        </div>
+
+        {/* Leyenda interactiva + Banners de Ticket Máx / Mín */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
+          {activeDay ? (
+            <div
+              style={{
+                background: 'rgba(56, 189, 248, 0.12)',
+                border: '1px solid rgba(56, 189, 248, 0.35)',
+                color: '#38bdf8',
+                borderRadius: '10px',
+                padding: '0.35rem 0.85rem',
+                fontSize: '0.82rem',
+                fontWeight: 700,
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.6rem',
+                transition: 'all 0.25s ease',
+              }}
+            >
+              <span>📅 {activeDay.dayLabel}:</span>
+              <span style={{ color: '#10b981' }}>Ventas {formatCurrency(activeDay.salesNio, activeDay.salesUsd)}</span>
+              <span>• {activeDay.approvedOrders} ord.</span>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', gap: '0.9rem', alignItems: 'center', fontSize: '0.75rem', flexWrap: 'wrap' }}>
+              <span style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', color: '#10b981', fontWeight: 700 }}>
+                <span style={{ width: '10px', height: '10px', borderRadius: '50%', backgroundColor: '#10b981', boxShadow: '0 0 8px #10b981' }} /> Ventas
+              </span>
+              <span style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', color: '#fb7185', fontWeight: 700 }}>
+                <span style={{ width: '10px', height: '10px', borderRadius: '50%', backgroundColor: '#fb7185', boxShadow: '0 0 8px #fb7185' }} /> Devoluciones
+              </span>
+              {highestTicketDay && (
+                <span style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', color: '#34d399', fontWeight: 700, background: 'rgba(16, 185, 129, 0.15)', padding: '0.15rem 0.45rem', borderRadius: '6px', border: '1px solid rgba(16, 185, 129, 0.35)' }}>
+                  🏆 Ticket Máx: {highestTicketDay.dayLabel} ({formatCurrency(highestTicketDay.avgTicketNio, highestTicketDay.avgTicketUsd)})
+                </span>
+              )}
+              {lowestTicketDay && (
+                <span style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', color: '#f59e0b', fontWeight: 700, background: 'rgba(245, 158, 11, 0.15)', padding: '0.15rem 0.45rem', borderRadius: '6px', border: '1px solid rgba(245, 158, 11, 0.35)' }}>
+                  ⚠️ Ticket Mín: {lowestTicketDay.dayLabel} ({formatCurrency(lowestTicketDay.avgTicketNio, lowestTicketDay.avgTicketUsd)})
+                </span>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* SVG Canvas interactivo */}
+      <div style={{ position: 'relative', width: '100%', overflowX: 'auto', padding: '0.5rem 0' }}>
+        <svg viewBox={`0 0 ${svgWidth} ${svgHeight}`} style={{ width: '100%', height: 'auto', minWidth: '700px', display: 'block', overflow: 'visible' }}>
+          
+          <defs>
+            {/* Degradados para líneas y áreas */}
+            <linearGradient id="gradSalesArea" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="#10b981" stopOpacity="0.25" />
+              <stop offset="100%" stopColor="#10b981" stopOpacity="0.0" />
+            </linearGradient>
+            <linearGradient id="gradRefundsArea" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="#fb7185" stopOpacity="0.2" />
+              <stop offset="100%" stopColor="#fb7185" stopOpacity="0.0" />
+            </linearGradient>
+          </defs>
+
+          {/* Guías Horizontales de Montos */}
+          {[0, 0.33, 0.66, 1].map((ratio) => {
+            const y = paddingTop + chartH * (1 - ratio);
+            const valLabel = maxVal * ratio;
+            return (
+              <g key={ratio}>
+                <line x1={paddingLeft} y1={y} x2={svgWidth - paddingRight} y2={y} stroke="rgba(255, 255, 255, 0.07)" strokeDasharray="4 4" />
+                <text x={paddingLeft - 8} y={y + 4} textAnchor="end" fill="#64748b" fontSize="10" fontWeight="600">
+                  C$ {valLabel >= 1000 ? `${(valLabel / 1000).toFixed(0)}k` : valLabel.toFixed(0)}
+                </text>
+              </g>
+            );
+          })}
+
+          {/* Degradado bajo curvas */}
+          {areaSales && <path d={areaSales} fill="url(#gradSalesArea)" />}
+
+          {/* Curva de Devoluciones (Rosa Elegante Fina) */}
+          <path d={pathRefunds} fill="none" stroke="#fb7185" strokeWidth="1.5" strokeLinecap="round" opacity="0.8" />
+
+          {/* Curva de Ventas (Verde Neón Elegante Fina) */}
+          <path d={pathSales} fill="none" stroke="#10b981" strokeWidth="1.8" strokeLinecap="round" />
+
+          {/* Columna / Franja vertical interactiva al hacer Hover */}
+          {hoveredIdx !== null && (
+            <rect
+              x={pointsSales[hoveredIdx].x - 14}
+              y={paddingTop - 10}
+              width={28}
+              height={chartH + 20}
+              fill="rgba(56, 189, 248, 0.08)"
+              rx={6}
+            />
+          )}
+
+          {/* NODOS Y PUNTOS CIRCULARES ELEGANTES (SE AMPLÍAN CON FLUIDEZ AL HACER HOVER) */}
+          {dailyBreakdown.map((d, i) => {
+            const ptS = pointsSales[i];
+            const ptR = pointsRefunds[i];
+            const isHovered = hoveredIdx === i;
+            const totalDays = dailyBreakdown.length;
+            const isHighestTicket = highestTicketIdx === i;
+            const isLowestTicket = lowestTicketIdx === i;
+
+            // Formato de etiqueta en X sin amontonamiento
+            const showXLabel = totalDays <= 16 || i % 2 === 0 || isHovered || i === totalDays - 1;
+            const xLabelText = String(d.dayNum || i + 1).padStart(2, '0');
+
+            return (
+              <g
+                key={d.date}
+                onMouseEnter={() => setHoveredIdx(i)}
+                onMouseLeave={() => setHoveredIdx(null)}
+                style={{ cursor: 'pointer' }}
+              >
+                {/* Etiqueta del Día en Eje X */}
+                {showXLabel && (
+                  <text
+                    x={ptS.x}
+                    y={svgHeight - 12}
+                            fill={isHovered ? '#38bdf8' : isHighestTicket ? '#34d399' : isLowestTicket ? '#f59e0b' : '#64748b'}
+                    fontSize={isHovered || isHighestTicket || isLowestTicket ? '11' : '10'}
+                    fontWeight={isHovered || isHighestTicket || isLowestTicket ? '800' : '600'}
+                  >
+                    {xLabelText}
+                  </text>
+                )}
+
+                {/* Halo Destacado de Ticket Promedio Más Alto (Verde Success) */}
+                {isHighestTicket && (
+                  <g>
+                    <circle
+                      cx={ptS.x}
+                      cy={ptS.y}
+                      r={11}
+                      fill="rgba(16, 185, 129, 0.18)"
+                      stroke="#10b981"
+                      strokeWidth="1.4"
+                      strokeDasharray="3 2"
+                    />
+                    <text
+                      x={ptS.x}
+                      y={Math.max(12, ptS.y - 12)}
+                      textAnchor="middle"
+                      fill="#34d399"
+                      fontSize="9"
+                      fontWeight="800"
+                    >
+                      🏆
+                    </text>
+                  </g>
+                )}
+
+                {/* Halo Destacado de Ticket Promedio Más Bajo (Ámbar Warning) */}
+                {isLowestTicket && (
+                  <g>
+                    <circle
+                      cx={ptS.x}
+                      cy={ptS.y}
+                      r={10}
+                      fill="rgba(245, 158, 11, 0.18)"
+                      stroke="#f59e0b"
+                      strokeWidth="1.4"
+                      strokeDasharray="2 2"
+                    />
+                    <text
+                      x={ptS.x}
+                      y={Math.max(12, ptS.y - 12)}
+                      textAnchor="middle"
+                      fill="#f59e0b"
+                      fontSize="9"
+                      fontWeight="800"
+                    >
+                      ⚠️
+                    </text>
+                  </g>
+                )}
+
+                {/* Punto de Devolución (Rosa Fino) */}
+                {d.refundsNio > 0 && (
+                  <circle
+                    cx={ptR.x}
+                    cy={ptR.y}
+                    r={isHovered ? 5.5 : 2.5}
+                    fill="#fb7185"
+                    stroke="#0f172a"
+                    strokeWidth={isHovered ? 2 : 1}
+                    style={{ transition: 'all 0.25s cubic-bezier(0.34, 1.56, 0.64, 1)' }}
+                  />
+                )}
+
+                {/* Punto de Venta (Verde Neón Elegante) */}
+                {isHovered && (
+                  <circle
+                    cx={ptS.x}
+                    cy={ptS.y}
+                    r={12}
+                    fill="rgba(16, 185, 129, 0.2)"
+                  />
+                )}
+                <circle
+                  cx={ptS.x}
+                  cy={ptS.y}
+                  r={isHovered ? 6.5 : isHighestTicket || isLowestTicket ? 4.0 : 2.8}
+                  fill={isHovered ? '#34d399' : isHighestTicket ? '#34d399' : isLowestTicket ? '#f59e0b' : '#10b981'}
+                  stroke="#ffffff"
+                  strokeWidth={isHovered || isHighestTicket || isLowestTicket ? 2 : 1}
+                  style={{ transition: 'all 0.25s cubic-bezier(0.34, 1.56, 0.64, 1)' }}
+                />
+              </g>
+            );
+          })}
+        </svg>
+      </div>
+
+      {/* TOOLTIP / POPOVER FLOTANTE AL NIVEL RAÍZ DE LA TARJETA (100% INMUNE A RECORTES BCN) */}
+      {activeDay && activeSalesPt && (
+        <div
+          style={{
+            position: 'absolute',
+            bottom: '12px',
+            left: isRightSide ? 'auto' : `${Math.min(65, Math.max(2, xPct - 5))}%`,
+            right: isRightSide ? `${Math.min(65, Math.max(2, 100 - xPct - 5))}%` : 'auto',
+            background: 'linear-gradient(135deg, rgba(15, 23, 42, 0.97), rgba(30, 41, 59, 0.99))',
+            backdropFilter: 'blur(16px)',
+            border: '1px solid rgba(16, 185, 129, 0.45)',
+            boxShadow: '0 20px 35px -5px rgba(0, 0, 0, 0.8), 0 0 25px rgba(16, 185, 129, 0.25)',
+            borderRadius: '14px',
+            padding: '0.8rem 1.05rem',
+            zIndex: 100,
+            minWidth: '270px',
+            pointerEvents: 'none',
+            transition: 'all 0.25s cubic-bezier(0.16, 1, 0.3, 1)',
+          }}
+        >
+          {/* Encabezado del Popover */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid rgba(255, 255, 255, 0.1)', paddingBottom: '0.35rem', marginBottom: '0.5rem' }}>
+            <span style={{ fontSize: '0.85rem', fontWeight: 800, color: '#ffffff', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+              📅 Día {activeDay.dayLabel} <span style={{ fontSize: '0.72rem', color: '#94a3b8', fontWeight: 400 }}>({activeDay.date})</span>
+            </span>
+            <span style={{ fontSize: '0.72rem', color: '#10b981', fontWeight: 700, background: 'rgba(16, 185, 129, 0.15)', padding: '0.15rem 0.45rem', borderRadius: '6px' }}>
+              {activeDay.approvedOrders} órdenes
+            </span>
+          </div>
+
+          {/* Banner de Ticket Máx / Mín en Popover */}
+          {hoveredIdx === highestTicketIdx && (
+            <div style={{ fontSize: '0.68rem', fontWeight: 800, color: '#34d399', background: 'rgba(16, 185, 129, 0.15)', border: '1px solid rgba(16, 185, 129, 0.35)', borderRadius: '6px', padding: '0.2rem 0.5rem', marginBottom: '0.4rem', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+              🏆 Día con el Ticket Promedio MÁS ALTO del Período
+            </div>
+          )}
+          {hoveredIdx === lowestTicketIdx && (
+            <div style={{ fontSize: '0.68rem', fontWeight: 800, color: '#f59e0b', background: 'rgba(245, 158, 11, 0.15)', border: '1px solid rgba(245, 158, 11, 0.35)', borderRadius: '6px', padding: '0.2rem 0.5rem', marginBottom: '0.4rem', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+              ⚠️ Día con el Ticket Promedio MÁS BAJO del Período
+            </div>
+          )}
+
+          {/* Datos Principales Ampliados */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+            {/* Ventas Aprobadas */}
+            <div>
+              <div style={{ fontSize: '0.7rem', color: '#94a3b8', textTransform: 'uppercase', fontWeight: 700 }}>💰 Ventas del Día</div>
+              <div style={{ fontSize: '1.1rem', fontWeight: 800, color: '#10b981', lineHeight: 1.2 }}>
+                {formatCurrency(activeDay.salesNio, activeDay.salesUsd)}
+              </div>
+            </div>
+
+            {/* Devoluciones si existen */}
+            {activeDay.refundsNio > 0 && (
+              <div>
+                <div style={{ fontSize: '0.7rem', color: '#fb7185', textTransform: 'uppercase', fontWeight: 700 }}>🛑 Devoluciones / Canceladas ({activeDay.canceledOrders} ord.)</div>
+                <div style={{ fontSize: '0.9rem', fontWeight: 700, color: '#fb7185' }}>
+                  {formatCurrency(activeDay.refundsNio, activeDay.refundsUsd)}
+                </div>
+              </div>
+            )}
+
+            {/* Ticket Promedio del Día */}
+            <div style={{ borderTop: '1px dashed rgba(255, 255, 255, 0.1)', paddingTop: '0.35rem', marginTop: '0.1rem' }}>
+              <div style={{ fontSize: '0.7rem', color: '#a5b4fc', textTransform: 'uppercase', fontWeight: 700 }}>🎫 Ticket Promedio del Día</div>
+              <div style={{ fontSize: '0.95rem', fontWeight: 800, color: '#a5b4fc' }}>
+                {formatCurrency(activeDay.avgTicketNio, activeDay.avgTicketUsd)}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+    </div>
+  );
+}
 
 export default function DashboardPage() {
   const nicNow = getNicaraguaNow();
@@ -45,6 +444,9 @@ export default function DashboardPage() {
 
   const [startDateB, setStartDateB] = useState(defaultStartB);
   const [endDateB, setEndDateB] = useState(defaultMtdEndB);
+
+  // Selector de Modo de Moneda: 'usd' por defecto (Dólares USD $), 'nio' (Córdobas C$)
+  const [currencyMode, setCurrencyMode] = useState('usd');
 
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState(null);
@@ -78,6 +480,44 @@ export default function DashboardPage() {
     fetchAnalytics(startDateA, endDateA, startDateB, endDateB);
   }, []);
 
+  // Función para aplicar presets de meses específicos (0 = Mes Actual, 1 = Mes Anterior, 2 = Hace 2 Meses, 3 = Hace 3 Meses)
+  const applyMonthPreset = (monthOffset) => {
+    let targetYearA = nicNow.year;
+    let targetMonthA = nicNow.month - monthOffset;
+    while (targetMonthA < 0) {
+      targetYearA -= 1;
+      targetMonthA += 12;
+    }
+    const lastDayA = new Date(targetYearA, targetMonthA + 1, 0).getDate();
+    const mAStr = String(targetMonthA + 1).padStart(2, '0');
+
+    const sA = `${targetYearA}-${mAStr}-01`;
+    const eA = monthOffset === 0
+      ? nicNow.todayStr
+      : `${targetYearA}-${mAStr}-${String(lastDayA).padStart(2, '0')}`;
+
+    let targetYearB = targetYearA;
+    let targetMonthB = targetMonthA - 1;
+    if (targetMonthB < 0) {
+      targetYearB -= 1;
+      targetMonthB = 11;
+    }
+    const lastDayB = new Date(targetYearB, targetMonthB + 1, 0).getDate();
+    const mBStr = String(targetMonthB + 1).padStart(2, '0');
+
+    const sB = `${targetYearB}-${mBStr}-01`;
+    const eB = monthOffset === 0
+      ? `${targetYearB}-${mBStr}-${String(Math.min(nicNow.day, lastDayB)).padStart(2, '0')}`
+      : `${targetYearB}-${mBStr}-${String(lastDayB).padStart(2, '0')}`;
+
+    setStartDateA(sA);
+    setEndDateA(eA);
+    setStartDateB(sB);
+    setEndDateB(eB);
+
+    fetchAnalytics(sA, eA, sB, eB);
+  };
+
   // Función para aplicar presets rápidos de fecha
   const applyPreset = (presetKey) => {
     let sA = nicNow.firstDayStr;
@@ -96,7 +536,6 @@ export default function DashboardPage() {
       sB = defaultStartB;
       eB = defaultMtdEndB;
     } else if (presetKey === 'prev_vs_two_ago') {
-      // Mes Pasado vs Antepasado
       sA = defaultStartB;
       eA = defaultFullEndB;
 
@@ -127,21 +566,23 @@ export default function DashboardPage() {
     const sign = changePct > 0 ? '+' : '';
 
     return (
-      <span
-        className={`badge ${badgeClass}`}
-        style={{
-          padding: '0.25rem 0.6rem',
-          fontSize: '0.78rem',
-          display: 'inline-flex',
-          alignItems: 'center',
-          gap: '0.3rem',
-          fontWeight: 700,
-        }}
-      >
+      <span className={badgeClass} style={{ display: 'inline-flex', alignItems: 'center', gap: '0.2rem', padding: '0.2rem 0.5rem', borderRadius: '6px', fontSize: '0.75rem', fontWeight: 700 }}>
         <IconComponent size={14} />
         {sign}{changePct}%
       </span>
     );
+  };
+
+  // Función de formateo según la moneda seleccionada (Dólar USD por defecto)
+  const formatCurrency = (nioAmount = 0, usdAmount = 0) => {
+    const rate = data?.bcnExchangeRate || 36.6243;
+    const calcUsd = usdAmount || (nioAmount > 0 ? nioAmount / rate : 0);
+
+    const formattedNio = `C$ ${nioAmount.toLocaleString('es-NI', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    const formattedUsd = `$ ${calcUsd.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD`;
+
+    if (currencyMode === 'nio') return formattedNio;
+    return formattedUsd;
   };
 
   const kpis = data?.kpis;
@@ -153,107 +594,131 @@ export default function DashboardPage() {
     <AppLayout>
       <main style={{ maxWidth: '1600px', margin: '0 auto', width: '100%' }}>
         
-        {/* Title Header Bar */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem', marginBottom: '1.5rem' }}>
+        {/* BARRA SUPERIOR DE TÍTULO Y SELECTOR DE MONEDA BCN */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem', marginBottom: '0.9rem' }}>
           <div>
-            <h1 style={{ fontSize: '1.35rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.5rem', background: 'linear-gradient(to right, #ffffff, #94a3b8)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
-              <TrendingUp size={24} color="#38bdf8" />
+            <h1 style={{ fontSize: '1.2rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.4rem', margin: 0, background: 'linear-gradient(to right, #ffffff, #94a3b8)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
+              <TrendingUp size={20} color="#38bdf8" />
               Dashboard Ejecutivo de Ventas & Analytics Comparativo
             </h1>
-            <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+            <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', margin: '0.15rem 0 0 0' }}>
               Comparación en tiempo real: <strong style={{ color: 'var(--accent-primary)' }}>{periods?.current?.label || 'Período A'}</strong> vs. <span style={{ color: '#38bdf8', fontWeight: 600 }}>{periods?.previous?.label || 'Período B'}</span>.
             </p>
           </div>
 
-          <button onClick={() => fetchAnalytics()} disabled={loading} className="btn-secondary" style={{ padding: '0.45rem 0.85rem', fontSize: '0.82rem' }}>
-            <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
-            Actualizar Métricas
-          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+            
+            {/* SELECTOR DE MONEDA ($ USD Dólares por defecto o C$ Córdobas) */}
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.2rem',
+                background: 'rgba(15, 23, 42, 0.8)',
+                padding: '0.2rem 0.4rem',
+                borderRadius: '10px',
+                border: '1px solid rgba(255, 255, 255, 0.12)',
+              }}
+            >
+              <CircleDollarSign size={14} color="#34d399" />
+              <span style={{ fontSize: '0.72rem', color: '#94a3b8', fontWeight: 600, marginRight: '0.15rem' }}>Moneda:</span>
+              {[
+                { id: 'usd', label: '🇺🇸 $ USD' },
+                { id: 'nio', label: '🇳🇮 C$ NIO' },
+              ].map((m) => (
+                <button
+                  key={m.id}
+                  onClick={() => setCurrencyMode(m.id)}
+                  style={{
+                    padding: '0.25rem 0.5rem',
+                    borderRadius: '6px',
+                    fontSize: '0.72rem',
+                    fontWeight: currencyMode === m.id ? 700 : 500,
+                    border: 'none',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s',
+                    backgroundColor: currencyMode === m.id ? '#34d399' : 'transparent',
+                    color: currencyMode === m.id ? '#0f172a' : '#94a3b8',
+                  }}
+                >
+                  {m.label}
+                </button>
+              ))}
+            </div>
+
+            {/* Badge Tasa de Cambio BCN */}
+            <div
+              style={{
+                fontSize: '0.72rem',
+                color: '#34d399',
+                backgroundColor: 'rgba(52, 211, 153, 0.12)',
+                border: '1px solid rgba(52, 211, 153, 0.3)',
+                padding: '0.35rem 0.65rem',
+                borderRadius: '8px',
+                fontWeight: 600,
+              }}
+            >
+              Tasa BCN: 1 USD = C$ {data?.bcnExchangeRate || 36.6243}
+            </div>
+
+            <button onClick={() => fetchAnalytics()} disabled={loading} className="btn-secondary" style={{ padding: '0.35rem 0.75rem', fontSize: '0.78rem' }}>
+              <RefreshCw size={13} className={loading ? 'animate-spin' : ''} />
+              Actualizar
+            </button>
+          </div>
         </div>
 
         {/* Dynamic Compact Dual Date Range Picker Bar */}
-        <div className="glass-card" style={{ padding: '0.85rem 1.15rem', marginBottom: '1.5rem' }}>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+        <div className="glass-card" style={{ padding: '0.65rem 0.95rem', marginBottom: '0.9rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '0.6rem', justifyContent: 'space-between' }}>
             
-            {/* Row 1: Header Title & Quick Preset Pills */}
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.5rem' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.82rem', fontWeight: 700, color: '#ffffff' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap', flex: 1 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.78rem', fontWeight: 700, color: '#ffffff', marginRight: '0.4rem' }}>
                 <Calendar size={15} color="var(--accent-primary)" />
-                <span>Comparar Rangos de Fechas:</span>
+                <span>Rango de Fechas:</span>
               </div>
-
-              {/* Botones de Presets Rápidos en formato Píldoras Compactas */}
-              <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap' }}>
-                <button
-                  onClick={() => applyPreset('current_vs_prev_full')}
-                  className="btn-secondary"
-                  style={{ padding: '0.2rem 0.55rem', fontSize: '0.72rem', color: '#38bdf8', borderColor: 'rgba(56, 189, 248, 0.3)', borderRadius: '999px' }}
-                >
-                  ⚡ Mes Actual vs. Mes Anterior Completo
-                </button>
-                <button
-                  onClick={() => applyPreset('current_vs_prev_mtd')}
-                  className="btn-secondary"
-                  style={{ padding: '0.2rem 0.55rem', fontSize: '0.72rem', color: '#34d399', borderColor: 'rgba(52, 211, 153, 0.3)', borderRadius: '999px' }}
-                >
-                  ⚡ Mes Actual vs. Mismísimos Días (MTD)
-                </button>
-                <button
-                  onClick={() => applyPreset('prev_vs_two_ago')}
-                  className="btn-secondary"
-                  style={{ padding: '0.2rem 0.55rem', fontSize: '0.72rem', color: '#a5b4fc', borderColor: 'rgba(165, 180, 252, 0.3)', borderRadius: '999px' }}
-                >
-                  ⚡ Mes Anterior vs. Antepasado
-                </button>
-              </div>
-            </div>
-
-            {/* Row 2: Compact Inline Date Pickers (Período A vs Período B) */}
-            <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem', justifyContent: 'space-between' }}>
-              
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flexWrap: 'wrap', flex: 1 }}>
                 
                 {/* Período A */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', background: 'rgba(56, 189, 248, 0.08)', padding: '0.3rem 0.6rem', borderRadius: '10px', border: '1px solid rgba(56, 189, 248, 0.25)' }}>
-                  <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#38bdf8', whiteSpace: 'nowrap' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', background: 'rgba(56, 189, 248, 0.08)', padding: '0.2rem 0.5rem', borderRadius: '8px', border: '1px solid rgba(56, 189, 248, 0.25)' }}>
+                  <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#38bdf8', whiteSpace: 'nowrap' }}>
                     🔵 Período A:
                   </span>
                   <input
                     type="date"
                     className="glass-input"
-                    style={{ fontSize: '0.78rem', padding: '0.25rem 0.45rem', minHeight: '32px' }}
+                    style={{ fontSize: '0.75rem', padding: '0.2rem 0.4rem', minHeight: '28px' }}
                     value={startDateA}
                     onChange={(e) => setStartDateA(e.target.value)}
                   />
-                  <span style={{ color: 'var(--text-dim)', fontSize: '0.75rem' }}>a</span>
+                  <span style={{ color: 'var(--text-dim)', fontSize: '0.72rem' }}>a</span>
                   <input
                     type="date"
                     className="glass-input"
-                    style={{ fontSize: '0.78rem', padding: '0.25rem 0.45rem', minHeight: '32px' }}
+                    style={{ fontSize: '0.75rem', padding: '0.2rem 0.4rem', minHeight: '28px' }}
                     value={endDateA}
                     onChange={(e) => setEndDateA(e.target.value)}
                   />
                 </div>
 
-                <span style={{ color: 'var(--text-dim)', fontWeight: 700, fontSize: '0.82rem', padding: '0 0.2rem' }}>vs.</span>
+                <span style={{ color: 'var(--text-dim)', fontWeight: 700, fontSize: '0.78rem', padding: '0 0.15rem' }}>vs.</span>
 
                 {/* Período B */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', background: 'rgba(129, 140, 248, 0.08)', padding: '0.3rem 0.6rem', borderRadius: '10px', border: '1px solid rgba(129, 140, 248, 0.25)' }}>
-                  <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#a5b4fc', whiteSpace: 'nowrap' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', background: 'rgba(129, 140, 248, 0.08)', padding: '0.2rem 0.5rem', borderRadius: '8px', border: '1px solid rgba(129, 140, 248, 0.25)' }}>
+                  <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#a5b4fc', whiteSpace: 'nowrap' }}>
                     🟣 Período B:
                   </span>
                   <input
                     type="date"
                     className="glass-input"
-                    style={{ fontSize: '0.78rem', padding: '0.25rem 0.45rem', minHeight: '32px' }}
+                    style={{ fontSize: '0.75rem', padding: '0.2rem 0.4rem', minHeight: '28px' }}
                     value={startDateB}
                     onChange={(e) => setStartDateB(e.target.value)}
                   />
-                  <span style={{ color: 'var(--text-dim)', fontSize: '0.75rem' }}>a</span>
+                  <span style={{ color: 'var(--text-dim)', fontSize: '0.72rem' }}>a</span>
                   <input
                     type="date"
                     className="glass-input"
-                    style={{ fontSize: '0.78rem', padding: '0.25rem 0.45rem', minHeight: '32px' }}
+                    style={{ fontSize: '0.75rem', padding: '0.2rem 0.4rem', minHeight: '28px' }}
                     value={endDateB}
                     onChange={(e) => setEndDateB(e.target.value)}
                   />
@@ -266,26 +731,25 @@ export default function DashboardPage() {
                 onClick={() => fetchAnalytics(startDateA, endDateA, startDateB, endDateB)}
                 disabled={loading}
                 className="btn-primary"
-                style={{ padding: '0.4rem 1.15rem', fontSize: '0.8rem', minHeight: '34px', flexShrink: 0 }}
+                style={{ padding: '0.35rem 0.95rem', fontSize: '0.78rem', minHeight: '30px', flexShrink: 0 }}
               >
-                <Filter size={14} />
+                <Filter size={13} />
                 {loading ? 'Consultando...' : 'Aplicar Comparación'}
               </button>
 
             </div>
-          </div>
         </div>
 
         {/* Global Loading & Error Status Banners */}
         {loading && (
-          <div className="glass-card" style={{ padding: '2rem', textAlign: 'center', marginBottom: '1.5rem', color: 'var(--text-muted)' }}>
-            <RefreshCw size={24} className="animate-spin" color="var(--accent-primary)" style={{ margin: '0 auto 0.75rem auto' }} />
+          <div className="glass-card" style={{ padding: '1.5rem', textAlign: 'center', marginBottom: '0.9rem', color: 'var(--text-muted)' }}>
+            <RefreshCw size={20} className="animate-spin" color="var(--accent-primary)" style={{ margin: '0 auto 0.5rem auto' }} />
             Obteniendo analíticas y analizando 100% de órdenes del Período A y B...
           </div>
         )}
 
         {error && (
-          <div style={{ padding: '1rem', borderRadius: '12px', background: 'rgba(248, 113, 113, 0.1)', border: '1px solid rgba(248, 113, 113, 0.3)', color: '#fb7185', marginBottom: '1.5rem', fontSize: '0.88rem' }}>
+          <div style={{ padding: '0.75rem 1rem', borderRadius: '10px', background: 'rgba(248, 113, 113, 0.1)', border: '1px solid rgba(248, 113, 113, 0.3)', color: '#fb7185', marginBottom: '0.9rem', fontSize: '0.82rem' }}>
             ⚠️ <strong>Error en métricas:</strong> {error}
           </div>
         )}
@@ -293,74 +757,84 @@ export default function DashboardPage() {
         {/* Analytics Main Dashboard Grid */}
         {data && !loading && (
           <>
-            {/* Top 4 Key Executive Performance Indicators (KPI Cards) */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '1.25rem', marginBottom: '1.5rem' }}>
+            {/* Top 4 Key Executive Performance Indicators (KPI Cards con Moneda Dual C$ y USD) */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))', gap: '0.85rem', marginBottom: '0.9rem' }}>
               
               {/* Ventas Totales */}
-              <div className="glass-card" style={{ padding: '1.25rem' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
-                  <span style={{ fontSize: '0.75rem', color: 'var(--text-dim)', textTransform: 'uppercase', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                    <DollarSign size={14} color="#34d399" /> Ventas Totales <span style={{ fontSize: '0.68rem', color: '#34d399' }}>(excl. canceladas)</span>
+              <div className="glass-card" style={{ padding: '0.85rem 1.0rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.35rem' }}>
+                  <span style={{ fontSize: '0.72rem', color: 'var(--text-dim)', textTransform: 'uppercase', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                    <DollarSign size={13} color="#34d399" /> Ventas Totales <span style={{ fontSize: '0.65rem', color: '#34d399' }}>(excl. canceladas)</span>
                   </span>
                   {renderTrendBadge(kpis?.totalRevenue?.changePct || 0)}
                 </div>
-                <div style={{ fontSize: '1.65rem', fontWeight: 700, color: '#ffffff', letterSpacing: '-0.02em' }}>
-                  C$ {(kpis?.totalRevenue?.current || 0).toLocaleString('es-NI', { minimumFractionDigits: 2 })}
+                <div style={{ fontSize: '1.35rem', fontWeight: 800, color: '#ffffff', letterSpacing: '-0.02em', lineHeight: 1.15 }}>
+                  {formatCurrency(kpis?.totalRevenue?.currentNio || kpis?.totalRevenue?.current || 0, kpis?.totalRevenue?.currentUsd || 0)}
                 </div>
-                <div style={{ fontSize: '0.78rem', color: 'var(--text-dim)', marginTop: '0.4rem' }}>
-                  vs. C$ {(kpis?.totalRevenue?.previous || 0).toLocaleString('es-NI', { minimumFractionDigits: 2 })} <span style={{ opacity: 0.7 }}>({periods?.previous?.label || 'Período B'})</span>
+                <div style={{ fontSize: '0.72rem', color: 'var(--text-dim)', marginTop: '0.35rem' }}>
+                  vs. {formatCurrency(kpis?.totalRevenue?.previousNio || kpis?.totalRevenue?.previous || 0, kpis?.totalRevenue?.previousUsd || 0)} <span style={{ opacity: 0.7 }}>({periods?.previous?.label || 'Período B'})</span>
                 </div>
               </div>
 
               {/* Total de Órdenes */}
-              <div className="glass-card" style={{ padding: '1.25rem' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
-                  <span style={{ fontSize: '0.75rem', color: 'var(--text-dim)', textTransform: 'uppercase', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                    <ShoppingCart size={14} color="#38bdf8" /> Total de Órdenes
+              <div className="glass-card" style={{ padding: '0.85rem 1.0rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.35rem' }}>
+                  <span style={{ fontSize: '0.72rem', color: 'var(--text-dim)', textTransform: 'uppercase', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                    <ShoppingCart size={13} color="#38bdf8" /> Total de Órdenes
                   </span>
                   {renderTrendBadge(kpis?.totalOrders?.changePct || 0)}
                 </div>
-                <div style={{ fontSize: '1.65rem', fontWeight: 700, color: '#ffffff', letterSpacing: '-0.02em' }}>
+                <div style={{ fontSize: '1.35rem', fontWeight: 800, color: '#ffffff', letterSpacing: '-0.02em', lineHeight: 1.15 }}>
                   {(kpis?.totalOrders?.current || 0).toLocaleString()} órdenes
                 </div>
-                <div style={{ fontSize: '0.78rem', color: 'var(--text-dim)', marginTop: '0.4rem' }}>
+                <div style={{ fontSize: '0.72rem', color: 'var(--text-dim)', marginTop: '0.35rem' }}>
                   vs. {(kpis?.totalOrders?.previous || 0).toLocaleString()} órdenes <span style={{ opacity: 0.7 }}>({periods?.previous?.label || 'Período B'})</span>
                 </div>
               </div>
 
               {/* Ticket Promedio */}
-              <div className="glass-card" style={{ padding: '1.25rem' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
-                  <span style={{ fontSize: '0.75rem', color: 'var(--text-dim)', textTransform: 'uppercase', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                    <Receipt size={14} color="#a5b4fc" /> Ticket Promedio
+              <div className="glass-card" style={{ padding: '0.85rem 1.0rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.35rem' }}>
+                  <span style={{ fontSize: '0.72rem', color: 'var(--text-dim)', textTransform: 'uppercase', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                    <Receipt size={13} color="#a5b4fc" /> Ticket Promedio
                   </span>
                   {renderTrendBadge(kpis?.avgTicket?.changePct || 0)}
                 </div>
-                <div style={{ fontSize: '1.65rem', fontWeight: 700, color: '#ffffff', letterSpacing: '-0.02em' }}>
-                  C$ {(kpis?.avgTicket?.current || 0).toLocaleString('es-NI', { minimumFractionDigits: 2 })}
+                <div style={{ fontSize: '1.35rem', fontWeight: 800, color: '#ffffff', letterSpacing: '-0.02em', lineHeight: 1.15 }}>
+                  {formatCurrency(kpis?.avgTicket?.currentNio || kpis?.avgTicket?.current || 0, kpis?.avgTicket?.currentUsd || 0)}
                 </div>
-                <div style={{ fontSize: '0.78rem', color: 'var(--text-dim)', marginTop: '0.4rem' }}>
-                  vs. C$ {(kpis?.avgTicket?.previous || 0).toLocaleString('es-NI', { minimumFractionDigits: 2 })} <span style={{ opacity: 0.7 }}>({periods?.previous?.label || 'Período B'})</span>
+                <div style={{ fontSize: '0.72rem', color: 'var(--text-dim)', marginTop: '0.35rem' }}>
+                  vs. {formatCurrency(kpis?.avgTicket?.previousNio || kpis?.avgTicket?.previous || 0, kpis?.avgTicket?.previousUsd || 0)} <span style={{ opacity: 0.7 }}>({periods?.previous?.label || 'Período B'})</span>
                 </div>
               </div>
 
               {/* Tasa de Cancelación */}
-              <div className="glass-card" style={{ padding: '1.25rem' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
-                  <span style={{ fontSize: '0.75rem', color: 'var(--text-dim)', textTransform: 'uppercase', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                    <AlertTriangle size={14} color="#fb7185" /> Tasa Cancelación
+              <div className="glass-card" style={{ padding: '0.85rem 1.0rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.35rem' }}>
+                  <span style={{ fontSize: '0.72rem', color: 'var(--text-dim)', textTransform: 'uppercase', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                    <AlertTriangle size={13} color="#fb7185" /> Tasa Cancelación
                   </span>
                   {renderTrendBadge(kpis?.cancelRate?.changePct || 0, true)}
                 </div>
-                <div style={{ fontSize: '1.65rem', fontWeight: 700, color: '#ffffff', letterSpacing: '-0.02em' }}>
+                <div style={{ fontSize: '1.35rem', fontWeight: 800, color: '#ffffff', letterSpacing: '-0.02em', lineHeight: 1.15 }}>
                   {kpis?.cancelRate?.current || 0}%
                 </div>
-                <div style={{ fontSize: '0.78rem', color: 'var(--text-dim)', marginTop: '0.4rem' }}>
+                <div style={{ fontSize: '0.72rem', color: 'var(--text-dim)', marginTop: '0.35rem' }}>
                   vs. {kpis?.cancelRate?.previous || 0}% <span style={{ opacity: 0.7 }}>({periods?.previous?.label || 'Período B'})</span>
                 </div>
               </div>
 
             </div>
+
+            {/* SECCIÓN NUEVA: GRÁFICA MULTI-LÍNEA INTERACTIVA CON NODOS EXPANDIBLES EN HOVER */}
+            {data?.dailyBreakdown && data.dailyBreakdown.length > 0 && (
+              <DailyInteractiveTrendChart
+                dailyBreakdown={data.dailyBreakdown}
+                formatCurrency={formatCurrency}
+                bcnRate={data?.bcnExchangeRate || 36.6243}
+                periodLabel={periods?.current?.label}
+              />
+            )}
 
             {/* Social Selling vs. Web Direct Breakdown Grid */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', gap: '1.5rem', marginBottom: '1.5rem' }}>
@@ -390,7 +864,7 @@ export default function DashboardPage() {
                         <strong style={{ color: '#34d399' }}>{periods?.current?.label}:</strong> {channels?.socialSelling?.current?.count || 0} órdenes
                       </span>
                       <span style={{ color: '#34d399', fontWeight: 700 }}>
-                        {channels?.socialSelling?.current?.pct || 0}% (C$ {(channels?.socialSelling?.current?.revenue || 0).toLocaleString('es-NI', { minimumFractionDigits: 2 })})
+                        {channels?.socialSelling?.current?.pct || 0}% ({formatCurrency(channels?.socialSelling?.current?.revenueNio || channels?.socialSelling?.current?.revenue || 0, channels?.socialSelling?.current?.revenueUsd || 0)})
                       </span>
                     </div>
                     <div style={{ width: '100%', height: '8px', borderRadius: '4px', background: 'rgba(255, 255, 255, 0.08)', overflow: 'hidden' }}>
@@ -405,7 +879,7 @@ export default function DashboardPage() {
                         <strong>{periods?.previous?.label}:</strong> {channels?.socialSelling?.previous?.count || 0} órdenes
                       </span>
                       <span style={{ color: 'var(--text-dim)', fontWeight: 600 }}>
-                        {channels?.socialSelling?.previous?.pct || 0}% (C$ {(channels?.socialSelling?.previous?.revenue || 0).toLocaleString('es-NI', { minimumFractionDigits: 2 })})
+                        {channels?.socialSelling?.previous?.pct || 0}% ({formatCurrency(channels?.socialSelling?.previous?.revenueNio || channels?.socialSelling?.previous?.revenue || 0, channels?.socialSelling?.previous?.revenueUsd || 0)})
                       </span>
                     </div>
                     <div style={{ width: '100%', height: '6px', borderRadius: '3px', background: 'rgba(255, 255, 255, 0.05)', overflow: 'hidden' }}>
@@ -430,7 +904,7 @@ export default function DashboardPage() {
                         <strong style={{ color: '#38bdf8' }}>{periods?.current?.label}:</strong> {channels?.webDirect?.current?.count || 0} órdenes
                       </span>
                       <span style={{ color: '#38bdf8', fontWeight: 700 }}>
-                        {channels?.webDirect?.current?.pct || 0}% (C$ {(channels?.webDirect?.current?.revenue || 0).toLocaleString('es-NI', { minimumFractionDigits: 2 })})
+                        {channels?.webDirect?.current?.pct || 0}% ({formatCurrency(channels?.webDirect?.current?.revenueNio || channels?.webDirect?.current?.revenue || 0, channels?.webDirect?.current?.revenueUsd || 0)})
                       </span>
                     </div>
                     <div style={{ width: '100%', height: '8px', borderRadius: '4px', background: 'rgba(255, 255, 255, 0.08)', overflow: 'hidden' }}>
@@ -445,7 +919,7 @@ export default function DashboardPage() {
                         <strong>{periods?.previous?.label}:</strong> {channels?.webDirect?.previous?.count || 0} órdenes
                       </span>
                       <span style={{ color: 'var(--text-dim)', fontWeight: 600 }}>
-                        {channels?.webDirect?.previous?.pct || 0}% (C$ {(channels?.webDirect?.previous?.revenue || 0).toLocaleString('es-NI', { minimumFractionDigits: 2 })})
+                        {channels?.webDirect?.previous?.pct || 0}% ({formatCurrency(channels?.webDirect?.previous?.revenueNio || channels?.webDirect?.previous?.revenue || 0, channels?.webDirect?.previous?.revenueUsd || 0)})
                       </span>
                     </div>
                     <div style={{ width: '100%', height: '6px', borderRadius: '3px', background: 'rgba(255, 255, 255, 0.05)', overflow: 'hidden' }}>
@@ -508,6 +982,7 @@ export default function DashboardPage() {
               </div>
 
             </div>
+
           </>
         )}
 

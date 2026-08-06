@@ -27,7 +27,7 @@ export default function TendenciasPage() {
   const [endDate, setEndDate] = useState('');
   const [activeTab, setActiveTab] = useState('skus'); // 'skus', 'categories', 'brands'
   const [searchTerm, setSearchTerm] = useState('');
-  const [sortBy, setSortBy] = useState('quantity'); // 'quantity' o 'revenue'
+  const [sortBy, setSortBy] = useState('revenue'); // 'revenue' por defecto (Ingresos C$), o 'quantity' (Volumen)
   const [data, setData] = useState(null);
 
   const fetchTrendingData = async (selectedRange = range, sDate = startDate, eDate = endDate) => {
@@ -393,31 +393,47 @@ export default function TendenciasPage() {
             </div>
           </div>
 
-          {/* Card 4: Producto Estrella */}
-          <div
-            style={{
-              background: 'linear-gradient(135deg, rgba(30, 41, 59, 0.7), rgba(15, 23, 42, 0.85))',
-              borderRadius: '16px',
-              padding: '1.25rem 1.5rem',
-              border: '1px solid rgba(245, 158, 11, 0.25)',
-              position: 'relative',
-              overflow: 'hidden',
-              boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.3)',
-            }}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
-              <span style={{ fontSize: '0.82rem', color: '#94a3b8', fontWeight: 600 }}>Producto Estrella (#1)</span>
-              <div style={{ padding: '0.4rem', borderRadius: '10px', background: 'rgba(245, 158, 11, 0.15)', color: '#fbbf24' }}>
-                <Award size={20} />
+          {/* Card 4: Producto Estrella (Evaluación Comercial Multicriterio) */}
+          {(() => {
+            const isRevenue = sortBy === 'revenue';
+            const starProduct = isRevenue
+              ? (data?.summary?.topProductByRevenue || data?.summary?.topProduct)
+              : (data?.summary?.topProductByQuantity || data?.summary?.topProduct);
+
+            return (
+              <div
+                style={{
+                  background: 'linear-gradient(135deg, rgba(30, 41, 59, 0.7), rgba(15, 23, 42, 0.85))',
+                  borderRadius: '16px',
+                  padding: '1.25rem 1.5rem',
+                  border: '1px solid rgba(245, 158, 11, 0.3)',
+                  position: 'relative',
+                  overflow: 'hidden',
+                  boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.3)',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.65rem' }}>
+                  <span style={{ fontSize: '0.82rem', color: '#94a3b8', fontWeight: 600 }}>
+                    {isRevenue ? '🏆 Producto Estrella (#1 Ingresos)' : '🔥 Producto Más Demandado (#1 Unid.)'}
+                  </span>
+                  <div style={{ padding: '0.4rem', borderRadius: '10px', background: 'rgba(245, 158, 11, 0.15)', color: '#fbbf24' }}>
+                    <Award size={20} />
+                  </div>
+                </div>
+                <div style={{ fontSize: '0.95rem', fontWeight: 700, color: '#ffffff', lineHeight: 1.3, height: '2.5rem', overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
+                  {starProduct?.name || 'Cargando...'}
+                </div>
+                <div style={{ fontSize: '0.78rem', marginTop: '0.45rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.3rem' }}>
+                  <span style={{ color: '#34d399', fontWeight: 800 }}>
+                    💰 C$ {(starProduct?.revenue || 0).toLocaleString('es-NI', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </span>
+                  <span style={{ color: '#fbbf24', fontWeight: 600, background: 'rgba(245, 158, 11, 0.12)', padding: '0.15rem 0.45rem', borderRadius: '6px' }}>
+                    {starProduct?.quantity || 0} {starProduct?.quantity === 1 ? 'unid.' : 'unids.'}
+                  </span>
+                </div>
               </div>
-            </div>
-            <div style={{ fontSize: '1rem', fontWeight: 700, color: '#ffffff', lineHeight: 1.3, height: '2.6rem', overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
-              {data?.summary?.topProduct?.name || 'Cargando...'}
-            </div>
-            <div style={{ fontSize: '0.78rem', color: '#fbbf24', marginTop: '0.4rem' }}>
-              🔥 <strong>{data?.summary?.topProduct?.quantity || 0} unidades vendidas</strong>
-            </div>
-          </div>
+            );
+          })()}
         </div>
 
         {/* NAVEGACIÓN POR PESTAÑAS + BARRA DE BÚSQUEDA Y ORDEN */}
