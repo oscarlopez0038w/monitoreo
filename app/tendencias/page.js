@@ -22,7 +22,7 @@ import {
 
 export default function TendenciasPage() {
   const [loading, setLoading] = useState(true);
-  const [range, setRange] = useState('30days');
+  const [range, setRange] = useState('month'); // 'month' por defecto (Mes Actual)
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [activeTab, setActiveTab] = useState('skus'); // 'skus', 'categories', 'brands'
@@ -34,7 +34,7 @@ export default function TendenciasPage() {
     try {
       setLoading(true);
       let url = `/api/analytics/trending?range=${selectedRange}`;
-      if (selectedRange === 'custom' && sDate && eDate) {
+      if (sDate && eDate) {
         url += `&startDate=${sDate}&endDate=${eDate}`;
       }
 
@@ -42,6 +42,10 @@ export default function TendenciasPage() {
       const json = await res.json();
       if (json.success) {
         setData(json);
+        if (json.period?.startDate && json.period?.endDate) {
+          setStartDate(json.period.startDate);
+          setEndDate(json.period.endDate);
+        }
       }
     } catch (err) {
       console.error('Error cargando tendencias:', err);
@@ -51,11 +55,14 @@ export default function TendenciasPage() {
   };
 
   useEffect(() => {
-    fetchTrendingData(range);
-  }, [range]);
+    fetchTrendingData('month', '', '');
+  }, []);
 
   const handleRangeChange = (newRange) => {
     setRange(newRange);
+    setStartDate('');
+    setEndDate('');
+    fetchTrendingData(newRange, '', '');
   };
 
   const handleCustomFilterSubmit = (e) => {
@@ -134,16 +141,11 @@ export default function TendenciasPage() {
     return Math.max(...filteredSkus.map((s) => s.quantity));
   }, [filteredSkus]);
 
-  const maxCategoryRevenue = useMemo(() => {
-    if (!data?.topCategories?.length) return 1;
-    return Math.max(...data.topCategories.map((c) => c.revenue));
-  }, [data?.topCategories]);
-
   return (
     <AppLayout>
       <div style={{ maxWidth: '1440px', margin: '0 auto', paddingBottom: '2rem' }}>
         
-        {/* HEADER SUPERIOR CON TITULO Y SELECTOR DE FECHAS */}
+        {/* HEADER SUPERIOR CON TITULO Y SELECTOR DE FECHAS DE LIBRE ELECCIÓN */}
         <div
           style={{
             display: 'flex',
@@ -175,12 +177,19 @@ export default function TendenciasPage() {
               </h1>
             </div>
             <p style={{ margin: '0.35rem 0 0 0', fontSize: '0.88rem', color: '#94a3b8' }}>
-              Análisis ejecutivo en tiempo real de los productos, categorías y marcas con mayor demanda en SINSA.
+              Análisis completo de demandadas, productos y categorías en VTEX OMS.
+              {data?.period?.startDate && (
+                <span style={{ color: '#10b981', fontWeight: 600, marginLeft: '0.5rem' }}>
+                  • Período: {data.period.startDate} al {data.period.endDate} ({data?.summary?.totalOrders || 0} órdenes analizadas)
+                </span>
+              )}
             </p>
           </div>
 
-          {/* BOTONES DE FILTRO DE RANGO DE TIEMPO */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+          {/* CONTROLES DE RANGO DE FECHAS Y SELECCIÓN LIBRE */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+            
+            {/* Botones Predefinidos Rápido */}
             <div
               style={{
                 display: 'flex',
@@ -191,17 +200,18 @@ export default function TendenciasPage() {
               }}
             >
               {[
+                { id: 'month', label: 'Mes Actual (Defecto)' },
                 { id: 'today', label: 'Hoy' },
                 { id: '7days', label: '7 Días' },
-                { id: '30days', label: 'Este Mes (30d)' },
+                { id: 'prevMonth', label: 'Mes Anterior' },
               ].map((b) => (
                 <button
                   key={b.id}
                   onClick={() => handleRangeChange(b.id)}
                   style={{
-                    padding: '0.5rem 0.9rem',
+                    padding: '0.5rem 0.85rem',
                     borderRadius: '8px',
-                    fontSize: '0.82rem',
+                    fontSize: '0.8rem',
                     fontWeight: range === b.id ? 700 : 500,
                     border: 'none',
                     cursor: 'pointer',
@@ -215,8 +225,68 @@ export default function TendenciasPage() {
               ))}
             </div>
 
+            {/* Formulario de Selección Libre de Rango de Fechas */}
+            <form
+              onSubmit={handleCustomFilterSubmit}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.4rem',
+                background: 'rgba(15, 23, 42, 0.8)',
+                padding: '0.35rem 0.65rem',
+                borderRadius: '12px',
+                border: '1px solid rgba(255, 255, 255, 0.1)',
+              }}
+            >
+              <Calendar size={15} color="#94a3b8" />
+              <input
+                type="date"
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+                style={{
+                  backgroundColor: 'rgba(30, 41, 59, 0.9)',
+                  border: '1px solid rgba(255, 255, 255, 0.15)',
+                  color: '#ffffff',
+                  borderRadius: '6px',
+                  padding: '0.3rem 0.5rem',
+                  fontSize: '0.78rem',
+                  outline: 'none',
+                }}
+              />
+              <span style={{ fontSize: '0.75rem', color: '#64748b' }}>a</span>
+              <input
+                type="date"
+                value={endDate}
+                onChange={(e) => setEndDate(e.target.value)}
+                style={{
+                  backgroundColor: 'rgba(30, 41, 59, 0.9)',
+                  border: '1px solid rgba(255, 255, 255, 0.15)',
+                  color: '#ffffff',
+                  borderRadius: '6px',
+                  padding: '0.3rem 0.5rem',
+                  fontSize: '0.78rem',
+                  outline: 'none',
+                }}
+              />
+              <button
+                type="submit"
+                style={{
+                  backgroundColor: '#38bdf8',
+                  color: '#0f172a',
+                  fontWeight: 700,
+                  fontSize: '0.78rem',
+                  border: 'none',
+                  borderRadius: '6px',
+                  padding: '0.35rem 0.65rem',
+                  cursor: 'pointer',
+                }}
+              >
+                Consultar
+              </button>
+            </form>
+
             <button
-              onClick={() => fetchTrendingData(range)}
+              onClick={() => fetchTrendingData(range, startDate, endDate)}
               style={{
                 background: 'rgba(255, 255, 255, 0.06)',
                 border: '1px solid rgba(255, 255, 255, 0.1)',
@@ -232,7 +302,6 @@ export default function TendenciasPage() {
               }}
             >
               <RefreshCw size={15} className={loading ? 'animate-spin' : ''} />
-              Refrescar
             </button>
           </div>
         </div>

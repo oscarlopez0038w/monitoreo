@@ -5,11 +5,11 @@ import { getNicaraguaNow } from '@/lib/dateUtils';
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
-// Obtener todas las órdenes de un período paginando por lotes de 100
+// Obtener TODAS las órdenes de un período paginando dinámicamente hasta el final
 async function fetchAllPeriodOrders(startIso, endIso) {
   let allOrders = [];
   let page = 1;
-  let maxPages = 10; // Límite seguro (hasta 1,000 órdenes por consulta de tendencias)
+  let maxPages = 50; // Paginación completa hasta 5,000 órdenes por rango seleccionado
 
   while (page <= maxPages) {
     const res = await fetchVtexOrders(startIso, endIso, '', '', page, 100).catch(() => null);
@@ -31,31 +31,39 @@ export async function GET(request) {
     }
 
     const { searchParams } = new URL(request.url);
-    const range = searchParams.get('range') || '30days';
-    const limit = parseInt(searchParams.get('limit') || '50', 10);
-
+    const limit = parseInt(searchParams.get('limit') || '100', 10);
     const nicNow = getNicaraguaNow();
-    let startIso, endIso;
-    let startDateStr, endDateStr;
 
-    if (range === 'today') {
-      startDateStr = nicNow.todayStr;
-      endDateStr = nicNow.todayStr;
-    } else if (range === '7days') {
-      const d = new Date(nicNow.todayStr);
-      d.setDate(d.getDate() - 7);
-      startDateStr = d.toISOString().split('T')[0];
-      endDateStr = nicNow.todayStr;
-    } else if (range === 'month' || range === '30days') {
-      startDateStr = nicNow.firstDayStr;
-      endDateStr = nicNow.todayStr;
-    } else {
-      startDateStr = searchParams.get('startDate') || nicNow.firstDayStr;
-      endDateStr = searchParams.get('endDate') || nicNow.todayStr;
+    let startDateStr = searchParams.get('startDate');
+    let endDateStr = searchParams.get('endDate');
+    const range = searchParams.get('range');
+
+    // Por defecto: Mes Actual completo (inicio del mes actual en Nicaragua hasta hoy)
+    if (!startDateStr || !endDateStr) {
+      if (range === 'today') {
+        startDateStr = nicNow.todayStr;
+        endDateStr = nicNow.todayStr;
+      } else if (range === '7days') {
+        const d = new Date(nicNow.todayStr);
+        d.setDate(d.getDate() - 7);
+        startDateStr = d.toISOString().split('T')[0];
+        endDateStr = nicNow.todayStr;
+      } else if (range === 'prevMonth') {
+        let pY = nicNow.year;
+        let pM = nicNow.month - 1;
+        if (pM < 0) { pM = 11; pY -= 1; }
+        const lastDay = new Date(pY, pM + 1, 0).getDate();
+        startDateStr = `${pY}-${String(pM + 1).padStart(2, '0')}-01`;
+        endDateStr = `${pY}-${String(pM + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+      } else {
+        // 'month' / por defecto: Mes Actual
+        startDateStr = nicNow.firstDayStr;
+        endDateStr = nicNow.todayStr;
+      }
     }
 
-    startIso = new Date(`${startDateStr}T00:00:00-06:00`).toISOString();
-    endIso = new Date(`${endDateStr}T23:59:59-06:00`).toISOString();
+    const startIso = new Date(`${startDateStr}T00:00:00-06:00`).toISOString();
+    const endIso = new Date(`${endDateStr}T23:59:59-06:00`).toISOString();
 
     // 1. Consultar órdenes del período
     const ordersList = await fetchAllPeriodOrders(startIso, endIso);
