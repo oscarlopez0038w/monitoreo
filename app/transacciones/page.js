@@ -1,8 +1,5 @@
 'use client';
 
-export const dynamic = 'force-dynamic';
-export const revalidate = 0;
-
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import AppLayout from '@/components/AppLayout';
 import TransactionsTable from '@/components/TransactionsTable';
