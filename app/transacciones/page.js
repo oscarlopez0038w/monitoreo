@@ -28,7 +28,7 @@ export default function TransaccionesPage() {
   const [endDate, setEndDate] = useState(nicNow.todayStr);
   const [statusFilter, setStatusFilter] = useState('all');
   const [searchTerm, setSearchTerm] = useState('');
-  const [autoRefreshInterval, setAutoRefreshInterval] = useState(0); // 0s por defecto (Vercel Cron 60s en 2º plano)
+  const [autoRefreshInterval, setAutoRefreshInterval] = useState(60); // 60s por defecto (polling activo)
   const [isLoading, setIsLoading] = useState(true);
 
   const [transactions, setTransactions] = useState([]);
