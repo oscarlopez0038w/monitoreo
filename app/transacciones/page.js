@@ -28,7 +28,7 @@ export default function TransaccionesPage() {
   const [endDate, setEndDate] = useState(nicNow.todayStr);
   const [statusFilter, setStatusFilter] = useState('all');
   const [searchTerm, setSearchTerm] = useState('');
-  const [autoRefreshInterval, setAutoRefreshInterval] = useState(30); // 30s default
+  const [autoRefreshInterval, setAutoRefreshInterval] = useState(0); // 0s por defecto (Vercel Cron 60s en 2º plano)
   const [isLoading, setIsLoading] = useState(true);
 
   const [transactions, setTransactions] = useState([]);
@@ -246,7 +246,7 @@ export default function TransaccionesPage() {
                   cursor: 'pointer',
                 }}
               >
-                <option value={0} style={{ background: '#0f172a' }}>Desactivado</option>
+                <option value={0} style={{ background: '#0f172a' }}>Desactivado (Cron Vercel 60s)</option>
                 <option value={15} style={{ background: '#0f172a' }}>Cada 15s</option>
                 <option value={30} style={{ background: '#0f172a' }}>Cada 30s</option>
                 <option value={60} style={{ background: '#0f172a' }}>Cada 60s</option>

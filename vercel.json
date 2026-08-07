@@ -1,0 +1,16 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron/sync-transactions",
+      "schedule": "* * * * *"
+    },
+    {
+      "path": "/api/cron/sync-inventory",
+      "schedule": "0 */2 * * *"
+    },
+    {
+      "path": "/api/cron/sync-prices",
+      "schedule": "0 1-23/2 * * *"
+    }
+  ]
+}

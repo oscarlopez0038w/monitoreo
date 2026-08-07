@@ -1,4 +1,6 @@
 import { NextResponse } from 'next/server';
+import { supabaseAdmin, isSupabaseConfigured } from '@/lib/supabase';
+import { sendGa4RefundEvent } from '@/lib/ga4';
 import {
   isVtexConfigured,
   fetchVtexTransactionsBatch,
@@ -242,7 +244,53 @@ export async function GET(request) {
         );
       }
 
-      const enriched = buildEnrichedTransaction(txDetail, orderDetail, interactions, payments);
+      const enriched = await buildEnrichedTransaction(txDetail, orderDetail, interactions, payments);
+
+      // Persistir de inmediato en Supabase la transacción consultada individualmente
+      if (isSupabaseConfigured()) {
+        try {
+          const singlePayload = {
+            transaction_id: String(enriched.transactionId || enriched.key || enriched.orderId),
+            order_id: enriched.orderId || null,
+            status: enriched.status || 'Pending',
+            start_date: enriched.startDate || new Date().toISOString(),
+            client_name: enriched.client?.name || null,
+            client_email: enriched.client?.email || null,
+            client_phone: enriched.client?.phone || null,
+            client_document: enriched.client?.document || null,
+            payment_system: enriched.payment?.systemName || null,
+            card_number: enriched.payment?.cardNumber || null,
+            card_holder: enriched.payment?.cardHolder || null,
+            amount: enriched.amount || 0,
+            acquirer: enriched.payment?.acquirer || null,
+            tid: enriched.payment?.tid || null,
+            auth_id: enriched.payment?.authId || null,
+            return_code: enriched.payment?.returnCode || null,
+            return_message: enriched.payment?.returnMessage || null,
+            error_code: enriched.errorDiagnostics?.code || null,
+            error_title: enriched.errorDiagnostics?.title || null,
+            error_description: enriched.errorDiagnostics?.description || null,
+            is_error: enriched.errorDiagnostics?.isError || false,
+            is_refund: enriched.errorDiagnostics?.isRefund || false,
+            cancel_reason: enriched.errorDiagnostics?.cancelReason || null,
+            items: enriched.skus || [],
+            raw_payload: enriched,
+            updated_at: new Date().toISOString(),
+          };
+
+          await supabaseAdmin
+            .from('vtex_transactions')
+            .upsert([singlePayload], { onConflict: 'transaction_id' });
+
+          // Notificar evento refund a GA4 si es una devolución aún no enviada
+          if (enriched.errorDiagnostics?.isRefund || enriched.status === 'Refunded') {
+            await handleGa4RefundDispatch(singlePayload);
+          }
+        } catch (dbErr) {
+          console.warn('Aviso guardando detalle individual en Supabase:', dbErr.message);
+        }
+      }
+
       return NextResponse.json({ success: true, transaction: enriched });
     }
 
@@ -434,6 +482,53 @@ export async function GET(request) {
       approvalRate: totalTransactions > 0 ? ((approvedCount / totalTransactions) * 100).toFixed(1) : 0,
       cancellationRate: totalTransactions > 0 ? ((canceledCount / totalTransactions) * 100).toFixed(1) : 0,
     };
+
+    // Persistir/Actualizar automáticamente las transacciones en Supabase (tabla vtex_transactions)
+    if (isSupabaseConfigured() && enrichedList.length > 0) {
+      try {
+        const dbPayloads = enrichedList.map((tx) => ({
+          transaction_id: String(tx.transactionId || tx.key || tx.orderId),
+          order_id: tx.orderId || null,
+          status: tx.status || 'Pending',
+          start_date: tx.startDate || new Date().toISOString(),
+          client_name: tx.client?.name || null,
+          client_email: tx.client?.email || null,
+          client_phone: tx.client?.phone || null,
+          client_document: tx.client?.document || null,
+          payment_system: tx.payment?.systemName || null,
+          card_number: tx.payment?.cardNumber || null,
+          card_holder: tx.payment?.cardHolder || null,
+          amount: tx.amount || 0,
+          acquirer: tx.payment?.acquirer || null,
+          tid: tx.payment?.tid || null,
+          auth_id: tx.payment?.authId || null,
+          return_code: tx.payment?.returnCode || null,
+          return_message: tx.payment?.returnMessage || null,
+          error_code: tx.errorDiagnostics?.code || null,
+          error_title: tx.errorDiagnostics?.title || null,
+          error_description: tx.errorDiagnostics?.description || null,
+          is_error: tx.errorDiagnostics?.isError || false,
+          is_refund: tx.errorDiagnostics?.isRefund || false,
+          cancel_reason: tx.errorDiagnostics?.cancelReason || null,
+          items: tx.skus || [],
+          raw_payload: tx,
+          updated_at: new Date().toISOString(),
+        }));
+
+        await supabaseAdmin
+          .from('vtex_transactions')
+          .upsert(dbPayloads, { onConflict: 'transaction_id' });
+
+        // Evaluar en segundo plano devoluciones no notificados a GA4
+        for (const payload of dbPayloads) {
+          if (payload.is_refund || payload.status === 'Refunded') {
+            await handleGa4RefundDispatch(payload);
+          }
+        }
+      } catch (dbErr) {
+        console.warn('Aviso guardando en vtex_transactions Supabase:', dbErr.message);
+      }
+    }
 
     return NextResponse.json({
       success: true,
@@ -722,4 +817,44 @@ function normalizeStatus(raw) {
     return 'Pending';
   }
   return raw;
+}
+
+/**
+ * Función auxiliar para verificar si una devolución ya fue enviada a GA4 y notificarla si está pendiente
+ */
+async function handleGa4RefundDispatch(payload) {
+  if (!payload || !payload.transaction_id || !isSupabaseConfigured()) return;
+
+  try {
+    const { data: existingRow } = await supabaseAdmin
+      .from('vtex_transactions')
+      .select('ga4_refund_sent')
+      .eq('transaction_id', payload.transaction_id)
+      .maybeSingle();
+
+    if (existingRow?.ga4_refund_sent) {
+      return; // Ya se notificó previamente a GA4
+    }
+
+    const ga4Res = await sendGa4RefundEvent({
+      transactionId: payload.transaction_id,
+      orderId: payload.order_id,
+      amount: payload.amount,
+      currency: 'NIO',
+      items: payload.items || payload.raw_payload?.skus || [],
+      clientId: payload.client_email || payload.raw_payload?.client?.email,
+    });
+
+    if (ga4Res.success) {
+      await supabaseAdmin
+        .from('vtex_transactions')
+        .update({
+          ga4_refund_sent: true,
+          ga4_refund_sent_at: new Date().toISOString(),
+        })
+        .eq('transaction_id', payload.transaction_id);
+    }
+  } catch (err) {
+    console.error('Error enviando evento GA4 refund:', err.message);
+  }
 }
