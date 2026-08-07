@@ -70,8 +70,8 @@ async function handleInventoryCron(request) {
 
         return {
           id: skuId,
-          mega_stock: inv.megaStock || 0,
-          cedis_stock: inv.cedisStock || 0,
+          stock_wh1: inv.megaStock || 0,
+          stock_wh2: inv.cedisStock || 0,
           total_stock: inv.totalAvailable || 0,
           is_active: details?.isActive ?? true,
           inventory_updated_at: nowIso,
