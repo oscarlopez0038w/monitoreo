@@ -108,3 +108,125 @@ CREATE POLICY "Permitir acceso total vtex_orders" ON public.vtex_orders FOR ALL 
 -- Habilitar publicación en tiempo real para la tabla vtex_orders
 ALTER PUBLICATION supabase_realtime ADD TABLE public.vtex_orders;
 
+
+-- ==============================================================================
+-- TABLA DE USUARIOS AUTORIZADOS PARA CONTROL DE ACCESO Y ROLES (APP_USERS)
+-- Estructura exacta en Supabase
+-- ==============================================================================
+
+CREATE TABLE IF NOT EXISTS public.app_users (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    email TEXT NOT NULL UNIQUE,
+    username TEXT UNIQUE,
+    name TEXT NOT NULL,
+    password TEXT NOT NULL,
+    role TEXT NOT NULL DEFAULT 'Ejecutivo OMS',
+    is_active BOOLEAN NOT NULL DEFAULT true,
+    last_login_at TIMESTAMPTZ NULL,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Índices de consulta rápida
+CREATE INDEX IF NOT EXISTS idx_app_users_email ON public.app_users(email);
+CREATE INDEX IF NOT EXISTS idx_app_users_active ON public.app_users(is_active);
+
+-- Políticas RLS Seguras
+ALTER TABLE public.app_users ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Permitir acceso total app_users" ON public.app_users;
+CREATE POLICY "Permitir acceso total app_users" ON public.app_users FOR ALL USING (true) WITH CHECK (true);
+
+
+-- ==============================================================================
+-- TABLAS DEL SISTEMA DE ROLES Y PERMISOS DINÁMICOS (RBAC)
+-- Copia y ejecuta este bloque en el SQL Editor de Supabase
+-- ==============================================================================
+
+-- 1. Tabla de Roles
+CREATE TABLE IF NOT EXISTS public.app_roles (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    name TEXT UNIQUE NOT NULL,
+    description TEXT NULL,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 2. Tabla de Permisos por Módulo
+CREATE TABLE IF NOT EXISTS public.app_permissions (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    code TEXT UNIQUE NOT NULL,
+    name TEXT NOT NULL,
+    category TEXT NOT NULL DEFAULT 'General',
+    description TEXT NULL,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 3. Tabla Intermedia Matriz de Permisos por Rol
+CREATE TABLE IF NOT EXISTS public.app_role_permissions (
+    role_id UUID REFERENCES public.app_roles(id) ON DELETE CASCADE,
+    permission_id UUID REFERENCES public.app_permissions(id) ON DELETE CASCADE,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    PRIMARY KEY (role_id, permission_id)
+);
+
+-- Habilitar RLS e Idempotencia de Políticas
+ALTER TABLE public.app_roles ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Permitir acceso total app_roles" ON public.app_roles;
+CREATE POLICY "Permitir acceso total app_roles" ON public.app_roles FOR ALL USING (true) WITH CHECK (true);
+
+ALTER TABLE public.app_permissions ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Permitir acceso total app_permissions" ON public.app_permissions;
+CREATE POLICY "Permitir acceso total app_permissions" ON public.app_permissions FOR ALL USING (true) WITH CHECK (true);
+
+ALTER TABLE public.app_role_permissions ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Permitir acceso total app_role_permissions" ON public.app_role_permissions;
+CREATE POLICY "Permitir acceso total app_role_permissions" ON public.app_role_permissions FOR ALL USING (true) WITH CHECK (true);
+
+-- Catalogó Semilla de Permisos Iniciales por Módulo
+INSERT INTO public.app_permissions (code, name, category, description)
+VALUES
+    ('dashboard:view', 'Ver Dashboard de Ventas & KPIs', 'Ventas', 'Permite acceder al dashboard de métricas de ventas'),
+    ('tendencias:view', 'Ver Tendencias E-Commerce', 'Ventas', 'Permite analizar tendencias de ventas e-commerce'),
+    ('skus:view', 'Ver Catálogo e Inventario SKUs', 'Inventario', 'Permite visualizar la lista completa de SKUs'),
+    ('skus:sync', 'Sincronizar SKUs Masivos', 'Inventario', 'Permite ejecutar la sincronización desde VTEX a Supabase'),
+    ('safety_stock:manage', 'Gestionar Stock de Seguridad', 'Inventario', 'Permite editar los límites mínimos de stock de seguridad'),
+    ('prices:manage', 'Gestionar Precios & Descuentos', 'Precios', 'Permite ver y actualizar los precios de catálogo VTEX'),
+    ('simulador:use', 'Usar Simulador de Carrito', 'Promociones', 'Permite simular carritos de compra y promociones'),
+    ('orders:view', 'Ver Órdenes VTEX OMS', 'Órdenes', 'Permite consultar órdenes de compra en tiempo real'),
+    ('transactions:view', 'Ver Transacciones & Pasarelas', 'Pagos', 'Permite inspeccionar transacciones y diagnósticos de cobro'),
+    ('users:manage', 'Administrar Usuarios, Roles & Permisos', 'Administración', 'Acceso completo a la gestión de cuentas y permisos')
+ON CONFLICT (code) DO NOTHING;
+
+-- Catálogo Semilla de Roles Iniciales
+INSERT INTO public.app_roles (name, description)
+VALUES
+    ('Administrador Ejecutivo', 'Acceso total a todos los módulos y administración de permisos'),
+    ('Ejecutivo OMS', 'Acceso a inventario, órdenes, ventas y transacciones'),
+    ('Auditor de Inventario', 'Acceso de consulta a SKUs, stock de seguridad y precios'),
+    ('Gerencia de Ventas', 'Acceso a reportes de dashboard, tendencias y órdenes OMS')
+ON CONFLICT (name) DO NOTHING;
+
+-- Matriz de Relaciones Semilla Iniciales (role_id + permission_id)
+-- 1. Conceder todos los permisos al Administrador Ejecutivo
+INSERT INTO public.app_role_permissions (role_id, permission_id)
+SELECT r.id, p.id
+FROM public.app_roles r
+CROSS JOIN public.app_permissions p
+WHERE r.name = 'Administrador Ejecutivo'
+ON CONFLICT (role_id, permission_id) DO NOTHING;
+
+-- 2. Conceder permisos operativos al Ejecutivo OMS
+INSERT INTO public.app_role_permissions (role_id, permission_id)
+SELECT r.id, p.id
+FROM public.app_roles r
+JOIN public.app_permissions p ON p.code IN ('dashboard:view', 'skus:view', 'orders:view', 'transactions:view')
+WHERE r.name = 'Ejecutivo OMS'
+ON CONFLICT (role_id, permission_id) DO NOTHING;
+
+
+
+
+
+
+
+

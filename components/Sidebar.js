@@ -1,11 +1,32 @@
 'use client';
 
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
-import { LayoutDashboard, Layers, ShieldAlert, Tag, ShoppingCart, Zap, ShieldCheck, X, Gift, CreditCard, TrendingUp } from 'lucide-react';
+import { usePathname, useRouter } from 'next/navigation';
+import {
+  LayoutDashboard,
+  Layers,
+  ShieldAlert,
+  Tag,
+  ShoppingCart,
+  Zap,
+  ShieldCheck,
+  X,
+  Gift,
+  CreditCard,
+  TrendingUp,
+  User,
+  LogOut,
+  Users,
+} from 'lucide-react';
 
 export default function Sidebar({ vtexStatus, supabaseStatus, mobileOpen, onCloseMobile, newTxCount = 0 }) {
   const pathname = usePathname();
+  const [user, setUser] = useState(null);
+  const [isMounted, setIsMounted] = useState(false);
+  const [isLoadingUser, setIsLoadingUser] = useState(true);
+  const [pendingUsersCount, setPendingUsersCount] = useState(0);
+  const router = useRouter();
 
   const navItems = [
     {
@@ -13,252 +34,467 @@ export default function Sidebar({ vtexStatus, supabaseStatus, mobileOpen, onClos
       href: '/dashboard',
       icon: LayoutDashboard,
       color: '#38bdf8',
+      permission: 'dashboard:view',
     },
     {
       label: 'Tendencias E-Commerce',
       href: '/tendencias',
       icon: TrendingUp,
       color: '#10b981',
+      permission: 'tendencias:view',
     },
     {
       label: 'Inventario & SKUs',
       href: '/',
       icon: Layers,
       color: 'var(--accent-primary)',
+      permission: 'skus:view',
     },
     {
       label: 'Stock de Seguridad',
       href: '/stock-seguridad',
       icon: ShieldAlert,
       color: 'var(--accent-amber)',
+      permission: 'safety_stock:manage',
     },
     {
       label: 'Precios VTEX',
       href: '/precios',
       icon: Tag,
       color: '#a5b4fc',
+      permission: 'prices:manage',
     },
     {
       label: 'Simulador Carrito',
       href: '/simulador',
       icon: Gift,
       color: '#e879f9',
+      permission: 'simulador:use',
     },
     {
       label: 'Órdenes VTEX OMS',
       href: '/ordenes',
       icon: ShoppingCart,
       color: '#34d399',
+      permission: 'orders:view',
     },
     {
       label: 'Transacciones VTEX',
       href: '/transacciones',
       icon: CreditCard,
       color: '#f43f5e',
+      permission: 'transactions:view',
+    },
+    {
+      label: 'Gestión Usuarios',
+      href: '/usuarios',
+      icon: Users,
+      color: '#c084fc',
+      permission: 'users:manage',
     },
   ];
 
+  useEffect(() => {
+    setIsMounted(true);
+    if (typeof window !== 'undefined') {
+      try {
+        const cached = sessionStorage.getItem('vtex_user_session');
+        if (cached) {
+          setUser(JSON.parse(cached));
+          setIsLoadingUser(false);
+        }
+      } catch (e) {}
+    }
+
+    async function loadUser() {
+      try {
+        const res = await fetch('/api/auth/me');
+        const data = await res.json();
+        if (data.authenticated && data.user) {
+          setUser(data.user);
+          if (typeof window !== 'undefined') {
+            sessionStorage.setItem('vtex_user_session', JSON.stringify(data.user));
+          }
+        }
+      } catch (e) {
+        // Silencioso
+      } finally {
+        setIsLoadingUser(false);
+      }
+    }
+
+    async function loadPendingUsers() {
+      try {
+        const res = await fetch('/api/users?status=pending');
+        const data = await res.json();
+        if (data.success && data.stats) {
+          setPendingUsersCount(data.stats.pending || 0);
+        }
+      } catch (e) {
+        // Silencioso
+      }
+    }
+
+    loadUser();
+    loadPendingUsers();
+  }, []);
+
+  const handleLogout = async () => {
+    try {
+      if (typeof window !== 'undefined') {
+        sessionStorage.removeItem('vtex_user_session');
+      }
+      await fetch('/api/auth/logout', { method: 'POST' });
+      router.push('/login');
+      router.refresh();
+    } catch (e) {
+      router.push('/login');
+    }
+  };
+
+  // Filtrar estrictamente las opciones de menú según los permisos concedidos al rol en la matriz RBAC
+  const visibleNavItems = navItems.filter((item) => {
+    if (!user) return false;
+    if (user.role === 'Administrador Ejecutivo') return true;
+    if (user.permissions?.includes('*')) return true;
+    return user.permissions?.includes(item.permission);
+  });
 
   return (
     <>
-      {/* Backdrop for Mobile Drawer Overlay */}
+      {/* Mobile Backdrop Overlay */}
       {mobileOpen && (
         <div
           onClick={onCloseMobile}
           style={{
             position: 'fixed',
             inset: 0,
-            background: 'rgba(0, 0, 0, 0.75)',
-            backdropFilter: 'blur(6px)',
-            WebkitBackdropFilter: 'blur(6px)',
-            zIndex: 90,
+            backgroundColor: 'rgba(0,0,0,0.6)',
+            backdropFilter: 'blur(4px)',
+            zIndex: 49,
           }}
           className="mobile-backdrop"
         />
       )}
 
+      {/* Sidebar Main Drawer Container */}
       <aside
         style={{
-          width: '260px',
-          flexShrink: 0,
-          height: '100vh',
-          position: 'sticky',
-          top: 0,
+          width: '270px',
+          minWidth: '270px',
           background: 'rgba(11, 15, 25, 0.95)',
-          backdropFilter: 'blur(24px)',
-          WebkitBackdropFilter: 'blur(24px)',
+          backdropFilter: 'blur(20px)',
+          WebkitBackdropFilter: 'blur(20px)',
           borderRight: '1px solid var(--border-subtle)',
           display: 'flex',
           flexDirection: 'column',
           justifyContent: 'space-between',
           padding: '1.25rem 1rem',
-          zIndex: 100,
+          position: 'sticky',
+          top: 0,
+          height: '100vh',
+          zIndex: 50,
+          boxSizing: 'border-box',
+          overflowY: 'auto',
         }}
-        className={`app-sidebar ${mobileOpen ? 'mobile-sidebar-open' : ''}`}
+        className={`app-sidebar ${mobileOpen ? 'mobile-open' : ''}`}
       >
-        {/* Top Header & Brand Logo */}
+        {/* Top Header Section */}
         <div>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.5rem 0.5rem 1.25rem 0.5rem', borderBottom: '1px solid var(--border-subtle)', marginBottom: '1.25rem' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem' }}>
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              marginBottom: '1.75rem',
+              padding: '0 0.5rem',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
               <div
                 style={{
                   width: '40px',
                   height: '40px',
                   borderRadius: '12px',
-                  background: 'var(--gradient-btn)',
+                  background: 'linear-gradient(135deg, #38bdf8 0%, #2563eb 100%)',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  boxShadow: '0 4px 18px rgba(56, 189, 248, 0.35)',
-                  flexShrink: 0,
+                  boxShadow: '0 4px 20px rgba(56, 189, 248, 0.35)',
                 }}
               >
                 <Zap size={22} color="#ffffff" />
               </div>
               <div>
-                <h1 style={{ fontSize: '1.1rem', fontWeight: 700, letterSpacing: '-0.02em', background: 'linear-gradient(to right, #ffffff, #94a3b8)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
+                <h1
+                  style={{
+                    fontSize: '1.1rem',
+                    fontWeight: 800,
+                    color: '#ffffff',
+                    letterSpacing: '-0.02em',
+                    margin: 0,
+                    lineHeight: '1.1',
+                  }}
+                >
                   VTEX Extractor
                 </h1>
-                <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
-                  <strong style={{ color: 'var(--accent-primary)' }}>SINSA</strong> • Monitoring
-                </p>
+                <span
+                  style={{
+                    fontSize: '0.72rem',
+                    color: 'var(--accent-primary)',
+                    fontWeight: 600,
+                    letterSpacing: '0.05em',
+                  }}
+                >
+                  SINSA • Monitoring
+                </span>
               </div>
             </div>
 
             {/* Mobile Close Button */}
             <button
               onClick={onCloseMobile}
-              style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', display: 'none' }}
-              className="sidebar-close-btn"
+              style={{
+                background: 'none',
+                border: 'none',
+                color: 'var(--text-muted)',
+                cursor: 'pointer',
+                display: 'none',
+                padding: '0.4rem',
+              }}
+              className="mobile-close-btn"
             >
               <X size={20} />
             </button>
           </div>
 
-          {/* Navigation Section */}
-          <div style={{ fontSize: '0.72rem', textTransform: 'uppercase', color: 'var(--text-dim)', fontWeight: 600, paddingLeft: '0.75rem', marginBottom: '0.6rem', letterSpacing: '0.05em' }}>
-            Menú Principal
-          </div>
-
-          <nav style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
-            {navItems.map((item) => {
-              const isActive = pathname === item.href;
-              const IconComponent = item.icon;
-              const isTxItem = item.href === '/transacciones';
-              const showBadge = isTxItem && newTxCount > 0;
-
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  onClick={() => {
-                    if (onCloseMobile) onCloseMobile();
-                  }}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '0.75rem',
-                    padding: '0.75rem 0.95rem',
-                    borderRadius: '12px',
-                    fontSize: '0.9rem',
-                    fontWeight: isActive ? 600 : 500,
-                    textDecoration: 'none',
-                    transition: 'all 0.2s ease',
-                    background: isActive ? 'rgba(56, 189, 248, 0.12)' : 'transparent',
-                    color: isActive ? '#ffffff' : 'var(--text-muted)',
-                    border: isActive ? '1px solid rgba(56, 189, 248, 0.25)' : '1px solid transparent',
-                    boxShadow: isActive ? '0 4px 15px rgba(56, 189, 248, 0.15)' : 'none',
-                    minHeight: '44px',
-                    position: 'relative',
-                  }}
-                >
-                  <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-                    <IconComponent size={19} color={isActive ? item.color : 'var(--text-dim)'} />
-                    {showBadge && (
-                      <span
-                        style={{
-                          position: 'absolute',
-                          top: '-4px',
-                          right: '-4px',
-                          width: '9px',
-                          height: '9px',
-                          borderRadius: '50%',
-                          backgroundColor: '#f43f5e',
-                          boxShadow: '0 0 10px #f43f5e',
-                          border: '2px solid rgba(11, 15, 25, 0.95)',
-                        }}
-                      />
-                    )}
-                  </div>
-                  <span>{item.label}</span>
-
-                  {showBadge && (
-                    <span
-                      style={{
-                        marginLeft: 'auto',
-                        background: 'linear-gradient(135deg, #ef4444, #f43f5e)',
-                        color: '#ffffff',
-                        fontSize: '0.72rem',
-                        fontWeight: 800,
-                        padding: '0.15rem 0.55rem',
-                        borderRadius: '20px',
-                        boxShadow: '0 0 14px rgba(244, 63, 94, 0.6)',
-                        letterSpacing: '0.02em',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        minWidth: '22px',
-                        height: '20px',
-                      }}
-                    >
-                      {newTxCount > 99 ? '99+' : `+${newTxCount}`}
-                    </span>
-                  )}
-                </Link>
-              );
-            })}
-          </nav>
-        </div>
-
-        {/* Footer System Status Badges */}
-        <div style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: '1.25rem' }}>
-          {/* SKUs Activos Badge */}
-          {typeof supabaseStatus?.activeSkus === 'number' && (
-            <div
+          {/* Navigation Links Group */}
+          <div style={{ marginBottom: '1.5rem' }}>
+            <span
               style={{
-                background: 'rgba(52, 211, 153, 0.12)',
-                border: '1px solid rgba(52, 211, 153, 0.3)',
-                borderRadius: '12px',
-                padding: '0.65rem 0.85rem',
-                marginBottom: '0.85rem',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '0.6rem',
-                fontSize: '0.82rem',
-                color: '#34d399',
+                fontSize: '0.68rem',
+                fontWeight: 700,
+                color: 'var(--text-dim)',
+                textTransform: 'uppercase',
+                letterSpacing: '0.08em',
+                padding: '0 0.75rem',
+                marginBottom: '0.65rem',
+                display: 'block',
               }}
             >
-              <ShieldCheck size={16} color="#34d399" />
-              <div>
-                <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', display: 'block' }}>SKUs Activos</span>
-                <strong style={{ fontSize: '0.95rem', color: '#ffffff' }}>{supabaseStatus.activeSkus.toLocaleString('es-NI')}</strong>
+              Menú Principal
+            </span>
+
+            <nav style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+              {!isMounted || isLoadingUser ? (
+                <div style={{ padding: '1rem', color: '#94a3b8', fontSize: '0.82rem', textAlign: 'center' }}>
+                  Cargando permisos RBAC...
+                </div>
+              ) : visibleNavItems.length === 0 ? (
+                <div style={{ padding: '1rem', color: '#fca5a5', fontSize: '0.8rem', textAlign: 'center' }}>
+                  ⚠️ Rol sin permisos de menú concedidos
+                </div>
+              ) : (
+                visibleNavItems.map((item) => {
+                  const isActive = pathname === item.href;
+                  const IconComponent = item.icon;
+                  const isTxItem = item.href === '/transacciones';
+                  const isUserItem = item.href === '/usuarios';
+                  const showBadge = isTxItem ? newTxCount > 0 : isUserItem ? pendingUsersCount > 0 : false;
+                  const badgeCount = isTxItem ? newTxCount : pendingUsersCount;
+                  const badgeColor = isTxItem ? 'linear-gradient(135deg, #ef4444, #f43f5e)' : 'linear-gradient(135deg, #f59e0b, #d97706)';
+
+                  return (
+                    <Link
+                      key={item.href}
+                      href={item.href}
+                      onClick={() => {
+                        if (onCloseMobile) onCloseMobile();
+                      }}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '0.75rem',
+                        padding: '0.75rem 0.95rem',
+                        borderRadius: '12px',
+                        fontSize: '0.9rem',
+                        fontWeight: isActive ? 600 : 500,
+                        textDecoration: 'none',
+                        transition: 'all 0.2s ease',
+                        background: isActive ? 'rgba(56, 189, 248, 0.12)' : 'transparent',
+                        color: isActive ? '#ffffff' : 'var(--text-muted)',
+                        border: isActive ? '1px solid rgba(56, 189, 248, 0.25)' : '1px solid transparent',
+                        boxShadow: isActive ? '0 4px 15px rgba(56, 189, 248, 0.15)' : 'none',
+                        minHeight: '44px',
+                        position: 'relative',
+                      }}
+                    >
+                      <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                        <IconComponent size={19} color={isActive ? item.color : 'var(--text-dim)'} />
+                        {showBadge && (
+                          <span
+                            style={{
+                              position: 'absolute',
+                              top: '-4px',
+                              right: '-4px',
+                              width: '9px',
+                              height: '9px',
+                              borderRadius: '50%',
+                              backgroundColor: isTxItem ? '#f43f5e' : '#f59e0b',
+                              boxShadow: isTxItem ? '0 0 10px #f43f5e' : '0 0 10px #f59e0b',
+                              border: '2px solid rgba(11, 15, 25, 0.95)',
+                            }}
+                          />
+                        )}
+                      </div>
+                      <span>{item.label}</span>
+
+                      {showBadge && (
+                        <span
+                          style={{
+                            marginLeft: 'auto',
+                            background: badgeColor,
+                            color: '#ffffff',
+                            fontSize: '0.72rem',
+                            fontWeight: 800,
+                            padding: '0.15rem 0.55rem',
+                            borderRadius: '20px',
+                            boxShadow: isTxItem ? '0 0 14px rgba(244, 63, 94, 0.6)' : '0 0 14px rgba(245, 158, 11, 0.6)',
+                            letterSpacing: '0.02em',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            minWidth: '22px',
+                            height: '20px',
+                          }}
+                        >
+                          {badgeCount > 99 ? '99+' : isTxItem ? `+${badgeCount}` : badgeCount}
+                        </span>
+                      )}
+                    </Link>
+                  );
+                })
+              )}
+            </nav>
+          </div>
+        </div>
+
+        {/* Bottom User & System Status Card */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+          {/* User Profile Card */}
+          {user && (
+            <div
+              style={{
+                background: 'rgba(30, 41, 59, 0.5)',
+                border: '1px solid rgba(255, 255, 255, 0.08)',
+                borderRadius: '14px',
+                padding: '0.75rem 0.85rem',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', overflow: 'hidden' }}>
+                <div
+                  style={{
+                    width: '32px',
+                    height: '32px',
+                    borderRadius: '10px',
+                    background: 'linear-gradient(135deg, #38bdf8, #2563eb)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: '#ffffff',
+                    fontWeight: 700,
+                    fontSize: '0.85rem',
+                    flexShrink: 0,
+                  }}
+                >
+                  <User size={16} />
+                </div>
+                <div style={{ overflow: 'hidden' }}>
+                  <strong
+                    style={{
+                      color: '#ffffff',
+                      fontSize: '0.84rem',
+                      display: 'block',
+                      whiteSpace: 'nowrap',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                    }}
+                  >
+                    {user.name || 'Usuario'}
+                  </strong>
+                  <span style={{ color: '#38bdf8', fontSize: '0.7rem', fontWeight: 600, display: 'block' }}>
+                    {user.role}
+                  </span>
+                </div>
               </div>
+
+              <button
+                onClick={handleLogout}
+                title="Cerrar Sesión"
+                style={{
+                  background: 'rgba(239, 68, 68, 0.12)',
+                  border: '1px solid rgba(239, 68, 68, 0.25)',
+                  borderRadius: '8px',
+                  color: '#fca5a5',
+                  padding: '0.4rem',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexShrink: 0,
+                }}
+              >
+                <LogOut size={16} />
+              </button>
             </div>
           )}
 
-          {/* Integration Status summary */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', fontSize: '0.78rem' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', color: 'var(--text-muted)' }}>
-              <span>VTEX API:</span>
-              <span style={{ color: vtexStatus?.configured ? '#34d399' : '#fbbf24', fontWeight: 600 }}>
-                {vtexStatus?.configured ? '● Conectado' : '○ Pendiente'}
+          {/* System Connection Indicators */}
+          <div
+            style={{
+              background: 'rgba(15, 23, 42, 0.4)',
+              borderRadius: '12px',
+              padding: '0.65rem 0.85rem',
+              border: '1px solid rgba(255, 255, 255, 0.05)',
+              fontSize: '0.74rem',
+            }}
+          >
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                marginBottom: '0.35rem',
+              }}
+            >
+              <span style={{ color: 'var(--text-muted)' }}>VTEX API:</span>
+              <span
+                style={{
+                  color: (vtexStatus === 'online' || vtexStatus?.configured === true) ? '#34d399' : '#f87171',
+                  fontWeight: 700,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.3rem',
+                }}
+              >
+                ● {(vtexStatus === 'online' || vtexStatus?.configured === true) ? 'Conectado' : 'Desconectado'}
               </span>
             </div>
-
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', color: 'var(--text-muted)' }}>
-              <span>Supabase:</span>
-              <span style={{ color: supabaseStatus?.configured ? '#34d399' : '#fbbf24', fontWeight: 600 }}>
-                {supabaseStatus?.configured ? '● Conectado' : '○ Sin Configurar'}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <span style={{ color: 'var(--text-muted)' }}>Supabase:</span>
+              <span
+                style={{
+                  color: (supabaseStatus === 'online' || supabaseStatus?.configured === true) ? '#34d399' : '#f87171',
+                  fontWeight: 700,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.3rem',
+                }}
+              >
+                ● {(supabaseStatus === 'online' || supabaseStatus?.configured === true) ? 'Conectado' : 'Desconectado'}
               </span>
             </div>
           </div>
@@ -270,17 +506,16 @@ export default function Sidebar({ vtexStatus, supabaseStatus, mobileOpen, onClos
           .app-sidebar {
             position: fixed !important;
             top: 0 !important;
-            bottom: 0 !important;
             left: 0 !important;
+            bottom: 0 !important;
             height: 100vh !important;
             transform: translateX(-100%);
-            transition: transform 0.28s cubic-bezier(0.16, 1, 0.3, 1);
-            box-shadow: 4px 0 25px rgba(0, 0, 0, 0.6);
+            transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
           }
-          .mobile-sidebar-open {
+          .app-sidebar.mobile-open {
             transform: translateX(0) !important;
           }
-          .sidebar-close-btn {
+          .mobile-close-btn {
             display: flex !important;
           }
         }

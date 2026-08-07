@@ -233,13 +233,20 @@ export default function SyncPanel({ onSyncCompleted, vtexReady, supabaseReady, i
       )}
 
       {/* Live Sync Progress Info Cards */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem', marginBottom: '1.25rem' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '1rem', marginBottom: '1.25rem' }}>
         <div style={{ background: 'rgba(15, 23, 42, 0.5)', padding: '1rem', borderRadius: '12px', border: '1px solid var(--border-subtle)' }}>
           <span style={{ fontSize: '0.75rem', color: 'var(--text-dim)', textTransform: 'uppercase', fontWeight: 600 }}>
             {syncingInventory ? 'Inventarios Actualizados' : 'Total SKUs en BD'}
           </span>
           <div style={{ fontSize: '1.35rem', fontWeight: 700, color: 'var(--accent-primary)', marginTop: '0.2rem' }}>
             {syncingInventory ? inventoryProcessed.toLocaleString() : displaySkuCount.toLocaleString()}
+          </div>
+        </div>
+
+        <div style={{ background: 'rgba(15, 23, 42, 0.5)', padding: '1rem', borderRadius: '12px', border: '1px solid rgba(52, 211, 153, 0.2)' }}>
+          <span style={{ fontSize: '0.75rem', color: 'var(--text-dim)', textTransform: 'uppercase', fontWeight: 600 }}>SKUs Activos en BD</span>
+          <div style={{ fontSize: '1.35rem', fontWeight: 700, color: '#34d399', marginTop: '0.2rem' }}>
+            {activeSkus > 0 ? activeSkus.toLocaleString() : displaySkuCount.toLocaleString()}
           </div>
         </div>
 
