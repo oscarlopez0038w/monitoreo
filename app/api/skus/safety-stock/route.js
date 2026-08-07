@@ -4,7 +4,7 @@ import { supabaseAdmin, isSupabaseConfigured } from '@/lib/supabase';
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
-// GET: Obtener lista de Stock de Seguridad
+// GET: Obtener lista de Stock de Seguridad con paginación y conteo exacto de Supabase (65.2K+)
 export async function GET(request) {
   try {
     if (!isSupabaseConfigured()) {
@@ -16,10 +16,15 @@ export async function GET(request) {
 
     const { searchParams } = new URL(request.url);
     const search = searchParams.get('search') || '';
+    const page = Math.max(1, parseInt(searchParams.get('page') || '1', 10));
+    const pageSize = Math.min(200, Math.max(10, parseInt(searchParams.get('pageSize') || '50', 10)));
+
+    const from = (page - 1) * pageSize;
+    const to = from + pageSize - 1;
 
     let query = supabaseAdmin
       .from('vtex_safety_stock')
-      .select('sku_id, description, safety_stock, updated_at');
+      .select('sku_id, description, safety_stock, updated_at', { count: 'exact' });
 
     if (search.trim()) {
       const searchNum = parseInt(search.trim(), 10);
@@ -30,14 +35,22 @@ export async function GET(request) {
       }
     }
 
-    const { data, error } = await query.order('sku_id', { ascending: true }).limit(2000);
+    const { data, count, error } = await query
+      .order('updated_at', { ascending: false, nullsFirst: false })
+      .range(from, to);
 
     if (error) throw new Error(error.message);
+
+    const totalRecords = count || 0;
+    const totalPages = Math.ceil(totalRecords / pageSize);
 
     return NextResponse.json({
       success: true,
       data: data || [],
-      total: (data || []).length,
+      total: totalRecords,
+      page,
+      pageSize,
+      totalPages: totalPages || 1,
     });
   } catch (err) {
     return NextResponse.json(
