@@ -18,6 +18,7 @@ import {
   User,
   LogOut,
   Users,
+  Package,
 } from 'lucide-react';
 
 export default function Sidebar({ vtexStatus, supabaseStatus, mobileOpen, onCloseMobile, newTxCount = 0 }) {
@@ -51,12 +52,20 @@ export default function Sidebar({ vtexStatus, supabaseStatus, mobileOpen, onClos
       permission: 'skus:view',
     },
     {
+      label: 'Kits & Combos VTEX',
+      href: '/minisplits',
+      icon: Package,
+      color: '#38bdf8',
+      permission: 'kits:manage',
+    },
+    {
       label: 'Stock de Seguridad',
       href: '/stock-seguridad',
       icon: ShieldAlert,
       color: 'var(--accent-amber)',
       permission: 'safety_stock:manage',
     },
+
     {
       label: 'Precios VTEX',
       href: '/precios',

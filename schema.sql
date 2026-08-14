@@ -119,3 +119,20 @@ ALTER TABLE public.vtex_transactions
   ADD COLUMN IF NOT EXISTS items JSONB NULL,
   ADD COLUMN IF NOT EXISTS ga4_refund_sent BOOLEAN DEFAULT false,
   ADD COLUMN IF NOT EXISTS ga4_refund_sent_at TIMESTAMPTZ NULL;
+
+-- 5. TABLA DE MONITOREO DE KITS VTEX
+CREATE TABLE IF NOT EXISTS public.vtex_kits (
+    kit_sku_id BIGINT PRIMARY KEY,
+    description TEXT NULL,
+    is_active BOOLEAN DEFAULT true,
+    custom_skus JSONB NULL,
+    last_sync_at TIMESTAMPTZ DEFAULT NOW(),
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE public.vtex_kits ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Permitir acceso total vtex_kits" ON public.vtex_kits;
+CREATE POLICY "Permitir acceso total vtex_kits" ON public.vtex_kits FOR ALL USING (true) WITH CHECK (true);
+
+

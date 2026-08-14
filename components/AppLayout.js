@@ -10,6 +10,7 @@ const ROUTE_PERMISSIONS = {
   '/dashboard': { code: 'dashboard:view', name: 'Dashboard de Ventas & KPIs' },
   '/tendencias': { code: 'tendencias:view', name: 'Tendencias E-Commerce' },
   '/': { code: 'skus:view', name: 'Inventario & SKUs' },
+  '/minisplits': { code: 'kits:manage', name: 'Kits VTEX & Combos' },
   '/stock-seguridad': { code: 'safety_stock:manage', name: 'Stock de Seguridad' },
   '/precios': { code: 'prices:manage', name: 'Precios VTEX' },
   '/simulador': { code: 'simulador:use', name: 'Simulador de Carrito' },

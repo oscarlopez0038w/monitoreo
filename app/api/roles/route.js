@@ -21,13 +21,29 @@ export async function GET() {
     }
 
     // 2. Cargar catálogo de permisos
-    const { data: permissions, error: permError } = await supabaseAdmin
+    let { data: permissions, error: permError } = await supabaseAdmin
       .from('app_permissions')
       .select('*')
       .order('category, code');
 
     if (permError) {
       console.error('Error al cargar permisos:', permError);
+    }
+
+    // Auto-registrar permiso de Kits si aún no existe en app_permissions
+    if (Array.isArray(permissions) && !permissions.some((p) => p.code === 'kits:manage')) {
+      try {
+        await supabaseAdmin.from('app_permissions').insert({
+          code: 'kits:manage',
+          name: 'Kits VTEX & Combos',
+          description: 'Monitorear inventario, modificar precios e importar Kits desde Excel',
+          category: 'Catálogo & Inventario',
+        });
+        const reload = await supabaseAdmin.from('app_permissions').select('*').order('category, code');
+        if (reload.data) permissions = reload.data;
+      } catch (e) {
+        console.warn('No se pudo auto-registrar el permiso kits:manage:', e.message);
+      }
     }
 
     // 3. Cargar matriz de asignaciones role_permissions
