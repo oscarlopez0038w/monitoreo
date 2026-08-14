@@ -72,23 +72,20 @@ export async function GET(request) {
     const sortOrder = searchParams.get('sortOrder') || 'asc';
     const isAsc = sortOrder.toLowerCase() === 'asc';
 
-    // 1. Consultar mapa de descripciones desde vtex_safety_stock para nombres de productos
-    const { data: safetyData } = await supabaseAdmin
-      .from('vtex_safety_stock')
-      .select('sku_id, description');
-
-    const descMap = new Map();
+    // 1. Si hay término de búsqueda por texto, consultar vtex_safety_stock por ilike para encontrar SKUs coincidentes
     const matchingIdsFromDesc = [];
+    if (search && isNaN(search)) {
+      try {
+        const { data: textMatches } = await supabaseAdmin
+          .from('vtex_safety_stock')
+          .select('sku_id')
+          .ilike('description', `%${search.trim()}%`)
+          .limit(1000);
 
-    if (safetyData) {
-      safetyData.forEach((row) => {
-        const skuStr = String(row.sku_id);
-        descMap.set(skuStr, row.description);
-
-        if (search && row.description && row.description.toLowerCase().includes(search.toLowerCase())) {
-          matchingIdsFromDesc.push(row.sku_id);
+        if (textMatches) {
+          textMatches.forEach((row) => matchingIdsFromDesc.push(row.sku_id));
         }
-      });
+      } catch (e) {}
     }
 
     // Conteos globales exactos de base de datos en paralelo (< 5ms)
@@ -155,7 +152,28 @@ export async function GET(request) {
       const realCount = filterDiscount === 'with_discount' ? filteredSkus.length : (search ? filteredSkus.length : (totalCatalogCount || 82234));
       const totalPages = Math.ceil(filteredSkus.length / pageSize) || 1;
       const from = (page - 1) * pageSize;
-      const paginatedSkus = filteredSkus.slice(from, from + pageSize);
+      const rawPaginatedSkus = filteredSkus.slice(from, from + pageSize);
+
+      // Cargar descripciones exactas desde vtex_safety_stock para los SKUs de la página actual
+      const pageSkuIds = rawPaginatedSkus.map((s) => s.id);
+      const descMap = new Map();
+      if (pageSkuIds.length > 0) {
+        const { data: safetyRows } = await supabaseAdmin
+          .from('vtex_safety_stock')
+          .select('sku_id, description')
+          .in('sku_id', pageSkuIds);
+
+        if (safetyRows) {
+          safetyRows.forEach((r) => {
+            if (r.description) descMap.set(String(r.sku_id), r.description);
+          });
+        }
+      }
+
+      const paginatedSkus = rawPaginatedSkus.map((s) => ({
+        ...s,
+        description: descMap.get(String(s.id)) || s.description || 'Producto SINSA',
+      }));
 
       return NextResponse.json({
         success: true,
@@ -204,6 +222,22 @@ export async function GET(request) {
 
     if (error) {
       return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+    }
+
+    // Cargar descripciones exactas desde vtex_safety_stock para los SKUs de la página actual
+    const pageSkuIds = (skus || []).map((s) => s.id);
+    const descMap = new Map();
+    if (pageSkuIds.length > 0) {
+      const { data: safetyRows } = await supabaseAdmin
+        .from('vtex_safety_stock')
+        .select('sku_id, description')
+        .in('sku_id', pageSkuIds);
+
+      if (safetyRows) {
+        safetyRows.forEach((r) => {
+          if (r.description) descMap.set(String(r.sku_id), r.description);
+        });
+      }
     }
 
     const formattedSkus = (skus || []).map((s) => {

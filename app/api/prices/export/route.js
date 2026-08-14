@@ -14,18 +14,32 @@ export async function GET(request) {
       return NextResponse.json({ success: false, error: 'Supabase no está configurado.' }, { status: 400 });
     }
 
-    // 1. Cargar mapa de descripciones desde vtex_safety_stock
-    const { data: safetyData } = await supabaseAdmin
-      .from('vtex_safety_stock')
-      .select('sku_id, description');
-
+    // 1. Cargar mapa de descripciones completo desde vtex_safety_stock (paginando para evitar el límite de 1000 filas)
     const descMap = new Map();
-    if (safetyData) {
-      safetyData.forEach((row) => {
-        if (row.sku_id && row.description) {
-          descMap.set(String(row.sku_id), row.description);
-        }
-      });
+    let safetyPage = 0;
+    const safetyPageSize = 1000;
+    let hasMoreSafety = true;
+
+    while (hasMoreSafety) {
+      const fromSafety = safetyPage * safetyPageSize;
+      const toSafety = fromSafety + safetyPageSize - 1;
+
+      const { data: safetyData } = await supabaseAdmin
+        .from('vtex_safety_stock')
+        .select('sku_id, description')
+        .range(fromSafety, toSafety);
+
+      if (safetyData && safetyData.length > 0) {
+        safetyData.forEach((row) => {
+          if (row.sku_id && row.description) {
+            descMap.set(String(row.sku_id), row.description);
+          }
+        });
+        if (safetyData.length < safetyPageSize) hasMoreSafety = false;
+        else safetyPage++;
+      } else {
+        hasMoreSafety = false;
+      }
     }
 
     // 2. Obtener la cantidad total de SKUs con precios

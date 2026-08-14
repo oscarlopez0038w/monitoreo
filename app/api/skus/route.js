@@ -46,19 +46,33 @@ async function fetchAllSkus(sortColumn, isAscending, search = '') {
     }
   }
 
-  // Enriquecer todos los SKUs con el stock de seguridad guardado
+  // Enriquecer todos los SKUs con el stock de seguridad guardado (paginando vtex_safety_stock completamente)
   let safetyMap = {};
-  const { data: safetyData } = await supabaseAdmin
-    .from('vtex_safety_stock')
-    .select('sku_id, description, safety_stock');
+  let safetyPage = 0;
+  const safetyPageSize = 1000;
+  let hasMoreSafety = true;
 
-  if (safetyData && safetyData.length > 0) {
-    safetyData.forEach((s) => {
-      safetyMap[s.sku_id] = {
-        description: s.description || null,
-        safetyStock: s.safety_stock || 0,
-      };
-    });
+  while (hasMoreSafety) {
+    const fromSafety = safetyPage * safetyPageSize;
+    const toSafety = fromSafety + safetyPageSize - 1;
+
+    const { data: safetyData } = await supabaseAdmin
+      .from('vtex_safety_stock')
+      .select('sku_id, description, safety_stock')
+      .range(fromSafety, toSafety);
+
+    if (safetyData && safetyData.length > 0) {
+      safetyData.forEach((s) => {
+        safetyMap[s.sku_id] = {
+          description: s.description || null,
+          safetyStock: s.safety_stock || 0,
+        };
+      });
+      if (safetyData.length < safetyPageSize) hasMoreSafety = false;
+      else safetyPage++;
+    } else {
+      hasMoreSafety = false;
+    }
   }
 
   return allRows.map((row) => ({
@@ -180,8 +194,36 @@ export async function GET(request) {
 
     if (search.trim()) {
       const searchNum = parseInt(search.trim(), 10);
+      const searchIds = new Set();
       if (!isNaN(searchNum)) {
-        query = query.eq('id', searchNum);
+        searchIds.add(searchNum);
+      }
+
+      try {
+        const { data: textMatches } = await supabaseAdmin
+          .from('vtex_safety_stock')
+          .select('sku_id')
+          .ilike('description', `%${search.trim()}%`)
+          .limit(500);
+
+        if (textMatches && textMatches.length > 0) {
+          textMatches.forEach((m) => searchIds.add(m.sku_id));
+        }
+      } catch (e) {}
+
+      if (searchIds.size > 0) {
+        query = query.in('id', Array.from(searchIds));
+      } else if (isNaN(searchNum)) {
+        return NextResponse.json({
+          success: true,
+          skus: [],
+          total: 0,
+          page,
+          limit,
+          totalPages: 0,
+          sortBy: validSortColumn,
+          sortOrder,
+        });
       }
     }
 
