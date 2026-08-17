@@ -54,6 +54,20 @@ async function fetchCandidateSkus(search, matchingIdsFromDesc) {
   return results.flatMap((r) => r.data || []);
 }
 
+let candidatesCache = null;
+let candidatesCacheTime = 0;
+
+async function getGlobalCandidates() {
+  const now = Date.now();
+  if (candidatesCache && now - candidatesCacheTime < 60000) {
+    return candidatesCache;
+  }
+  const fresh = await fetchCandidateSkus('', []);
+  candidatesCache = fresh;
+  candidatesCacheTime = now;
+  return fresh;
+}
+
 export async function GET(request) {
   try {
     if (!isSupabaseConfigured()) {
@@ -94,19 +108,13 @@ export async function GET(request) {
       supabaseAdmin.from('vtex_skus').select('id', { count: 'exact', head: true }),
     ]);
 
-    // Para conteo exacto y consistente de ofertas
-    const globalCandidates = await fetchCandidateSkus('', []);
-    const discountedSkusCountGlobal = globalCandidates.filter(
-      (s) => s.list_price !== null && s.base_price !== null && parseFloat(s.list_price) > parseFloat(s.base_price)
-    ).length;
+    let discountedSkusCountGlobal = 0;
 
     // Caso A: Filtrar por descuento o calcular descuento % para ordenar por descuento %
     if (sortBy === 'discount_pct' || filterDiscount === 'with_discount') {
-      const candidateSkus = search ? await fetchCandidateSkus(search, matchingIdsFromDesc) : globalCandidates;
+      const candidateSkus = search ? await fetchCandidateSkus(search, matchingIdsFromDesc) : await getGlobalCandidates();
 
       let formattedCandidates = candidateSkus.map((s) => {
-        const skuIdStr = String(s.id);
-        const description = descMap.get(skuIdStr) || s.description || 'Producto SINSA';
         const listPrice = s.list_price !== null && s.list_price !== undefined ? parseFloat(s.list_price) : null;
         const basePrice = s.base_price !== null && s.base_price !== undefined ? parseFloat(s.base_price) : null;
         const costPrice = s.cost_price !== null && s.cost_price !== undefined ? parseFloat(s.cost_price) : null;
@@ -118,7 +126,7 @@ export async function GET(request) {
 
         return {
           id: s.id,
-          description,
+          description: s.description || 'Producto SINSA',
           listPrice,
           basePrice,
           costPrice,
@@ -135,7 +143,12 @@ export async function GET(request) {
 
       // Ordenar resultados
       if (sortBy === 'discount_pct') {
-        filteredSkus.sort((a, b) => (isAsc ? a.discountPct - b.discountPct : b.discountPct - a.discountPct));
+        filteredSkus.sort((a, b) => {
+          if (a.discountPct !== b.discountPct) {
+            return isAsc ? a.discountPct - b.discountPct : b.discountPct - a.discountPct;
+          }
+          return isAsc ? a.id - b.id : b.id - a.id;
+        });
       } else if (['id', 'base_price', 'list_price', 'price_updated_at'].includes(sortBy)) {
         filteredSkus.sort((a, b) => {
           let valA = a[sortBy];
@@ -174,6 +187,11 @@ export async function GET(request) {
         ...s,
         description: descMap.get(String(s.id)) || s.description || 'Producto SINSA',
       }));
+
+      const candidatesAll = await getGlobalCandidates();
+      discountedSkusCountGlobal = candidatesAll.filter(
+        (s) => s.list_price !== null && s.base_price !== null && parseFloat(s.list_price) > parseFloat(s.base_price)
+      ).length;
 
       return NextResponse.json({
         success: true,
@@ -263,6 +281,12 @@ export async function GET(request) {
         isActive: s.is_active ?? true,
       };
     });
+
+    if (candidatesCache) {
+      discountedSkusCountGlobal = candidatesCache.filter(
+        (s) => s.list_price !== null && s.base_price !== null && parseFloat(s.list_price) > parseFloat(s.base_price)
+      ).length;
+    }
 
     const realTotalCount = search ? (count || 0) : (filterDiscount === 'no_discount' ? (count || 0) : (totalCatalogCount || count || 0));
     const totalPages = Math.ceil(realTotalCount / pageSize) || 1;
