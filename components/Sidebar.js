@@ -19,6 +19,7 @@ import {
   LogOut,
   Users,
   Package,
+  Sparkles,
 } from 'lucide-react';
 
 export default function Sidebar({ vtexStatus, supabaseStatus, mobileOpen, onCloseMobile, newTxCount = 0 }) {
@@ -32,7 +33,7 @@ export default function Sidebar({ vtexStatus, supabaseStatus, mobileOpen, onClos
   const navItems = [
     {
       label: 'Dashboard Ventas',
-      href: '/dashboard',
+      href: '/',
       icon: LayoutDashboard,
       color: '#38bdf8',
       permission: 'dashboard:view',
@@ -46,7 +47,7 @@ export default function Sidebar({ vtexStatus, supabaseStatus, mobileOpen, onClos
     },
     {
       label: 'Inventario & SKUs',
-      href: '/',
+      href: '/inventario',
       icon: Layers,
       color: 'var(--accent-primary)',
       permission: 'skus:view',
@@ -72,6 +73,13 @@ export default function Sidebar({ vtexStatus, supabaseStatus, mobileOpen, onClos
       icon: Tag,
       color: '#a5b4fc',
       permission: 'prices:manage',
+    },
+    {
+      label: 'Vitrinas Home',
+      href: '/vitrinas',
+      icon: Sparkles,
+      color: '#38bdf8',
+      permission: 'showcases:manage',
     },
     {
       label: 'Simulador Carrito',

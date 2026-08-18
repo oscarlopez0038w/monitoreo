@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { isVtexConfigured, fetchVtexOrders, fetchVtexOrderDetail } from '@/lib/vtex';
+import { supabaseAdmin, isSupabaseConfigured } from '@/lib/supabase';
 import { getNicaraguaNow } from '@/lib/dateUtils';
 
 export const dynamic = 'force-dynamic';
@@ -9,7 +10,7 @@ export const revalidate = 0;
 async function fetchAllPeriodOrders(startIso, endIso) {
   let allOrders = [];
   let page = 1;
-  let maxPages = 15; // Límite de seguridad (hasta 1,500 órdenes por mes)
+  let maxPages = 15;
 
   while (page <= maxPages) {
     const res = await fetchVtexOrders(startIso, endIso, '', '', page, 100).catch(() => null);
@@ -24,7 +25,7 @@ async function fetchAllPeriodOrders(startIso, endIso) {
   return allOrders;
 }
 
-// Función para consultar los detalles de las órdenes en lotes concurrentes y determinar Social Selling con 100% de precisión
+// Función para consultar los detalles de las órdenes en lotes concurrentes y determinar Social Selling
 async function analyzeSocialSellingOrders(orders) {
   let socialCount = 0;
   let socialRevenue = 0;
@@ -40,14 +41,13 @@ async function analyzeSocialSellingOrders(orders) {
       const origOrder = batch[idx];
       if (!detail) return;
 
-      // Excluir canceladas si aplica
       if (detail.status === 'canceled') return;
 
       const mData = detail.marketingData || {};
       const utmi = mData.utmiCampaign || detail.utmiCampaign || mData.utmicampaign;
-
-      // Regla explícita del negocio: Si trae el UTM icampaign (código de vendedor) es Social Selling, de lo contrario es Orgánica
-      const isSocial = Boolean(utmi && String(utmi).trim().length > 0);
+      const mTags = mData.marketingTags || detail.marketingTags || [];
+      const hasSocialTag = Array.isArray(mTags) && mTags.includes('vtexSocialSelling');
+      const isSocial = Boolean((utmi && String(utmi).trim().length > 0) || hasSocialTag);
 
       if (isSocial) {
         socialCount++;
@@ -60,10 +60,8 @@ async function analyzeSocialSellingOrders(orders) {
   return { count: socialCount, revenue: socialRevenue };
 }
 
-// Función para formatear fechas amigables en español (ej. "1 de Agosto 2026")
 function formatFriendlyDateRange(startStr, endStr) {
   const monthNames = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
-  
   const [sY, sM, sD] = startStr.split('-').map(Number);
   const [eY, eM, eD] = endStr.split('-').map(Number);
 
@@ -81,23 +79,17 @@ function formatFriendlyDateRange(startStr, endStr) {
 export async function GET(request) {
   try {
     if (!isVtexConfigured()) {
-      return NextResponse.json(
-        { success: false, error: 'VTEX no está configurado.' },
-        { status: 400 }
-      );
+      return NextResponse.json({ success: false, error: 'VTEX no está configurado.' }, { status: 400 });
     }
 
     const { searchParams } = new URL(request.url);
     const nicNow = getNicaraguaNow();
 
-    // Calcular valores por defecto en zona horaria Nicaragua (UTC-6)
-    // Período A por defecto: Mes Actual (inicio del mes hasta hoy)
     const defaultStartA = nicNow.firstDayStr;
     const defaultEndA = nicNow.todayStr;
 
-    // Período B por defecto: Mismísimos Días (MTD - Month to Date) para una carga inicial ultra-rápida y comparación justa 1:1
     let prevYearVal = nicNow.year;
-    let prevMonthVal = nicNow.month - 1; // 0-indexed
+    let prevMonthVal = nicNow.month - 1;
     if (prevMonthVal < 0) {
       prevMonthVal = 11;
       prevYearVal -= 1;
@@ -108,20 +100,16 @@ export async function GET(request) {
     const defaultStartB = `${prevYearVal}-${String(prevMonthVal + 1).padStart(2, '0')}-01`;
     const defaultEndB = `${prevYearVal}-${String(prevMonthVal + 1).padStart(2, '0')}-${String(prevMonthSameDay).padStart(2, '0')}`;
 
-    // Extraer parámetros explícitos de fecha enviados desde el cliente
     const startDateA = searchParams.get('startDateA') || searchParams.get('startA') || defaultStartA;
     const endDateA = searchParams.get('endDateA') || searchParams.get('endA') || defaultEndA;
-
     const startDateB = searchParams.get('startDateB') || searchParams.get('startB') || defaultStartB;
     const endDateB = searchParams.get('endDateB') || searchParams.get('endB') || defaultEndB;
 
     const currentStartIso = new Date(`${startDateA}T00:00:00-06:00`).toISOString();
     const currentEndIso = new Date(`${endDateA}T23:59:59-06:00`).toISOString();
-
     const prevStartIso = new Date(`${startDateB}T00:00:00-06:00`).toISOString();
     const prevEndIso = new Date(`${endDateB}T23:59:59-06:00`).toISOString();
 
-    // Consultar TODAS las órdenes del Período A y del Período B en paralelo
     const [
       currOrders,
       prevOrders,
@@ -142,7 +130,6 @@ export async function GET(request) {
       fetchVtexOrders(prevStartIso, prevEndIso, 'canceled', '', 1, 1).catch(() => null),
     ]);
 
-    // EXCLUIR ÓRDENES CANCELADAS de la sumatoria de Ventas Totales
     const currValidOrders = currOrders.filter((o) => o.status !== 'canceled');
     const currTotalRevenue = currValidOrders.reduce((sum, o) => sum + (o.totalValue ? o.totalValue / 100 : 0), 0);
     const currTotalOrders = currOrders.length;
@@ -153,21 +140,17 @@ export async function GET(request) {
     const prevTotalOrders = prevOrders.length;
     const prevAvgTicket = prevValidOrders.length > 0 ? prevTotalRevenue / prevValidOrders.length : 0;
 
-    // Conteo exacto por estados (Período A)
     const currInvoicedCount = currInvoicedRes?.paging?.total ?? 0;
     const currHandlingCount = currHandlingRes?.paging?.total ?? 0;
     const currReadyCount = currReadyRes?.paging?.total ?? 0;
     const currCanceledCount = currCanceledRes?.paging?.total ?? 0;
 
-    // Conteo exacto por estados (Período B)
     const prevInvoicedCount = prevInvoicedRes?.paging?.total ?? 0;
     const prevCanceledCount = prevCanceledRes?.paging?.total ?? 0;
 
-    // Tasa de cancelación
     const currCancelRate = currTotalOrders > 0 ? (currCanceledCount / currTotalOrders) * 100 : 0;
     const prevCancelRate = prevTotalOrders > 0 ? (prevCanceledCount / prevTotalOrders) * 100 : 0;
 
-    // Análisis 100% preciso de Social Selling inspeccionando los detalles de las órdenes de AMBOS períodos
     const [currSocialAnalysis, prevSocialAnalysis] = await Promise.all([
       analyzeSocialSellingOrders(currValidOrders),
       analyzeSocialSellingOrders(prevValidOrders),
@@ -176,21 +159,18 @@ export async function GET(request) {
     const socialSellingOrdersCount = currSocialAnalysis.count;
     const socialSellingRevenue = currSocialAnalysis.revenue;
     const socialSellingPct = currValidOrders.length > 0 ? (socialSellingOrdersCount / currValidOrders.length) * 100 : 0;
-
     const webDirectPct = 100 - socialSellingPct;
     const webDirectRevenue = Math.max(0, currTotalRevenue - socialSellingRevenue);
 
-    // Métricas del Período B
     const prevSocialSellingOrdersCount = prevSocialAnalysis.count;
     const prevSocialSellingRevenue = prevSocialAnalysis.revenue;
     const prevSocialSellingPct = prevValidOrders.length > 0 ? (prevSocialSellingOrdersCount / prevValidOrders.length) * 100 : 0;
-
     const prevWebDirectPct = 100 - prevSocialSellingPct;
     const prevWebDirectRevenue = Math.max(0, prevTotalRevenue - prevSocialSellingRevenue);
 
     const BCN_EXCHANGE_RATE = 36.6243;
 
-    // Generar desglose diario para el Período A (Mes Actual)
+    // Generar desglose diario para el Período A
     const dailyMap = {};
     const startDateObj = new Date(`${startDateA}T00:00:00-06:00`);
     const endDateObj = new Date(`${endDateA}T00:00:00-06:00`);
@@ -271,7 +251,138 @@ export async function GET(request) {
       })
       .sort((a, b) => a.date.localeCompare(b.date));
 
-    // Función auxiliar para calcular porcentaje de cambio
+    // Extraer UTMs, Cupones y Métodos de Envío desde Supabase vtex_orders para el Período A
+    let utmCampaigns = [];
+    let utmSources = [];
+    let couponsList = [];
+    let vtexPromotions = [];
+    let logisticsSummary = {
+      pickupCount: 0,
+      pickupRevenue: 0,
+      deliveryCount: 0,
+      deliveryRevenue: 0,
+      freeFreightCount: 0,
+    };
+
+    if (isSupabaseConfigured()) {
+      try {
+        const { data: dbPeriodOrders } = await supabaseAdmin
+          .from('vtex_orders')
+          .select('*')
+          .gte('creation_date', currentStartIso)
+          .lte('creation_date', currentEndIso);
+
+        const campMap = {};
+        const sourceMap = {};
+        const couponMap = {};
+        const promoMap = {};
+
+        (dbPeriodOrders || []).forEach((r) => {
+          if (r.status === 'canceled') return;
+
+          const valNio = r.total_value || 0;
+          const detailObj = r.detail_json || (r.items && r.items.detail);
+          let mkt = r.marketing_json || detailObj?.marketingData || null;
+          let fulfillmentType = r.fulfillment_type || 'delivery';
+          let pickupStore = r.pickup_store || '';
+          let shippingCost = r.shipping_cost || 0;
+
+          if (r.items && !Array.isArray(r.items) && typeof r.items === 'object') {
+            mkt = r.items.marketing || r.marketing_json || mkt;
+            fulfillmentType = r.items.fulfillmentType || fulfillmentType;
+            pickupStore = r.items.pickupStore || pickupStore;
+            shippingCost = r.items.shippingCost !== undefined ? r.items.shippingCost : shippingCost;
+          }
+
+          // Logística
+          const isPickup = fulfillmentType === 'pickup' || (pickupStore && pickupStore.length > 0);
+          if (isPickup) {
+            logisticsSummary.pickupCount++;
+            logisticsSummary.pickupRevenue += valNio;
+          } else {
+            logisticsSummary.deliveryCount++;
+            logisticsSummary.deliveryRevenue += valNio;
+          }
+
+          if (shippingCost === 0) {
+            logisticsSummary.freeFreightCount++;
+          }
+
+          // UTM Campaign
+          const camp = mkt?.utmCampaign || mkt?.utm_campaign;
+          const cKey = (camp && String(camp).trim().length > 0) ? String(camp).trim() : 'Sin Campaña Específica (Orgánico / Directo)';
+          campMap[cKey] = campMap[cKey] || { name: cKey, orders: 0, revenueNio: 0 };
+          campMap[cKey].orders += 1;
+          campMap[cKey].revenueNio += valNio;
+
+          // UTM Source / Canal
+          const utmiVal = mkt?.utmiCampaign || mkt?.utmi_campaign || r.marketing_json?.utmiCampaign || r.marketing_json?.utmicampaign || detailObj?.marketingData?.utmiCampaign;
+          const mTags = mkt?.marketingTags || r.marketing_json?.marketingTags || detailObj?.marketingData?.marketingTags || [];
+          const hasSocialTag = (Array.isArray(mTags) && mTags.includes('vtexSocialSelling')) || Boolean(utmiVal && String(utmiVal).trim().length > 0);
+
+          const src = hasSocialTag ? 'Vendedor Interno (Social Selling)' : (mkt?.utmSource || mkt?.utm_source || 'Orgánico / Directo');
+          const srcKey = String(src).trim();
+          sourceMap[srcKey] = sourceMap[srcKey] || { name: srcKey, orders: 0, revenueNio: 0 };
+          sourceMap[srcKey].orders += 1;
+          sourceMap[srcKey].revenueNio += valNio;
+
+          // Cupón
+          const cpn = mkt?.coupon;
+          if (cpn && String(cpn).trim().length > 0) {
+            const cpnKey = String(cpn).trim();
+            couponMap[cpnKey] = couponMap[cpnKey] || { code: cpnKey, orders: 0, revenueNio: 0 };
+            couponMap[cpnKey].orders += 1;
+            couponMap[cpnKey].revenueNio += valNio;
+          }
+
+          // Promociones & Alianzas VTEX (Promotions and Partnerships)
+          const promoArray = detailObj?.ratesAndBenefitsData?.rateAndBenefitsIdentifiers || [];
+          promoArray.forEach((promo) => {
+            const pName = (promo.name || promo.id || '').trim();
+            if (pName) {
+              promoMap[pName] = promoMap[pName] || { name: pName, orders: 0, revenueNio: 0 };
+              promoMap[pName].orders += 1;
+              promoMap[pName].revenueNio += valNio;
+            }
+          });
+        });
+
+        utmCampaigns = Object.values(campMap)
+          .map((c) => ({
+            ...c,
+            revenueUsd: parseFloat((c.revenueNio / BCN_EXCHANGE_RATE).toFixed(2)),
+            revenueNio: parseFloat(c.revenueNio.toFixed(2)),
+          }))
+          .sort((a, b) => b.revenueNio - a.revenueNio);
+
+        utmSources = Object.values(sourceMap)
+          .map((s) => ({
+            ...s,
+            revenueUsd: parseFloat((s.revenueNio / BCN_EXCHANGE_RATE).toFixed(2)),
+            revenueNio: parseFloat(s.revenueNio.toFixed(2)),
+          }))
+          .sort((a, b) => b.revenueNio - a.revenueNio);
+
+        couponsList = Object.values(couponMap)
+          .map((cp) => ({
+            ...cp,
+            revenueUsd: parseFloat((cp.revenueNio / BCN_EXCHANGE_RATE).toFixed(2)),
+            revenueNio: parseFloat(cp.revenueNio.toFixed(2)),
+          }))
+          .sort((a, b) => b.revenueNio - a.revenueNio);
+
+        vtexPromotions = Object.values(promoMap)
+          .map((p) => ({
+            ...p,
+            revenueUsd: parseFloat((p.revenueNio / BCN_EXCHANGE_RATE).toFixed(2)),
+            revenueNio: parseFloat(p.revenueNio.toFixed(2)),
+          }))
+          .sort((a, b) => b.revenueNio - a.revenueNio);
+      } catch (e) {
+        console.error('Error procesando UTMs en analytics API:', e);
+      }
+    }
+
     const calcChange = (curr, prev) => {
       if (!prev || prev === 0) return curr > 0 ? 100 : 0;
       return parseFloat((((curr - prev) / prev) * 100).toFixed(1));
@@ -366,6 +477,21 @@ export async function GET(request) {
             revenue: parseFloat(prevWebDirectRevenue.toFixed(2)),
           },
           changePct: calcChange(webDirectRevenue, prevWebDirectRevenue),
+        },
+      },
+      marketingAnalytics: {
+        utmCampaigns,
+        utmSources,
+        coupons: couponsList,
+        promotions: vtexPromotions,
+        logistics: {
+          pickupCount: logisticsSummary.pickupCount,
+          pickupRevenueNio: parseFloat(logisticsSummary.pickupRevenue.toFixed(2)),
+          pickupRevenueUsd: parseFloat((logisticsSummary.pickupRevenue / BCN_EXCHANGE_RATE).toFixed(2)),
+          deliveryCount: logisticsSummary.deliveryCount,
+          deliveryRevenueNio: parseFloat(logisticsSummary.deliveryRevenue.toFixed(2)),
+          deliveryRevenueUsd: parseFloat((logisticsSummary.deliveryRevenue / BCN_EXCHANGE_RATE).toFixed(2)),
+          freeFreightCount: logisticsSummary.freeFreightCount,
         },
       },
       pipeline: {

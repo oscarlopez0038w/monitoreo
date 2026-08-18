@@ -25,20 +25,37 @@ export async function POST(request) {
       return NextResponse.json({ success: false, error: `No se obtuvo información de la orden ${orderId}` });
     }
 
-    // Extract client name & email safely
+    // Extraer datos del cliente
     const clientData = orderDetail.clientProfileData || {};
     const firstName = clientData.firstName || '';
     const lastName = clientData.lastName || '';
     const clientName = `${firstName} ${lastName}`.trim() || clientData.email || 'Cliente General';
     const clientEmail = clientData.email || null;
 
-    // Items array mapping
+    // Extracción de datos de envío y entrega
+    const logInfo = orderDetail.shippingData?.logisticsInfo?.[0];
+    const channel = logInfo?.selectedDeliveryChannel || orderDetail.shippingData?.selectedAddresses?.[0]?.addressType || '';
+    const isPickup = channel === 'pickup-in-point' || channel === 'pickup';
+    const fulfillmentType = isPickup ? 'pickup' : 'delivery';
+    const pickupStore = isPickup
+      ? (logInfo?.pickupStoreInfo?.friendlyName || logInfo?.deliveryCompany || 'Retiro en Tienda')
+      : '';
+
+    const shippingVal = orderDetail.totals?.find((t) => t.id === 'Shipping')?.value;
+    const shippingCost = shippingVal !== undefined ? shippingVal / 100 : 0;
+
+    const addressJson = orderDetail.shippingData?.address || null;
+    const marketingJson = orderDetail.marketingData || null;
+
+    // Arreglo de ítems mapeados
     const items = (orderDetail.items || []).map((it) => ({
       id: it.id || it.sellerSku,
       name: it.name || it.skuName,
       quantity: it.quantity || 1,
       price: it.price ? it.price / 100 : 0,
-      totalPrice: it.price && it.quantity ? (it.price * it.quantity) / 100 : 0,
+      sellingPrice: it.sellingPrice ? it.sellingPrice / 100 : (it.price ? it.price / 100 : 0),
+      listPrice: it.listPrice ? it.listPrice / 100 : (it.price ? it.price / 100 : 0),
+      totalPrice: (it.sellingPrice || it.price ? (it.sellingPrice || it.price) * (it.quantity || 1) : 0) / 100,
     }));
 
     const orderRow = {
@@ -50,18 +67,41 @@ export async function POST(request) {
       client_name: clientName,
       client_email: clientEmail,
       total_value: orderDetail.value ? orderDetail.value / 100 : 0,
+      fulfillment_type: fulfillmentType,
+      pickup_store: pickupStore,
+      shipping_cost: shippingCost,
+      address_json: addressJson,
+      marketing_json: marketingJson,
       items: items,
+      detail_json: orderDetail,
       updated_at: new Date().toISOString(),
     };
 
     // 2. Guardar/Actualizar (upsert) en Supabase para gatillar Supabase Realtime WebSocket
     if (isSupabaseConfigured()) {
-      const { error } = await supabaseAdmin
-        .from('vtex_orders')
-        .upsert(orderRow, { onConflict: 'order_id' });
+      try {
+        const { error } = await supabaseAdmin
+          .from('vtex_orders')
+          .upsert(orderRow, { onConflict: 'order_id' });
 
-      if (error) {
-        console.error('Error al guardar orden webhook en Supabase:', error);
+        if (error) {
+          // Fallback seguro por si la tabla vtex_orders aún no tiene las columnas adicionales en SQL
+          const basicRow = {
+            order_id: orderRow.order_id,
+            sequence: orderRow.sequence,
+            status: orderRow.status,
+            status_description: orderRow.status_description,
+            creation_date: orderRow.creation_date,
+            client_name: orderRow.client_name,
+            client_email: orderRow.client_email,
+            total_value: orderRow.total_value,
+            items: orderRow.items,
+            updated_at: orderRow.updated_at,
+          };
+          await supabaseAdmin.from('vtex_orders').upsert(basicRow, { onConflict: 'order_id' });
+        }
+      } catch (errDb) {
+        console.error('Error al guardar orden webhook en Supabase:', errDb);
       }
     }
 

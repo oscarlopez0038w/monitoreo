@@ -18,6 +18,12 @@ import {
   Terminal,
   Download,
   Loader2,
+  Edit3,
+  X,
+  DollarSign,
+  Calendar,
+  Clock,
+  CheckCircle2,
 } from 'lucide-react';
 
 export default function PricesTable() {
@@ -39,6 +45,128 @@ export default function PricesTable() {
   const [stats, setStats] = useState({ totalPricedSkus: 0, totalCatalogCount: 82234, discountedSkusCount: 0 });
   const [banner, setBanner] = useState(null);
   const [logs, setLogs] = useState([]);
+
+  // Modal de Edición de Precio
+  const [isPriceModalOpen, setIsPriceModalOpen] = useState(false);
+  const [editingSku, setEditingSku] = useState(null);
+  const [loadingModalData, setLoadingModalData] = useState(false);
+  const [savingPrice, setSavingPrice] = useState(false);
+  const [priceForm, setPriceForm] = useState({
+    costPrice: '',
+    basePrice: '',
+    listPrice: '',
+    hasFixedPrice: false,
+    fixedPriceValue: '',
+    fixedPriceListPrice: '',
+    minQuantity: '1',
+    dateFrom: '',
+    dateTo: '',
+  });
+
+  const handleOpenEditModal = async (sku) => {
+    setEditingSku(sku);
+    setIsPriceModalOpen(true);
+    setLoadingModalData(true);
+
+    const initialCost = sku.costPrice !== null && sku.costPrice !== undefined ? String(sku.costPrice) : (sku.basePrice !== null ? String(sku.basePrice) : '');
+    const initialBase = sku.basePrice !== null && sku.basePrice !== undefined ? String(sku.basePrice) : '';
+    const initialList = sku.listPrice !== null && sku.listPrice !== undefined ? String(sku.listPrice) : '';
+
+    setPriceForm({
+      costPrice: initialCost,
+      basePrice: initialBase,
+      listPrice: initialList,
+      hasFixedPrice: false,
+      fixedPriceValue: '',
+      fixedPriceListPrice: '',
+      minQuantity: '1',
+      dateFrom: '',
+      dateTo: '',
+    });
+
+    try {
+      const res = await fetch(`/api/prices/sync?skuId=${sku.id}`);
+      const fresh = await res.json();
+      if (fresh && fresh.success) {
+        setPriceForm({
+          costPrice: fresh.costPrice !== null && fresh.costPrice !== undefined ? String(fresh.costPrice) : initialCost,
+          basePrice: fresh.basePrice !== null && fresh.basePrice !== undefined ? String(fresh.basePrice) : initialBase,
+          listPrice: fresh.listPrice !== null && fresh.listPrice !== undefined ? String(fresh.listPrice) : initialList,
+          hasFixedPrice: Array.isArray(fresh.fixedPrices) && fresh.fixedPrices.length > 0,
+          fixedPriceValue: fresh.fixedPrices?.[0]?.value !== undefined ? String(fresh.fixedPrices[0].value) : '',
+          fixedPriceListPrice: fresh.fixedPrices?.[0]?.listPrice !== undefined && fresh.fixedPrices[0].listPrice !== null ? String(fresh.fixedPrices[0].listPrice) : '',
+          minQuantity: fresh.fixedPrices?.[0]?.minQuantity !== undefined ? String(fresh.fixedPrices[0].minQuantity) : '1',
+          dateFrom: fresh.fixedPrices?.[0]?.dateRange?.from ? fresh.fixedPrices[0].dateRange.from.substring(0, 16) : '',
+          dateTo: fresh.fixedPrices?.[0]?.dateRange?.to ? fresh.fixedPrices[0].dateRange.to.substring(0, 16) : '',
+        });
+      }
+    } catch (e) {
+      console.error('Error cargando detalles de precio:', e);
+    } finally {
+      setLoadingModalData(false);
+    }
+  };
+
+  const handleSavePriceSubmit = async (e) => {
+    e.preventDefault();
+    if (!editingSku) return;
+
+    setSavingPrice(true);
+    try {
+      const res = await fetch('/api/prices/update', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          skuId: editingSku.id,
+          costPrice: priceForm.costPrice,
+          basePrice: priceForm.basePrice,
+          listPrice: priceForm.listPrice,
+          hasFixedPrice: priceForm.hasFixedPrice,
+          fixedPriceValue: priceForm.fixedPriceValue,
+          fixedPriceListPrice: priceForm.fixedPriceListPrice,
+          minQuantity: priceForm.minQuantity,
+          dateFrom: priceForm.dateFrom,
+          dateTo: priceForm.dateTo,
+        }),
+      });
+
+      const data = await res.json();
+      if (data.success) {
+        const baseP = parseFloat(priceForm.basePrice || 0);
+        const listP = priceForm.listPrice ? parseFloat(priceForm.listPrice) : null;
+        let discPct = 0;
+        if (listP && baseP && listP > baseP) {
+          discPct = parseFloat((((listP - baseP) / listP) * 100).toFixed(1));
+        }
+
+        setSkus((prev) =>
+          prev.map((item) => {
+            if (item.id === editingSku.id) {
+              return {
+                ...item,
+                costPrice: parseFloat(priceForm.costPrice || 0),
+                basePrice: baseP,
+                listPrice: listP,
+                discountPct: discPct,
+                priceUpdatedAt: new Date().toISOString(),
+              };
+            }
+            return item;
+          })
+        );
+
+        setIsPriceModalOpen(false);
+        setBanner({ type: 'success', text: `✅ Precio del SKU ${editingSku.id} actualizado exitosamente en VTEX y Supabase.` });
+        fetchPrices(false);
+      } else {
+        alert(`Error actualizando precio: ${data.error || data.vtexError}`);
+      }
+    } catch (err) {
+      alert(`Error de red al actualizar precio: ${err.message}`);
+    } finally {
+      setSavingPrice(false);
+    }
+  };
 
   const syncRef = useRef(false);
 
@@ -78,6 +206,16 @@ export default function PricesTable() {
   useEffect(() => {
     fetchPrices(true);
   }, [fetchPrices]);
+
+  // Auto-cerrar banner de notificación tras 3 segundos
+  useEffect(() => {
+    if (banner) {
+      const timer = setTimeout(() => {
+        setBanner(null);
+      }, 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [banner]);
 
   // Bucle de sincronización masiva ininterrumpido cliente-servidor
   const handleToggleSync = async () => {
@@ -654,18 +792,39 @@ export default function PricesTable() {
                         {sku.priceUpdatedAt ? new Date(sku.priceUpdatedAt).toLocaleString('es-NI') : 'Pendiente'}
                       </td>
 
-                      {/* Botón Refrescar individual */}
+                      {/* ACCIONES: Botones Editar y Refrescar */}
                       <td style={{ padding: '0.6rem 0.75rem', textAlign: 'center' }}>
-                        <button
-                          onClick={() => handleRefreshSingleSku(sku.id)}
-                          disabled={isUpdatingThis}
-                          className="btn-secondary"
-                          style={{ padding: '0.25rem 0.55rem', fontSize: '0.72rem', minHeight: '30px' }}
-                          title="Actualizar precio de este SKU desde VTEX en tiempo real"
-                        >
-                          <RefreshCw size={12} className={isUpdatingThis ? 'animate-spin' : ''} />
-                          {isUpdatingThis ? 'Cargando' : 'Refrescar'}
-                        </button>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem' }}>
+                          <button
+                            onClick={() => handleOpenEditModal(sku)}
+                            className="btn-secondary"
+                            style={{
+                              padding: '0.25rem 0.6rem',
+                              fontSize: '0.74rem',
+                              minHeight: '30px',
+                              color: '#a5b4fc',
+                              borderColor: 'rgba(165, 180, 252, 0.4)',
+                              background: 'rgba(165, 180, 252, 0.1)',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '0.3rem',
+                            }}
+                            title="Editar Cost Price, Base Price y Fixed Prices en VTEX"
+                          >
+                            <Edit3 size={13} /> Editar
+                          </button>
+
+                          <button
+                            onClick={() => handleRefreshSingleSku(sku.id)}
+                            disabled={isUpdatingThis}
+                            className="btn-secondary"
+                            style={{ padding: '0.25rem 0.55rem', fontSize: '0.72rem', minHeight: '30px', display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}
+                            title="Actualizar precio de este SKU desde VTEX en tiempo real"
+                          >
+                            <RefreshCw size={12} className={isUpdatingThis ? 'animate-spin' : ''} />
+                            {isUpdatingThis ? 'Cargando' : 'Refrescar'}
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   );
@@ -704,6 +863,306 @@ export default function PricesTable() {
         )}
 
       </div>
+
+      {/* MODAL EJECUTIVO DE EDICIÓN DE PRECIOS (Cost Price, Base Price & Fixed Prices) */}
+      {isPriceModalOpen && editingSku && (
+        <div
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(11, 15, 25, 0.85)',
+            backdropFilter: 'blur(12px)',
+            WebkitBackdropFilter: 'blur(12px)',
+            zIndex: 9999,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '1rem',
+          }}
+          onClick={() => setIsPriceModalOpen(false)}
+        >
+          <div
+            style={{
+              background: 'linear-gradient(135deg, rgba(15, 23, 42, 0.98), rgba(30, 41, 59, 0.99))',
+              border: '1px solid rgba(165, 180, 252, 0.35)',
+              boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.9), 0 0 30px rgba(165, 180, 252, 0.2)',
+              borderRadius: '18px',
+              maxWidth: '620px',
+              width: '100%',
+              maxHeight: '90vh',
+              overflowY: 'auto',
+              padding: '1.5rem',
+              color: '#ffffff',
+              boxSizing: 'border-box',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1.25rem', borderBottom: '1px solid rgba(255, 255, 255, 0.1)', paddingBottom: '0.85rem' }}>
+              <div>
+                <span style={{ fontSize: '0.72rem', color: '#a5b4fc', textTransform: 'uppercase', fontWeight: 700, letterSpacing: '0.05em' }}>
+                  SKU {editingSku.id}
+                </span>
+                <h3 style={{ fontSize: '1.15rem', fontWeight: 700, color: '#ffffff', margin: '0.15rem 0 0 0' }}>
+                  {editingSku.description || `SKU ${editingSku.id}`}
+                </h3>
+              </div>
+
+              <button
+                onClick={() => setIsPriceModalOpen(false)}
+                style={{ background: 'transparent', border: 'none', color: 'var(--text-dim)', cursor: 'pointer', padding: '0.2rem' }}
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            {loadingModalData ? (
+              <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>
+                <Loader2 size={24} className="animate-spin" color="#a5b4fc" style={{ margin: '0 auto 0.5rem auto' }} />
+                Consultando estructura de precios reales en VTEX Pricing API...
+              </div>
+            ) : (
+              <form onSubmit={handleSavePriceSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1.15rem' }}>
+                
+                {/* 1. SECCIÓN: PRECIOS BASE Y COSTO */}
+                <div style={{ background: 'rgba(15, 23, 42, 0.6)', padding: '1rem', borderRadius: '12px', border: '1px solid rgba(255, 255, 255, 0.08)' }}>
+                  <h4 style={{ fontSize: '0.85rem', fontWeight: 700, color: '#38bdf8', margin: '0 0 0.85rem 0', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                    <DollarSign size={15} color="#38bdf8" /> Precios de Catálogo (Cost & Base Price)
+                  </h4>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.85rem' }}>
+                    {/* Cost price */}
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.74rem', color: 'var(--text-muted)', marginBottom: '0.3rem', fontWeight: 600 }}>
+                        Cost price (Precio Costo C$)
+                      </label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        className="glass-input"
+                        style={{ width: '100%', fontSize: '0.85rem', fontWeight: 700, fontFamily: 'var(--font-mono)' }}
+                        placeholder="0.00"
+                        value={priceForm.costPrice}
+                        onChange={(e) => setPriceForm({ ...priceForm, costPrice: e.target.value })}
+                        required
+                      />
+                    </div>
+
+                    {/* Base price */}
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.74rem', color: '#34d399', marginBottom: '0.3rem', fontWeight: 600 }}>
+                        Base price (Precio Base Venta C$)
+                      </label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        className="glass-input"
+                        style={{ width: '100%', fontSize: '0.85rem', fontWeight: 700, fontFamily: 'var(--font-mono)', color: '#34d399' }}
+                        placeholder="0.00"
+                        value={priceForm.basePrice}
+                        onChange={(e) => setPriceForm({ ...priceForm, basePrice: e.target.value })}
+                        required
+                      />
+                    </div>
+                  </div>
+
+                  {/* List price (MSRP) */}
+                  <div style={{ marginTop: '0.75rem' }}>
+                    <label style={{ display: 'block', fontSize: '0.74rem', color: 'var(--text-muted)', marginBottom: '0.3rem', fontWeight: 600 }}>
+                      List price / MSRP (Precio de Lista / Tachado C$)
+                    </label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      className="glass-input"
+                      style={{ width: '100%', fontSize: '0.85rem', fontFamily: 'var(--font-mono)' }}
+                      placeholder="Dejar vacío si es igual al Base price"
+                      value={priceForm.listPrice}
+                      onChange={(e) => setPriceForm({ ...priceForm, listPrice: e.target.value })}
+                    />
+                  </div>
+                </div>
+
+                {/* 2. SECCIÓN: PRECIO FIJO / OFERTA PROGRAMADA (FIXED PRICES) */}
+                <div style={{ background: 'rgba(15, 23, 42, 0.6)', padding: '1rem', borderRadius: '12px', border: priceForm.hasFixedPrice ? '1px solid rgba(165, 180, 252, 0.4)' : '1px solid rgba(255, 255, 255, 0.08)' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.5rem', marginBottom: priceForm.hasFixedPrice ? '0.85rem' : '0' }}>
+                    <label style={{ fontSize: '0.85rem', fontWeight: 700, color: priceForm.hasFixedPrice ? '#a5b4fc' : 'var(--text-muted)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
+                      <input
+                        type="checkbox"
+                        checked={priceForm.hasFixedPrice}
+                        onChange={(e) => {
+                          const checked = e.target.checked;
+                          setPriceForm({
+                            ...priceForm,
+                            hasFixedPrice: checked,
+                            fixedPriceValue: checked ? priceForm.fixedPriceValue : '',
+                            fixedPriceListPrice: checked ? priceForm.fixedPriceListPrice : '',
+                            dateFrom: checked ? priceForm.dateFrom : '',
+                            dateTo: checked ? priceForm.dateTo : '',
+                          });
+                        }}
+                        style={{ width: '16px', height: '16px', accentColor: '#a5b4fc', cursor: 'pointer' }}
+                      />
+                      🏷️ Activar Precio Fijo / Oferta (Fixed Price)
+                    </label>
+
+                    {priceForm.hasFixedPrice && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setPriceForm({
+                            ...priceForm,
+                            hasFixedPrice: false,
+                            fixedPriceValue: '',
+                            fixedPriceListPrice: '',
+                            dateFrom: '',
+                            dateTo: '',
+                          });
+                        }}
+                        style={{
+                          background: 'rgba(239, 68, 68, 0.15)',
+                          border: '1px solid rgba(239, 68, 68, 0.4)',
+                          color: '#f87171',
+                          padding: '0.25rem 0.65rem',
+                          borderRadius: '6px',
+                          fontSize: '0.74rem',
+                          fontWeight: 600,
+                          cursor: 'pointer',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '0.3rem',
+                        }}
+                        title="Desmarcar y eliminar la oferta de precio fijo en VTEX"
+                      >
+                        🗑️ Remover Precio Fijo
+                      </button>
+                    )}
+                  </div>
+
+                  {!priceForm.hasFixedPrice && (
+                    <p style={{ fontSize: '0.73rem', color: 'var(--text-dim)', margin: '0.4rem 0 0 0', lineHeight: '1.3' }}>
+                      💡 Al desmarcar esta casilla y dar clic en <strong>Guardar</strong>, se eliminará cualquier precio fijo u oferta programada en VTEX, y el producto volverá a venderse a su <strong>Base price</strong>.
+                    </p>
+                  )}
+
+                  {priceForm.hasFixedPrice && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', paddingTop: '0.5rem', borderTop: '1px dashed rgba(255, 255, 255, 0.1)' }}>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.85rem' }}>
+                        <div>
+                          <label style={{ display: 'block', fontSize: '0.72rem', color: '#a5b4fc', marginBottom: '0.3rem', fontWeight: 600 }}>
+                            Precio Fijo (Value C$) *
+                          </label>
+                          <input
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            className="glass-input"
+                            style={{ width: '100%', fontSize: '0.85rem', fontWeight: 700, fontFamily: 'var(--font-mono)', color: '#a5b4fc' }}
+                            placeholder="Ej: 1200.00"
+                            value={priceForm.fixedPriceValue}
+                            onChange={(e) => setPriceForm({ ...priceForm, fixedPriceValue: e.target.value })}
+                            required={priceForm.hasFixedPrice}
+                          />
+                        </div>
+
+                        <div>
+                          <label style={{ display: 'block', fontSize: '0.72rem', color: 'var(--text-muted)', marginBottom: '0.3rem', fontWeight: 600 }}>
+                            Precio Lista Fijo (List price C$)
+                          </label>
+                          <input
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            className="glass-input"
+                            style={{ width: '100%', fontSize: '0.85rem', fontFamily: 'var(--font-mono)' }}
+                            placeholder="Ej: 1500.00"
+                            value={priceForm.fixedPriceListPrice}
+                            onChange={(e) => setPriceForm({ ...priceForm, fixedPriceListPrice: e.target.value })}
+                          />
+                        </div>
+                      </div>
+
+                      {/* Cantidad Mínima */}
+                      <div>
+                        <label style={{ display: 'block', fontSize: '0.72rem', color: 'var(--text-dim)', marginBottom: '0.25rem' }}>
+                          Cant. Mínima
+                        </label>
+                        <input
+                          type="number"
+                          min="1"
+                          className="glass-input"
+                          style={{ width: '130px', fontSize: '0.8rem', padding: '0.35rem 0.5rem', boxSizing: 'border-box' }}
+                          value={priceForm.minQuantity}
+                          onChange={(e) => setPriceForm({ ...priceForm, minQuantity: e.target.value })}
+                        />
+                      </div>
+
+                      {/* Programación de Vigencia Opcional */}
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', width: '100%', boxSizing: 'border-box' }}>
+                        <div>
+                          <label style={{ display: 'block', fontSize: '0.72rem', color: 'var(--text-dim)', marginBottom: '0.25rem' }}>
+                            Fecha Inicio (Desde)
+                          </label>
+                          <input
+                            type="datetime-local"
+                            className="glass-input"
+                            style={{ width: '100%', fontSize: '0.75rem', padding: '0.35rem 0.45rem', boxSizing: 'border-box' }}
+                            value={priceForm.dateFrom}
+                            onChange={(e) => setPriceForm({ ...priceForm, dateFrom: e.target.value })}
+                          />
+                        </div>
+
+                        <div>
+                          <label style={{ display: 'block', fontSize: '0.72rem', color: 'var(--text-dim)', marginBottom: '0.25rem' }}>
+                            Fecha Fin (Hasta)
+                          </label>
+                          <input
+                            type="datetime-local"
+                            className="glass-input"
+                            style={{ width: '100%', fontSize: '0.75rem', padding: '0.35rem 0.45rem', boxSizing: 'border-box' }}
+                            value={priceForm.dateTo}
+                            onChange={(e) => setPriceForm({ ...priceForm, dateTo: e.target.value })}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Footer Buttons */}
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '0.5rem' }}>
+                  <button
+                    type="button"
+                    onClick={() => setIsPriceModalOpen(false)}
+                    disabled={savingPrice}
+                    className="btn-secondary"
+                    style={{ padding: '0.5rem 1.1rem', fontSize: '0.85rem' }}
+                  >
+                    Cancelar
+                  </button>
+
+                  <button
+                    type="submit"
+                    disabled={savingPrice}
+                    className="btn-primary"
+                    style={{ padding: '0.5rem 1.3rem', fontSize: '0.85rem' }}
+                  >
+                    {savingPrice ? <Loader2 size={15} className="animate-spin" /> : <CheckCircle2 size={15} />}
+                    {savingPrice ? 'Guardando en VTEX...' : 'Guardar Precios en VTEX'}
+                  </button>
+                </div>
+
+              </form>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

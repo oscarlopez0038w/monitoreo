@@ -130,3 +130,34 @@ export async function POST(request) {
     return NextResponse.json({ success: false, error: err.message }, { status: 500 });
   }
 }
+
+export async function GET(request) {
+  try {
+    const { searchParams } = new URL(request.url);
+    const skuId = searchParams.get('skuId');
+
+    if (!skuId) {
+      return NextResponse.json({ success: false, error: 'Se requiere el parámetro skuId.' }, { status: 400 });
+    }
+
+    if (!isVtexConfigured()) {
+      return NextResponse.json({ success: false, error: 'VTEX no está configurado.' }, { status: 400 });
+    }
+
+    const priceData = await fetchSkuPrice(skuId);
+    if (!priceData) {
+      return NextResponse.json({ success: false, error: `Precio no encontrado para SKU ${skuId} en VTEX.` }, { status: 404 });
+    }
+
+    return NextResponse.json({
+      success: true,
+      skuId,
+      costPrice: priceData.costPrice,
+      basePrice: priceData.basePrice,
+      listPrice: priceData.listPrice,
+      fixedPrices: priceData.fixedPrices || [],
+    });
+  } catch (err) {
+    return NextResponse.json({ success: false, error: err.message }, { status: 500 });
+  }
+}

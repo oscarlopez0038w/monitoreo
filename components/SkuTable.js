@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Search, ChevronLeft, ChevronRight, Hash, Database, RefreshCw, Warehouse, Layers, ArrowUpDown, ArrowUp, ArrowDown, CheckCircle2, XCircle } from 'lucide-react';
+import { Search, ChevronLeft, ChevronRight, Hash, Database, RefreshCw, Warehouse, Layers, ArrowUpDown, ArrowUp, ArrowDown, CheckCircle2, XCircle, Power, ToggleRight, ToggleLeft } from 'lucide-react';
 import ExportButton from './ExportButton';
 
 export default function SkuTable({ onRefreshNeeded, refreshTrigger }) {
@@ -18,6 +18,37 @@ export default function SkuTable({ onRefreshNeeded, refreshTrigger }) {
 
   // Estado de actualización por SKU individual
   const [updatingSkuId, setUpdatingSkuId] = useState(null);
+  const [togglingActiveSkuId, setTogglingActiveSkuId] = useState(null);
+
+  const handleToggleSkuActive = async (skuId, currentIsActive) => {
+    const targetState = !currentIsActive;
+    const actionText = targetState ? 'activar' : 'desactivar';
+
+    setTogglingActiveSkuId(skuId);
+    try {
+      const res = await fetch('/api/skus/toggle-active', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ skuId, isActive: targetState }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setSkus((prevSkus) =>
+          prevSkus.map((s) => (s.id === skuId ? { ...s, is_active: targetState } : s))
+        );
+        if (data.vtexError) {
+          alert(`⚠️ SKU ${skuId} actualizado a ${targetState ? 'ACTIVO' : 'INACTIVO'} en BD local, pero VTEX devolvió el siguiente mensaje:\n\n${data.vtexError}`);
+        }
+        if (onRefreshNeeded) onRefreshNeeded();
+      } else {
+        alert(`Error al ${actionText} el SKU ${skuId}: ${data.error}`);
+      }
+    } catch (err) {
+      alert(`Error de conexión al ${actionText} SKU: ${err.message}`);
+    } finally {
+      setTogglingActiveSkuId(null);
+    }
+  };
 
   const fetchSkus = async (pageNum = 1, searchQuery = '', sortCol = sortBy, sortDir = sortOrder, isSilent = false) => {
     if (!isSilent) setLoading(true);
@@ -154,6 +185,31 @@ export default function SkuTable({ onRefreshNeeded, refreshTrigger }) {
           </div>
 
           <ExportButton totalSkus={totalSkus} />
+
+          {/* Controles de Paginación Superior */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+            <button
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              disabled={page <= 1 || loading}
+              className="btn-secondary"
+              style={{ padding: '0.35rem 0.65rem', fontSize: '0.78rem', display: 'inline-flex', alignItems: 'center', gap: '0.2rem' }}
+              title="Página Anterior"
+            >
+              <ChevronLeft size={15} /> Anterior
+            </button>
+            <span style={{ fontSize: '0.78rem', color: 'var(--text-dim)', padding: '0 0.2rem', fontWeight: 600 }}>
+              {page} / {totalPages}
+            </span>
+            <button
+              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+              disabled={page >= totalPages || loading}
+              className="btn-secondary"
+              style={{ padding: '0.35rem 0.65rem', fontSize: '0.78rem', display: 'inline-flex', alignItems: 'center', gap: '0.2rem' }}
+              title="Página Siguiente"
+            >
+              Siguiente <ChevronRight size={15} />
+            </button>
+          </div>
         </div>
       </div>
 
@@ -380,16 +436,56 @@ export default function SkuTable({ onRefreshNeeded, refreshTrigger }) {
                       : 'Pendiente'}
                   </td>
                   <td style={{ padding: '0.45rem 0.35rem', textAlign: 'right', whiteSpace: 'nowrap' }}>
-                    <button
-                      onClick={() => handleSingleSkuRefresh(sku.id)}
-                      disabled={updatingSkuId === sku.id}
-                      className="btn-secondary"
-                      style={{ padding: '0.25rem 0.45rem', fontSize: '0.72rem', borderRadius: '6px' }}
-                      title={`Consultar inventario en VTEX para SKU ${sku.id}`}
-                    >
-                      <RefreshCw size={11} className={updatingSkuId === sku.id ? 'animate-spin' : ''} />
-                      {updatingSkuId === sku.id ? 'Cargando' : 'Actualizar'}
-                    </button>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '0.3rem' }}>
+                      {/* Botón Switch de Activar/Desactivar SKU (Icono Compacto) */}
+                      <button
+                        onClick={() => handleToggleSkuActive(sku.id, sku.is_active !== false)}
+                        disabled={togglingActiveSkuId === sku.id}
+                        className="btn-secondary"
+                        style={{
+                          padding: '0.3rem 0.45rem',
+                          borderRadius: '8px',
+                          border: sku.is_active !== false ? '1px solid rgba(52, 211, 153, 0.4)' : '1px solid rgba(248, 113, 113, 0.4)',
+                          color: sku.is_active !== false ? '#34d399' : '#fb7185',
+                          background: sku.is_active !== false ? 'rgba(52, 211, 153, 0.12)' : 'rgba(248, 113, 113, 0.12)',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          cursor: 'pointer',
+                          transition: 'all 0.2s ease',
+                        }}
+                        title={sku.is_active !== false ? `Desactivar SKU ${sku.id} en VTEX y BD` : `Activar SKU ${sku.id} en VTEX y BD`}
+                      >
+                        {togglingActiveSkuId === sku.id ? (
+                          <RefreshCw size={14} className="animate-spin" />
+                        ) : sku.is_active !== false ? (
+                          <ToggleRight size={17} color="#34d399" />
+                        ) : (
+                          <ToggleLeft size={17} color="#fb7185" />
+                        )}
+                      </button>
+
+                      {/* Botón de Refrescar Inventario de SKU (Icono Compacto) */}
+                      <button
+                        onClick={() => handleSingleSkuRefresh(sku.id)}
+                        disabled={updatingSkuId === sku.id}
+                        className="btn-secondary"
+                        style={{
+                          padding: '0.3rem 0.45rem',
+                          borderRadius: '8px',
+                          color: '#38bdf8',
+                          border: '1px solid rgba(56, 189, 248, 0.3)',
+                          background: 'rgba(56, 189, 248, 0.08)',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          cursor: 'pointer',
+                        }}
+                        title={`Consultar e integrar inventario VTEX para SKU ${sku.id}`}
+                      >
+                        <RefreshCw size={13} className={updatingSkuId === sku.id ? 'animate-spin' : ''} />
+                      </button>
+                    </div>
                   </td>
                 </tr>
               );

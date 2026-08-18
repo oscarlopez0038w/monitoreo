@@ -282,11 +282,10 @@ export async function GET(request) {
       };
     });
 
-    if (candidatesCache) {
-      discountedSkusCountGlobal = candidatesCache.filter(
-        (s) => s.list_price !== null && s.base_price !== null && parseFloat(s.list_price) > parseFloat(s.base_price)
-      ).length;
-    }
+    const candidatesAll = await getGlobalCandidates();
+    discountedSkusCountGlobal = candidatesAll.filter(
+      (s) => s.list_price !== null && s.base_price !== null && parseFloat(s.list_price) > parseFloat(s.base_price)
+    ).length;
 
     const realTotalCount = search ? (count || 0) : (filterDiscount === 'no_discount' ? (count || 0) : (totalCatalogCount || count || 0));
     const totalPages = Math.ceil(realTotalCount / pageSize) || 1;

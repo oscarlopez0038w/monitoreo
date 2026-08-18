@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import AppLayout from '@/components/AppLayout';
 import { getNicaraguaNow } from '@/lib/dateUtils';
+import * as XLSX from 'xlsx';
 import {
   TrendingUp,
   TrendingDown,
@@ -20,6 +21,13 @@ import {
   Zap,
   Filter,
   CircleDollarSign,
+  Megaphone,
+  Tag,
+  Truck,
+  Store,
+  MapPin,
+  Gift,
+  FileSpreadsheet,
 } from 'lucide-react';
 
 // Generador de curvas Bezier suaves para SVG
@@ -585,6 +593,60 @@ export default function DashboardPage() {
     return formattedUsd;
   };
 
+  // Función para exportar el Reporte de Marketing (UTMs), Canales y Promociones a Excel (.xlsx)
+  const handleExportMarketingExcel = () => {
+    if (!data?.marketingAnalytics) return;
+
+    const rate = data?.bcnExchangeRate || 36.6243;
+    const totalNio = data?.kpis?.totalRevenue?.currentNio || 1;
+
+    // 1. Sheet de Campañas UTM
+    const campaignsData = (data.marketingAnalytics.utmCampaigns || []).map((c) => ({
+      'Campaña (utm_campaign)': c.name,
+      'Órdenes Completadas': c.orders,
+      '% del Total de Ventas': `${Math.round((c.revenueNio / totalNio) * 100)}%`,
+      'Ingresos (C$ NIO)': Math.round(c.revenueNio * 100) / 100,
+      'Ingresos ($ USD)': Math.round((c.revenueUsd || c.revenueNio / rate) * 100) / 100,
+    }));
+
+    // 2. Sheet de Fuentes y Canales de Origen
+    const sourcesData = (data.marketingAnalytics.utmSources || []).map((s) => ({
+      'Fuente / Canal de Origen (utm_source)': s.name,
+      'Órdenes Completadas': s.orders,
+      '% del Total de Ventas': `${Math.round((s.revenueNio / totalNio) * 100)}%`,
+      'Ingresos (C$ NIO)': Math.round(s.revenueNio * 100) / 100,
+      'Ingresos ($ USD)': Math.round((s.revenueUsd || s.revenueNio / rate) * 100) / 100,
+    }));
+
+    // 3. Sheet de Promociones y Alianzas VTEX
+    const promotionsData = (data.marketingAnalytics.promotions || []).map((p) => ({
+      'Promoción / Beneficio VTEX': p.name,
+      'Órdenes Beneficiadas': p.orders,
+      '% del Total de Ventas': `${Math.round((p.revenueNio / totalNio) * 100)}%`,
+      'Ingresos (C$ NIO)': Math.round(p.revenueNio * 100) / 100,
+      'Ingresos ($ USD)': Math.round((p.revenueUsd || p.revenueNio / rate) * 100) / 100,
+    }));
+
+    const wb = XLSX.utils.book_new();
+
+    const wsCampaigns = XLSX.utils.json_to_sheet(campaignsData);
+    const wsSources = XLSX.utils.json_to_sheet(sourcesData);
+    const wsPromotions = XLSX.utils.json_to_sheet(promotionsData);
+
+    // Ajustar anchos de columnas en cada pestaña
+    const colWidths = [{ wch: 45 }, { wch: 22 }, { wch: 22 }, { wch: 22 }, { wch: 22 }];
+    wsCampaigns['!cols'] = colWidths;
+    wsSources['!cols'] = colWidths;
+    wsPromotions['!cols'] = colWidths;
+
+    XLSX.utils.book_append_sheet(wb, wsCampaigns, 'Campañas UTM');
+    XLSX.utils.book_append_sheet(wb, wsSources, 'Canales de Origen');
+    XLSX.utils.book_append_sheet(wb, wsPromotions, 'Promociones VTEX');
+
+    const fileName = `Reporte_Marketing_SINSA_${startDateA}_al_${endDateA}.xlsx`;
+    XLSX.writeFile(wb, fileName);
+  };
+
   const kpis = data?.kpis;
   const periods = data?.periods;
   const channels = data?.channels;
@@ -982,6 +1044,170 @@ export default function DashboardPage() {
               </div>
 
             </div>
+
+            {/* SECCIÓN NUEVA: REPORTE DE CAMPAÑAS DE MARKETING (UTMs) & CANALES DE ADQUISICIÓN */}
+            {data?.marketingAnalytics && (
+              <div style={{ marginBottom: '1.5rem' }}>
+                <div className="glass-card" style={{ padding: '1.5rem', background: 'linear-gradient(135deg, rgba(15, 23, 42, 0.95), rgba(30, 41, 59, 0.98))', border: '1px solid rgba(165, 180, 252, 0.3)' }}>
+                  
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+                    <h3 style={{ fontSize: '1.05rem', fontWeight: 700, color: '#ffffff', display: 'flex', alignItems: 'center', gap: '0.5rem', margin: 0 }}>
+                      <Megaphone size={20} color="#a5b4fc" />
+                      Reporte de Campañas de Marketing (UTMs) & Canales de Venta - {periods?.current?.label}
+                    </h3>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flexWrap: 'wrap' }}>
+                      <button
+                        onClick={handleExportMarketingExcel}
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '0.4rem',
+                          padding: '0.35rem 0.8rem',
+                          borderRadius: '8px',
+                          fontSize: '0.78rem',
+                          fontWeight: 700,
+                          backgroundColor: '#059669',
+                          color: '#ffffff',
+                          border: '1px solid #10b981',
+                          cursor: 'pointer',
+                          boxShadow: '0 2px 8px rgba(5, 150, 105, 0.3)',
+                          transition: 'all 0.2s ease',
+                        }}
+                        onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#047857')}
+                        onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = '#059669')}
+                      >
+                        <FileSpreadsheet size={15} />
+                        Exportar a Excel (.xlsx)
+                      </button>
+                      <span style={{ fontSize: '0.75rem', color: '#a5b4fc', background: 'rgba(165, 180, 252, 0.1)', padding: '0.25rem 0.6rem', borderRadius: '6px', border: '1px solid rgba(165, 180, 252, 0.25)', fontWeight: 600 }}>
+                        🎯 Atribución UTM en Tiempo Real
+                      </span>
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', gap: '1.25rem' }}>
+                    
+                    {/* Sub-Card A: Rendimiento por Campaña UTM (utm_campaign) */}
+                    <div style={{ background: 'rgba(15, 23, 42, 0.7)', padding: '1.1rem', borderRadius: '12px', border: '1px solid rgba(255, 255, 255, 0.08)', display: 'flex', flexDirection: 'column', height: '480px' }}>
+                      <h4 style={{ fontSize: '0.88rem', fontWeight: 700, color: '#a5b4fc', marginBottom: '0.85rem', display: 'flex', alignItems: 'center', gap: '0.4rem', flexShrink: 0 }}>
+                        <Tag size={15} color="#a5b4fc" />
+                        Top Campañas de Marketing (`utm_campaign`)
+                      </h4>
+
+                      {data.marketingAnalytics.utmCampaigns && data.marketingAnalytics.utmCampaigns.length > 0 ? (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem', overflowY: 'auto', flex: 1, paddingRight: '0.3rem' }}>
+                          {data.marketingAnalytics.utmCampaigns.map((camp, idx) => {
+                            const totalNio = kpis?.totalRevenue?.currentNio || 1;
+                            const pctOfTotal = Math.round((camp.revenueNio / totalNio) * 100);
+
+                            return (
+                              <div key={idx} style={{ background: 'rgba(255, 255, 255, 0.03)', padding: '0.65rem 0.85rem', borderRadius: '8px', border: '1px solid rgba(255, 255, 255, 0.05)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.15rem' }}>
+                                  <span style={{ fontSize: '0.82rem', fontWeight: 700, color: '#ffffff' }}>
+                                    🎯 {camp.name}
+                                  </span>
+                                  <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+                                    {camp.orders} órdenes completadas ({pctOfTotal}% del total)
+                                  </span>
+                                </div>
+                                <div style={{ textAlign: 'right' }}>
+                                  <div style={{ fontSize: '0.9rem', fontWeight: 800, color: '#34d399', fontFamily: 'var(--font-mono)' }}>
+                                    {formatCurrency(camp.revenueNio, camp.revenueUsd)}
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        <div style={{ fontSize: '0.8rem', color: 'var(--text-dim)', fontStyle: 'italic', padding: '1rem 0' }}>
+                          No se registran campañas UTM activas en las órdenes del período.
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Sub-Card B: Canales de Adquisición (utm_source / Medium) */}
+                    <div style={{ background: 'rgba(15, 23, 42, 0.7)', padding: '1.1rem', borderRadius: '12px', border: '1px solid rgba(255, 255, 255, 0.08)', display: 'flex', flexDirection: 'column', height: '480px' }}>
+                      <h4 style={{ fontSize: '0.88rem', fontWeight: 700, color: '#38bdf8', marginBottom: '0.85rem', display: 'flex', alignItems: 'center', gap: '0.4rem', flexShrink: 0 }}>
+                        <Globe size={15} color="#38bdf8" />
+                        Fuentes y Canales de Origen (`utm_source`)
+                      </h4>
+
+                      {data.marketingAnalytics.utmSources && data.marketingAnalytics.utmSources.length > 0 ? (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem', overflowY: 'auto', flex: 1, paddingRight: '0.3rem' }}>
+                          {data.marketingAnalytics.utmSources.map((src, idx) => {
+                            const totalNio = kpis?.totalRevenue?.currentNio || 1;
+                            const pctOfTotal = Math.round((src.revenueNio / totalNio) * 100);
+
+                            return (
+                              <div key={idx} style={{ background: 'rgba(255, 255, 255, 0.03)', padding: '0.65rem 0.85rem', borderRadius: '8px', border: '1px solid rgba(255, 255, 255, 0.05)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.15rem' }}>
+                                  <span style={{ fontSize: '0.82rem', fontWeight: 700, color: '#ffffff' }}>
+                                    📡 {src.name}
+                                  </span>
+                                  <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+                                    {src.orders} órdenes ({pctOfTotal}% de ventas)
+                                  </span>
+                                </div>
+                                <div style={{ textAlign: 'right' }}>
+                                  <div style={{ fontSize: '0.9rem', fontWeight: 800, color: '#38bdf8', fontFamily: 'var(--font-mono)' }}>
+                                    {formatCurrency(src.revenueNio, src.revenueUsd)}
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        <div style={{ fontSize: '0.8rem', color: 'var(--text-dim)', fontStyle: 'italic', padding: '1rem 0' }}>
+                          No hay datos de canales de adquisición en el período.
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Sub-Card C: Promociones & Alianzas VTEX (Promotions and Partnerships) */}
+                    <div style={{ background: 'rgba(15, 23, 42, 0.7)', padding: '1.1rem', borderRadius: '12px', border: '1px solid rgba(255, 255, 255, 0.08)', display: 'flex', flexDirection: 'column', height: '480px' }}>
+                      <h4 style={{ fontSize: '0.88rem', fontWeight: 700, color: '#fbbf24', marginBottom: '0.85rem', display: 'flex', alignItems: 'center', gap: '0.4rem', flexShrink: 0 }}>
+                        <Gift size={15} color="#fbbf24" />
+                        Promociones y Alianzas VTEX (`Promotions & Partnerships`)
+                      </h4>
+
+                      {data.marketingAnalytics.promotions && data.marketingAnalytics.promotions.length > 0 ? (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem', overflowY: 'auto', flex: 1, paddingRight: '0.3rem' }}>
+                          {data.marketingAnalytics.promotions.map((promo, idx) => {
+                            const totalNio = kpis?.totalRevenue?.currentNio || 1;
+                            const pctOfTotal = Math.round((promo.revenueNio / totalNio) * 100);
+
+                            return (
+                              <div key={idx} style={{ background: 'rgba(255, 255, 255, 0.03)', padding: '0.65rem 0.85rem', borderRadius: '8px', border: '1px solid rgba(255, 255, 255, 0.05)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.15rem' }}>
+                                  <span style={{ fontSize: '0.82rem', fontWeight: 700, color: '#ffffff' }}>
+                                    🎁 {promo.name}
+                                  </span>
+                                  <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+                                    {promo.orders} órdenes beneficiadas ({pctOfTotal}% de ventas)
+                                  </span>
+                                </div>
+                                <div style={{ textAlign: 'right' }}>
+                                  <div style={{ fontSize: '0.9rem', fontWeight: 800, color: '#fbbf24', fontFamily: 'var(--font-mono)' }}>
+                                    {formatCurrency(promo.revenueNio, promo.revenueUsd)}
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        <div style={{ fontSize: '0.8rem', color: 'var(--text-dim)', fontStyle: 'italic', padding: '1rem 0' }}>
+                          No se registraron promociones o beneficios aplicados en el período.
+                        </div>
+                      )}
+                    </div>
+
+                  </div>
+                </div>
+              </div>
+            )}
 
           </>
         )}

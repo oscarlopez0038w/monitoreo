@@ -208,29 +208,7 @@ export default function SyncPanel({ onSyncCompleted, vtexReady, supabaseReady, i
         </div>
       </div>
 
-      {/* Warning banner */}
-      {(!vtexReady || !supabaseReady) && (
-        <div
-          style={{
-            background: 'rgba(251, 191, 36, 0.08)',
-            border: '1px solid rgba(251, 191, 36, 0.25)',
-            borderRadius: '12px',
-            padding: '1rem',
-            marginBottom: '1.25rem',
-            display: 'flex',
-            alignItems: 'flex-start',
-            gap: '0.75rem',
-          }}
-        >
-          <AlertTriangle size={20} color="#fbbf24" style={{ flexShrink: 0, marginTop: '2px' }} />
-          <div style={{ fontSize: '0.88rem' }}>
-            <strong style={{ color: '#fbbf24' }}>Configuración Incompleta en .env.local:</strong>
-            <p style={{ color: 'var(--text-muted)', marginTop: '0.2rem' }}>
-              Asegúrate de tener <code style={{ color: '#ffffff' }}>VTEX_APP_KEY</code>, <code style={{ color: '#ffffff' }}>VTEX_APP_TOKEN</code> y las claves de Supabase en <code style={{ color: 'var(--accent-primary)' }}>.env.local</code>.
-            </p>
-          </div>
-        </div>
-      )}
+
 
       {/* Live Sync Progress Info Cards */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '1rem', marginBottom: '1.25rem' }}>

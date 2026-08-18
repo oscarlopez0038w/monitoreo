@@ -58,13 +58,29 @@ CREATE TABLE IF NOT EXISTS public.vtex_orders (
     client_name TEXT NULL,
     client_email TEXT NULL,
     total_value NUMERIC(12,2) DEFAULT 0,
+    fulfillment_type TEXT NULL,
+    pickup_store TEXT NULL,
+    shipping_cost NUMERIC(12,2) DEFAULT 0,
+    address_json JSONB NULL,
+    marketing_json JSONB NULL,
+    detail_json JSONB NULL,
     items JSONB NULL,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- MIGRACIÓN / ALTER TABLE PARA INSTALACIONES EXISTENTES:
+ALTER TABLE public.vtex_orders ADD COLUMN IF NOT EXISTS fulfillment_type TEXT NULL;
+ALTER TABLE public.vtex_orders ADD COLUMN IF NOT EXISTS pickup_store TEXT NULL;
+ALTER TABLE public.vtex_orders ADD COLUMN IF NOT EXISTS shipping_cost NUMERIC(12,2) DEFAULT 0;
+ALTER TABLE public.vtex_orders ADD COLUMN IF NOT EXISTS address_json JSONB NULL;
+ALTER TABLE public.vtex_orders ADD COLUMN IF NOT EXISTS marketing_json JSONB NULL;
+ALTER TABLE public.vtex_orders ADD COLUMN IF NOT EXISTS detail_json JSONB NULL;
+
 CREATE INDEX IF NOT EXISTS idx_vtex_orders_status ON public.vtex_orders(status);
 CREATE INDEX IF NOT EXISTS idx_vtex_orders_creation ON public.vtex_orders(creation_date DESC);
+CREATE INDEX IF NOT EXISTS idx_vtex_orders_fulfillment ON public.vtex_orders(fulfillment_type);
+CREATE INDEX IF NOT EXISTS idx_vtex_orders_pickup_store ON public.vtex_orders(pickup_store);
 ALTER TABLE public.vtex_orders ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Permitir acceso total vtex_orders" ON public.vtex_orders;
 CREATE POLICY "Permitir acceso total vtex_orders" ON public.vtex_orders FOR ALL USING (true) WITH CHECK (true);
@@ -134,5 +150,24 @@ CREATE TABLE IF NOT EXISTS public.vtex_kits (
 ALTER TABLE public.vtex_kits ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Permitir acceso total vtex_kits" ON public.vtex_kits;
 CREATE POLICY "Permitir acceso total vtex_kits" ON public.vtex_kits FOR ALL USING (true) WITH CHECK (true);
+
+
+-- 6. TABLA DE VITRINAS Y GRUPOS DE PRODUCTOS DESTACADOS PARA HOME
+CREATE TABLE IF NOT EXISTS public.home_showcases (
+    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+    title TEXT NOT NULL,
+    description TEXT NULL,
+    category_focus TEXT DEFAULT 'General',
+    skus_count INT DEFAULT 0,
+    items JSONB NOT NULL DEFAULT '[]'::jsonb,
+    is_active BOOLEAN DEFAULT true,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE public.home_showcases ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Permitir acceso total home_showcases" ON public.home_showcases;
+CREATE POLICY "Permitir acceso total home_showcases" ON public.home_showcases FOR ALL USING (true) WITH CHECK (true);
+
 
 

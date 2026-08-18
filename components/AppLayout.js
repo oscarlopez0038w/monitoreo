@@ -7,12 +7,14 @@ import GlobalSyncBanner from '@/components/GlobalSyncBanner';
 import { Menu, X, Zap, ShieldAlert, Lock, ArrowLeft, RefreshCw } from 'lucide-react';
 
 const ROUTE_PERMISSIONS = {
+  '/': { code: 'dashboard:view', name: 'Dashboard de Ventas & KPIs' },
   '/dashboard': { code: 'dashboard:view', name: 'Dashboard de Ventas & KPIs' },
+  '/inventario': { code: 'skus:view', name: 'Inventario & SKUs' },
   '/tendencias': { code: 'tendencias:view', name: 'Tendencias E-Commerce' },
-  '/': { code: 'skus:view', name: 'Inventario & SKUs' },
   '/minisplits': { code: 'kits:manage', name: 'Kits VTEX & Combos' },
   '/stock-seguridad': { code: 'safety_stock:manage', name: 'Stock de Seguridad' },
   '/precios': { code: 'prices:manage', name: 'Precios VTEX' },
+  '/vitrinas': { code: 'showcases:manage', name: 'Vitrinas Destacadas Home' },
   '/simulador': { code: 'simulador:use', name: 'Simulador de Carrito' },
   '/ordenes': { code: 'orders:view', name: 'Órdenes VTEX OMS' },
   '/transacciones': { code: 'transactions:view', name: 'Transacciones & Pasarelas' },

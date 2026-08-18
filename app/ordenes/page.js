@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import AppLayout from '@/components/AppLayout';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import { getNicaraguaNow } from '@/lib/dateUtils';
-import { ShoppingCart, Calendar, Filter, Search, RefreshCw, ChevronDown, ChevronUp, Package, DollarSign, CheckCircle2, Clock, AlertTriangle, FileText, Zap, Radio, X, MessageSquare, Info, Download, Truck, Store } from 'lucide-react';
+import { ShoppingCart, Calendar, Filter, Search, RefreshCw, ChevronDown, ChevronUp, Package, DollarSign, CheckCircle2, Clock, AlertTriangle, FileText, Zap, Radio, X, MessageSquare, Info, Download, Truck, Store, MapPin, Megaphone, Tag, Gift, User } from 'lucide-react';
 
 export default function OrdenesPage() {
   const nicNow = getNicaraguaNow();
@@ -22,7 +22,37 @@ export default function OrdenesPage() {
   const [loadingDetailId, setLoadingDetailId] = useState(null);
   const [liveBanner, setLiveBanner] = useState(null);
   const [showAllStores, setShowAllStores] = useState(false);
+  const [syncingOrders, setSyncingOrders] = useState(false);
   const [globalStats, setGlobalStats] = useState({ total: 0, invoiced: 0, handling: 0, readyForHandling: 0, canceled: 0, pickupCount: 0, deliveryCount: 0, pickupPct: 0, deliveryPct: 0, pickupStores: [] });
+
+  const handleSyncOrders = async () => {
+    setSyncingOrders(true);
+    setLiveBanner({
+      type: 'success',
+      text: '🚀 Iniciando extracción e indexación de órdenes en segundo plano...',
+    });
+    try {
+      const res = await fetch('/api/orders/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ startDate, endDate }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setLiveBanner({
+          type: 'success',
+          text: `🎉 ${data.message || 'Sincronización masiva de órdenes completada.'}`,
+        });
+        fetchOrders(1);
+      } else {
+        setLiveBanner({ type: 'error', text: `Error en sincronización: ${data.error}` });
+      }
+    } catch (err) {
+      setLiveBanner({ type: 'error', text: `Error de red al sincronizar órdenes: ${err.message}` });
+    } finally {
+      setSyncingOrders(false);
+    }
+  };
 
   const fetchOrders = async (page = 1) => {
     setLoading(true);
@@ -260,17 +290,6 @@ export default function OrdenesPage() {
               <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
               Actualizar Órdenes
             </button>
-
-            <a
-              href={`/api/orders/export-canceled?startDate=${startDate}&endDate=${endDate}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="btn-secondary"
-              style={{ padding: '0.45rem 0.85rem', fontSize: '0.82rem', color: '#fb7185', borderColor: 'rgba(251, 113, 133, 0.45)', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}
-            >
-              <Download size={14} />
-              Exportar Canceladas (.CSV)
-            </a>
           </div>
         </div>
 
@@ -353,17 +372,17 @@ export default function OrdenesPage() {
               </select>
             </div>
 
-            {/* Buscador de Orden */}
+            {/* Buscador Multi-campo: Orden, Cliente, SKU */}
             <div>
               <label style={{ fontSize: '0.75rem', color: 'var(--text-dim)', fontWeight: 600, textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: '0.3rem', marginBottom: '0.35rem' }}>
-                <Search size={13} color="var(--accent-primary)" /> Buscar por ID u Orden
+                <Search size={13} color="var(--accent-primary)" /> Buscar por ID, Cliente o SKU
               </label>
               <div style={{ position: 'relative' }}>
                 <input
                   type="text"
                   className="glass-input"
                   style={{ width: '100%', fontSize: '0.85rem' }}
-                  placeholder="Ej: v10025..."
+                  placeholder="Ej: 140911851, Axell, v511502..."
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                 />
@@ -410,18 +429,7 @@ export default function OrdenesPage() {
 
           {/* Card 5: Canceladas */}
           <div className="glass-card" style={{ padding: '0.75rem 0.85rem', display: 'flex', flexDirection: 'column', justifyContent: 'center', textAlign: 'center', position: 'relative', minHeight: '115px' }}>
-            <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '0.4rem' }}>
-              <span style={{ fontSize: '0.7rem', color: 'var(--text-dim)', textTransform: 'uppercase', fontWeight: 700, letterSpacing: '0.02em' }}>Canceladas</span>
-              <a
-                href={`/api/orders/export-canceled?startDate=${startDate}&endDate=${endDate}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                style={{ fontSize: '0.65rem', color: '#fb7185', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '0.15rem', fontWeight: 700 }}
-                title="Descargar reporte Excel / CSV"
-              >
-                <Download size={11} /> CSV
-              </a>
-            </div>
+            <span style={{ fontSize: '0.7rem', color: 'var(--text-dim)', textTransform: 'uppercase', fontWeight: 700, letterSpacing: '0.02em' }}>Canceladas</span>
             <div style={{ fontSize: '1.45rem', fontWeight: 800, color: '#fb7185', marginTop: '0.25rem', lineHeight: 1.1 }}>
               {canceledCount.toLocaleString()}
             </div>
@@ -732,12 +740,103 @@ export default function OrdenesPage() {
                                   Obteniendo items e información de inventario para la orden {order.orderId}...
                                 </div>
                               ) : detail ? (
-                                <div>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                                  
+                                  {/* BANNER DE INFORMACIÓN RESUMIDA: DIRECCIÓN, FLETE Y CAMPAÑA UTM */}
+                                  {(() => {
+                                    const shippingVal = detail.totals?.find((t) => t.id === 'Shipping')?.value;
+                                    const shippingCost = shippingVal !== undefined ? shippingVal / 100 : 0;
+
+                                    const addr = detail.shippingData?.address || {};
+                                    const receiverName = addr.receiverName || order.clientName || 'Cliente General';
+                                    const fullAddressParts = [addr.street, addr.number, addr.neighborhood, addr.city, addr.state].filter(Boolean);
+                                    const fullAddress = fullAddressParts.length > 0 ? fullAddressParts.join(', ') : 'Dirección de retiro/entrega no especificada';
+                                    const reference = addr.reference || null;
+
+                                    const mkt = detail.marketingData || {};
+                                    const utmCampaign = mkt.utmCampaign;
+                                    const utmSource = mkt.utmSource;
+                                    const utmMedium = mkt.utmMedium;
+                                    const utmiCampaign = mkt.utmiCampaign;
+                                    const coupon = mkt.coupon;
+
+                                    return (
+                                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '0.85rem' }}>
+                                        
+                                        {/* Card 1: Dirección y Destinatario */}
+                                        <div style={{ background: 'rgba(15, 23, 42, 0.85)', padding: '0.85rem', borderRadius: '10px', border: '1px solid rgba(56, 189, 248, 0.25)', display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+                                          <span style={{ fontSize: '0.7rem', color: '#38bdf8', textTransform: 'uppercase', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                                            <MapPin size={13} color="#38bdf8" /> Dirección & Destinatario
+                                          </span>
+                                          <div style={{ fontSize: '0.82rem', fontWeight: 700, color: '#ffffff' }}>
+                                            👤 {receiverName}
+                                          </div>
+                                          <div style={{ fontSize: '0.76rem', color: 'var(--text-main)', lineHeight: '1.3' }}>
+                                            📍 {fullAddress}
+                                          </div>
+                                          {reference && (
+                                            <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>
+                                              Ref: {reference}
+                                            </div>
+                                          )}
+                                        </div>
+
+                                        {/* Card 2: Costo de Flete / Envío */}
+                                        <div style={{ background: 'rgba(15, 23, 42, 0.85)', padding: '0.85rem', borderRadius: '10px', border: '1px solid rgba(52, 211, 153, 0.25)', display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+                                          <span style={{ fontSize: '0.7rem', color: '#34d399', textTransform: 'uppercase', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                                            <Truck size={13} color="#34d399" /> Costo de Flete / Envío
+                                          </span>
+                                          <div style={{ fontSize: '1.15rem', fontWeight: 800, color: shippingCost === 0 ? '#34d399' : '#ffffff', marginTop: '0.1rem' }}>
+                                            {shippingCost === 0 ? '✨ Flete Gratis (C$ 0.00)' : `C$ ${shippingCost.toLocaleString('es-NI', { minimumFractionDigits: 2 })}`}
+                                          </div>
+                                          <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+                                            Método: {order.fulfillmentType === 'pickup' ? `Retiro en Tienda (${order.pickupStore || 'Pickup'})` : 'Envío a Domicilio (Delivery)'}
+                                          </span>
+                                        </div>
+
+                                        {/* Card 3: Campaña Marketing / UTM & Cupones */}
+                                        <div style={{ background: 'rgba(15, 23, 42, 0.85)', padding: '0.85rem', borderRadius: '10px', border: '1px solid rgba(165, 180, 252, 0.25)', display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+                                          <span style={{ fontSize: '0.7rem', color: '#a5b4fc', textTransform: 'uppercase', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                                            <Megaphone size={13} color="#a5b4fc" /> Campaña & Origen (UTM)
+                                          </span>
+                                          {utmCampaign || utmSource || utmMedium || utmiCampaign || coupon ? (
+                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem', fontSize: '0.76rem' }}>
+                                              {utmCampaign && (
+                                                <div style={{ color: '#ffffff' }}>
+                                                  🎯 Campaign: <strong style={{ color: '#a5b4fc' }}>{utmCampaign}</strong>
+                                                </div>
+                                              )}
+                                              {utmSource && (
+                                                <div style={{ color: 'var(--text-muted)' }}>
+                                                  📡 Source / Canal: <strong style={{ color: '#ffffff' }}>{utmSource}</strong> {utmMedium ? `(${utmMedium})` : ''}
+                                                </div>
+                                              )}
+                                              {utmiCampaign && (
+                                                <div style={{ color: 'var(--text-muted)' }}>
+                                                  🖼️ Banner/Interno: <strong style={{ color: '#ffffff' }}>{utmiCampaign}</strong>
+                                                </div>
+                                              )}
+                                              {coupon && (
+                                                <div style={{ color: '#34d399', fontWeight: 700 }}>
+                                                  🎟️ Cupon Aplicado: {coupon}
+                                                </div>
+                                              )}
+                                            </div>
+                                          ) : (
+                                            <div style={{ fontSize: '0.76rem', color: 'var(--text-dim)', fontStyle: 'italic' }}>
+                                              🌐 Venta Orgánica / Directa (Sin campaña UTM)
+                                            </div>
+                                          )}
+                                        </div>
+
+                                      </div>
+                                    );
+                                  })()}
+
                                   {/* Banner de Motivo de Cancelación y Comentarios / Notas de la Orden */}
                                   {((order.status === 'canceled') || detail.cancelReason || detail.cancellationData || detail.openTextField) && (
                                     <div
                                       style={{
-                                        marginBottom: '1rem',
                                         padding: '0.85rem 1rem',
                                         borderRadius: '8px',
                                         background: order.status === 'canceled' ? 'rgba(248, 113, 113, 0.08)' : 'rgba(56, 189, 248, 0.08)',
@@ -779,55 +878,80 @@ export default function OrdenesPage() {
                                     </div>
                                   )}
 
+                                  {/* TABLA DE PRODUCTOS Y PRECIOS LISTA VS PRECIO FINAL REAL DE VENTA */}
                                   {detail.items && (
                                     <>
-                                      <h4 style={{ fontSize: '0.85rem', fontWeight: 600, color: '#ffffff', marginBottom: '0.6rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                                      <h4 style={{ fontSize: '0.85rem', fontWeight: 600, color: '#ffffff', margin: '0.3rem 0 0 0', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
                                         <Package size={15} color="var(--accent-primary)" />
                                         Desglose de SKUs Comprados ({detail.items.length} productos)
                                       </h4>
 
-                                  <div style={{ borderRadius: '8px', border: '1px solid var(--border-subtle)', overflow: 'hidden', background: '#04070d' }}>
-                                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.78rem', textAlign: 'left' }}>
-                                      <thead>
-                                        <tr style={{ background: 'rgba(30, 41, 59, 0.8)', color: 'var(--text-muted)', fontSize: '0.7rem', textTransform: 'uppercase' }}>
-                                          <th style={{ padding: '0.4rem 0.75rem' }}>SKU ID</th>
-                                          <th style={{ padding: '0.4rem 0.75rem' }}>Nombre / Descripción SKU</th>
-                                          <th style={{ padding: '0.4rem 0.75rem', textAlign: 'center' }}>Cantidad Comprada</th>
-                                          <th style={{ padding: '0.4rem 0.75rem', textAlign: 'right' }}>Precio Unitario</th>
-                                          <th style={{ padding: '0.4rem 0.75rem', textAlign: 'right' }}>Total Item</th>
-                                        </tr>
-                                      </thead>
-                                      <tbody>
-                                        {detail.items.map((item, idx) => {
-                                          const itemPrice = (item.price ? item.price / 100 : 0).toLocaleString('es-NI', { minimumFractionDigits: 2 });
-                                          const itemTotal = (item.price && item.quantity ? (item.price * item.quantity) / 100 : 0).toLocaleString('es-NI', { minimumFractionDigits: 2 });
-
-                                          return (
-                                            <tr key={idx} style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.05)' }}>
-                                              <td style={{ padding: '0.4rem 0.75rem', fontFamily: 'var(--font-mono)', fontWeight: 700, color: '#ffffff' }}>
-                                                {item.id || item.sellerSku}
-                                              </td>
-                                              <td style={{ padding: '0.4rem 0.75rem', color: 'var(--text-main)' }}>
-                                                {item.name || item.skuName || 'Producto SINSA'}
-                                              </td>
-                                              <td style={{ padding: '0.4rem 0.75rem', textAlign: 'center', fontWeight: 700, color: 'var(--accent-amber)' }}>
-                                                {item.quantity} unid.
-                                              </td>
-                                              <td style={{ padding: '0.4rem 0.75rem', textAlign: 'right', fontFamily: 'var(--font-mono)', color: 'var(--text-muted)' }}>
-                                                C$ {itemPrice}
-                                              </td>
-                                              <td style={{ padding: '0.4rem 0.75rem', textAlign: 'right', fontFamily: 'var(--font-mono)', fontWeight: 700, color: 'var(--accent-emerald)' }}>
-                                                C$ {itemTotal}
-                                              </td>
+                                      <div style={{ borderRadius: '8px', border: '1px solid var(--border-subtle)', overflow: 'hidden', background: '#04070d' }}>
+                                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.78rem', textAlign: 'left' }}>
+                                          <thead>
+                                            <tr style={{ background: 'rgba(30, 41, 59, 0.8)', color: 'var(--text-muted)', fontSize: '0.7rem', textTransform: 'uppercase' }}>
+                                              <th style={{ padding: '0.45rem 0.75rem' }}>SKU ID</th>
+                                              <th style={{ padding: '0.45rem 0.75rem' }}>Nombre / Descripción SKU</th>
+                                              <th style={{ padding: '0.45rem 0.75rem', textAlign: 'center' }}>Cantidad</th>
+                                              <th style={{ padding: '0.45rem 0.75rem', textAlign: 'right' }}>Precio Lista (MSRP)</th>
+                                              <th style={{ padding: '0.45rem 0.75rem', textAlign: 'right' }}>Precio Venta (Final)</th>
+                                              <th style={{ padding: '0.45rem 0.75rem', textAlign: 'center' }}>Descuento / Oferta</th>
+                                              <th style={{ padding: '0.45rem 0.75rem', textAlign: 'right' }}>Total Item</th>
                                             </tr>
-                                          );
-                                        })}
-                                      </tbody>
-                                    </table>
-                                  </div>
-                                 </>
-                               )}
-                             </div>
+                                          </thead>
+                                          <tbody>
+                                            {detail.items.map((item, idx) => {
+                                              const listP = (item.listPrice || item.price ? (item.listPrice || item.price) / 100 : 0);
+                                              const sellingP = (item.sellingPrice || item.price ? (item.sellingPrice || item.price) / 100 : 0);
+                                              const quantity = item.quantity || 1;
+                                              const totalItemVal = sellingP * quantity;
+
+                                              const hasDiscount = listP > sellingP && sellingP > 0;
+                                              const discountPct = hasDiscount ? Math.round(((listP - sellingP) / listP) * 100) : 0;
+                                              const discountAmount = hasDiscount ? (listP - sellingP) : 0;
+
+                                              return (
+                                                <tr key={idx} style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.05)' }}>
+                                                  <td style={{ padding: '0.45rem 0.75rem', fontFamily: 'var(--font-mono)', fontWeight: 700, color: '#ffffff' }}>
+                                                    {item.id || item.sellerSku}
+                                                  </td>
+                                                  <td style={{ padding: '0.45rem 0.75rem', color: 'var(--text-main)' }}>
+                                                    {item.name || item.skuName || 'Producto SINSA'}
+                                                  </td>
+                                                  <td style={{ padding: '0.45rem 0.75rem', textAlign: 'center', fontWeight: 700, color: 'var(--accent-amber)' }}>
+                                                    {quantity} unid.
+                                                  </td>
+                                                  {/* Precio Lista */}
+                                                  <td style={{ padding: '0.45rem 0.75rem', textAlign: 'right', fontFamily: 'var(--font-mono)', color: hasDiscount ? 'var(--text-dim)' : 'var(--text-muted)', textDecoration: hasDiscount ? 'line-through' : 'none' }}>
+                                                    C$ {listP.toLocaleString('es-NI', { minimumFractionDigits: 2 })}
+                                                  </td>
+                                                  {/* Precio Venta Final */}
+                                                  <td style={{ padding: '0.45rem 0.75rem', textAlign: 'right', fontFamily: 'var(--font-mono)', fontWeight: 700, color: '#34d399' }}>
+                                                    C$ {sellingP.toLocaleString('es-NI', { minimumFractionDigits: 2 })}
+                                                  </td>
+                                                  {/* Descuento Badge */}
+                                                  <td style={{ padding: '0.45rem 0.75rem', textAlign: 'center' }}>
+                                                    {hasDiscount ? (
+                                                      <span className="badge badge-emerald" style={{ padding: '0.15rem 0.45rem', fontSize: '0.72rem', fontWeight: 700 }}>
+                                                        -{discountPct}% (C$ {discountAmount.toFixed(2)})
+                                                      </span>
+                                                    ) : (
+                                                      <span style={{ color: 'var(--text-dim)', fontSize: '0.72rem' }}>Precio Base</span>
+                                                    )}
+                                                  </td>
+                                                  {/* Total Item */}
+                                                  <td style={{ padding: '0.45rem 0.75rem', textAlign: 'right', fontFamily: 'var(--font-mono)', fontWeight: 700, color: 'var(--accent-emerald)' }}>
+                                                    C$ {totalItemVal.toLocaleString('es-NI', { minimumFractionDigits: 2 })}
+                                                  </td>
+                                                </tr>
+                                              );
+                                            })}
+                                          </tbody>
+                                        </table>
+                                      </div>
+                                    </>
+                                  )}
+                                </div>
                               ) : (
                                 <span style={{ color: 'var(--text-dim)', fontSize: '0.8rem' }}>No se pudo cargar el detalle de items.</span>
                               )}

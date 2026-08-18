@@ -46,6 +46,22 @@ export async function GET() {
       }
     }
 
+    // Auto-registrar permiso de Vitrinas Home si aún no existe
+    if (Array.isArray(permissions) && !permissions.some((p) => p.code === 'showcases:manage')) {
+      try {
+        await supabaseAdmin.from('app_permissions').insert({
+          code: 'showcases:manage',
+          name: 'Vitrinas Destacadas Home',
+          description: 'Curar, analizar y guardar vitrinas de productos destacados para el Home',
+          category: 'Catálogo & Inventario',
+        });
+        const reload = await supabaseAdmin.from('app_permissions').select('*').order('category, code');
+        if (reload.data) permissions = reload.data;
+      } catch (e) {
+        console.warn('No se pudo auto-registrar el permiso showcases:manage:', e.message);
+      }
+    }
+
     // 3. Cargar matriz de asignaciones role_permissions
     const { data: rolePermissions, error: rpError } = await supabaseAdmin
       .from('app_role_permissions')
