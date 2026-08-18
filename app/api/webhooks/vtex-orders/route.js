@@ -62,6 +62,30 @@ export async function POST(request) {
     const statusClean = String(orderDetail.status || body.State || 'unknown').toLowerCase();
     const isCanceled = statusClean === 'canceled' || statusClean === 'cancel';
 
+    // Verificar si la orden pasó por aprobación de pago previamente en VTEX OMS
+    const statusHistory = orderDetail.statusHistory || [];
+    const hasBeenApproved = statusHistory.some((h) => {
+      const st = String(typeof h === 'string' ? h : (h.status || '')).toLowerCase();
+      return (
+        st === 'payment-approved' ||
+        st === 'ready-for-handling' ||
+        st === 'handling' ||
+        st === 'invoiced' ||
+        st.includes('approved') ||
+        st.includes('handling')
+      );
+    });
+
+    // OPCIÓN B: Si la orden está cancelada y NUNCA pasó por aprobación de pago (fallo de tarjeta en Checkout), omitir y NO guardar en la base de datos
+    if (isCanceled && !hasBeenApproved) {
+      return NextResponse.json({
+        success: true,
+        ignored: true,
+        orderId: orderDetail.orderId || orderId,
+        message: `Orden ${orderDetail.orderId || orderId} omitida por ser un intento fallido de pago en Checkout.`,
+      });
+    }
+
     let ga4RefundSent = false;
     let ga4RefundSentAt = null;
 
@@ -81,8 +105,8 @@ export async function POST(request) {
       } catch (e) {}
     }
 
-    // 2. Si la orden está cancelada y aún no se envió a GA4, notificar evento refund
-    if (isCanceled && !ga4RefundSent) {
+    // 2. Notificar evento refund a GA4 SOLAMENTE si la orden estuvo aprobada previamente y fue cancelada/devuelta
+    if (isCanceled && hasBeenApproved && !ga4RefundSent) {
       const ga4Res = await sendGa4RefundEvent({
         orderId: orderDetail.orderId || orderId,
         amount: orderDetail.value ? orderDetail.value / 100 : 0,
@@ -100,7 +124,9 @@ export async function POST(request) {
       order_id: orderDetail.orderId || orderId,
       sequence: String(orderDetail.sequence || ''),
       status: orderDetail.status || body.State || 'unknown',
-      status_description: orderDetail.statusDescription || orderDetail.status || '',
+      status_description: isCanceled && !hasBeenApproved
+        ? 'Intento de pago fallido en Checkout (no aprobada)'
+        : (orderDetail.statusDescription || orderDetail.status || ''),
       creation_date: orderDetail.creationDate || new Date().toISOString(),
       client_name: clientName,
       client_email: clientEmail,

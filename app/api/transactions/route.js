@@ -515,12 +515,7 @@ export async function GET(request) {
           .from('vtex_transactions')
           .upsert(dbPayloads, { onConflict: 'transaction_id' });
 
-        // Evaluar en segundo plano devoluciones no notificados a GA4
-        for (const payload of dbPayloads) {
-          if (payload.is_refund || payload.status === 'Refunded') {
-            await handleGa4RefundDispatch(payload);
-          }
-        }
+        // Nota: El envío del evento refund a GA4 es procesado automáticamente por el Webhook de Órdenes VTEX OMS (/api/webhooks/vtex-orders) cuando una orden es cancelada.
       } catch (dbErr) {
         console.warn('Aviso guardando en vtex_transactions Supabase:', dbErr.message);
       }
