@@ -5,8 +5,16 @@ import { isVtexConfigured, getVtexConfig } from '@/lib/vtex';
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
+let STATS_CACHE = null;
+let STATS_CACHE_TIME = 0;
+const STATS_TTL_MS = 30 * 1000; // 30s TTL
+
 export async function GET() {
   try {
+    if (STATS_CACHE && Date.now() - STATS_CACHE_TIME < STATS_TTL_MS) {
+      return NextResponse.json(STATS_CACHE);
+    }
+
     const vtexReady = isVtexConfigured();
     const supabaseReady = isSupabaseConfigured();
     const vtexConfig = getVtexConfig();
@@ -61,7 +69,7 @@ export async function GET() {
       }
     }
 
-    return NextResponse.json({
+    const responsePayload = {
       success: true,
       vtex: {
         configured: vtexReady,
@@ -76,7 +84,12 @@ export async function GET() {
         lastUpdated,
         dbError,
       },
-    });
+    };
+
+    STATS_CACHE = responsePayload;
+    STATS_CACHE_TIME = Date.now();
+
+    return NextResponse.json(responsePayload);
   } catch (error) {
     return NextResponse.json(
       { success: false, error: error.message },

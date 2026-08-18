@@ -6,20 +6,46 @@ import { getNicaraguaNow } from '@/lib/dateUtils';
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
-// Función para obtener TODAS las órdenes de un período paginando por lotes de 100 en 100
+// Memory Cache para respuestas analíticas (60s TTL)
+const ANALYTICS_CACHE = new Map();
+const CACHE_TTL_MS = 60 * 1000;
+
+function getCachedAnalytics(key) {
+  const item = ANALYTICS_CACHE.get(key);
+  if (!item) return null;
+  if (Date.now() - item.timestamp > CACHE_TTL_MS) {
+    ANALYTICS_CACHE.delete(key);
+    return null;
+  }
+  return item.data;
+}
+
+function setCachedAnalytics(key, data) {
+  if (ANALYTICS_CACHE.size > 100) {
+    ANALYTICS_CACHE.clear();
+  }
+  ANALYTICS_CACHE.set(key, { timestamp: Date.now(), data });
+}
+
+// Función optimizada para obtener TODAS las órdenes de un período paginando en paralelo (Promise.all)
 async function fetchAllPeriodOrders(startIso, endIso) {
-  let allOrders = [];
-  let page = 1;
-  let maxPages = 15;
+  const firstRes = await fetchVtexOrders(startIso, endIso, '', '', 1, 100).catch(() => null);
+  if (!firstRes || !firstRes.list || firstRes.list.length === 0) return [];
 
-  while (page <= maxPages) {
-    const res = await fetchVtexOrders(startIso, endIso, '', '', page, 100).catch(() => null);
-    if (!res || !res.list || res.list.length === 0) break;
+  const allOrders = [...firstRes.list];
+  const totalPages = Math.min(firstRes.paging?.pages || 1, 15);
 
-    allOrders.push(...res.list);
-    const totalPages = res.paging?.pages || 1;
-    if (page >= totalPages) break;
-    page++;
+  if (totalPages > 1) {
+    const pagePromises = [];
+    for (let p = 2; p <= totalPages; p++) {
+      pagePromises.push(fetchVtexOrders(startIso, endIso, '', '', p, 100).catch(() => null));
+    }
+    const additionalPages = await Promise.all(pagePromises);
+    additionalPages.forEach((res) => {
+      if (res && Array.isArray(res.list)) {
+        allOrders.push(...res.list);
+      }
+    });
   }
 
   return allOrders;
@@ -85,25 +111,33 @@ async function analyzePeriodMarketingDetails(orders) {
       })
     );
 
-    // Guardar en Supabase las órdenes recién obtenidas
-    for (let idx = 0; idx < batch.length; idx++) {
-      const o = batch[idx];
-      const detail = details[idx];
-      if (!detail) continue;
+    // Guardar en Supabase las órdenes recién obtenidas (segundo plano no bloqueante)
+    if (isSupabaseConfigured()) {
+      const updatePromises = [];
+      for (let idx = 0; idx < batch.length; idx++) {
+        const o = batch[idx];
+        const detail = details[idx];
+        if (!detail) continue;
 
-      if (!cachedMap[o.orderId] && isSupabaseConfigured()) {
-        const mData = detail.marketingData || null;
-        try {
-          await supabaseAdmin
-            .from('vtex_orders')
-            .update({
-              detail_json: detail,
-              marketing_json: mData,
-            })
-            .eq('order_id', o.orderId);
-        } catch (e) {
-          // Ignores update error if any
+        if (!cachedMap[o.orderId]) {
+          const mData = detail.marketingData || null;
+          updatePromises.push(
+            (async () => {
+              try {
+                await supabaseAdmin
+                  .from('vtex_orders')
+                  .update({
+                    detail_json: detail,
+                    marketing_json: mData,
+                  })
+                  .eq('order_id', o.orderId);
+              } catch (e) {}
+            })()
+          );
         }
+      }
+      if (updatePromises.length > 0) {
+        Promise.all(updatePromises).catch(() => null);
       }
     }
 
@@ -265,29 +299,22 @@ export async function GET(request) {
     const startDateB = searchParams.get('startDateB') || searchParams.get('startB') || defaultStartB;
     const endDateB = searchParams.get('endDateB') || searchParams.get('endB') || defaultEndB;
 
+    // Verificar memoria caché (60s TTL)
+    const cacheKey = `${startDateA}_${endDateA}_${startDateB}_${endDateB}`;
+    const cachedData = getCachedAnalytics(cacheKey);
+    if (cachedData) {
+      return NextResponse.json(cachedData);
+    }
+
     const currentStartIso = new Date(`${startDateA}T00:00:00-06:00`).toISOString();
     const currentEndIso = new Date(`${endDateA}T23:59:59-06:00`).toISOString();
     const prevStartIso = new Date(`${startDateB}T00:00:00-06:00`).toISOString();
     const prevEndIso = new Date(`${endDateB}T23:59:59-06:00`).toISOString();
 
-    const [
-      currOrders,
-      prevOrders,
-      currInvoicedRes,
-      currHandlingRes,
-      currReadyRes,
-      currCanceledRes,
-      prevInvoicedRes,
-      prevCanceledRes,
-    ] = await Promise.all([
+    // Obtener todas las órdenes de ambos períodos en paralelo (Sin llamadas HTTP extras por estado)
+    const [currOrders, prevOrders] = await Promise.all([
       fetchAllPeriodOrders(currentStartIso, currentEndIso),
       fetchAllPeriodOrders(prevStartIso, prevEndIso),
-      fetchVtexOrders(currentStartIso, currentEndIso, 'invoiced', '', 1, 1).catch(() => null),
-      fetchVtexOrders(currentStartIso, currentEndIso, 'handling', '', 1, 1).catch(() => null),
-      fetchVtexOrders(currentStartIso, currentEndIso, 'ready-for-handling', '', 1, 1).catch(() => null),
-      fetchVtexOrders(currentStartIso, currentEndIso, 'canceled', '', 1, 1).catch(() => null),
-      fetchVtexOrders(prevStartIso, prevEndIso, 'invoiced', '', 1, 1).catch(() => null),
-      fetchVtexOrders(prevStartIso, prevEndIso, 'canceled', '', 1, 1).catch(() => null),
     ]);
 
     const currValidOrders = currOrders.filter((o) => o.status !== 'canceled');
@@ -300,13 +327,28 @@ export async function GET(request) {
     const prevTotalOrders = prevOrders.length;
     const prevAvgTicket = prevValidOrders.length > 0 ? prevTotalRevenue / prevValidOrders.length : 0;
 
-    const currInvoicedCount = currInvoicedRes?.paging?.total ?? 0;
-    const currHandlingCount = currHandlingRes?.paging?.total ?? 0;
-    const currReadyCount = currReadyRes?.paging?.total ?? 0;
-    const currCanceledCount = currCanceledRes?.paging?.total ?? 0;
+    // Calcular estados en memoria sin peticiones externas redundantes a VTEX
+    let currInvoicedCount = 0;
+    let currHandlingCount = 0;
+    let currReadyCount = 0;
+    let currCanceledCount = 0;
 
-    const prevInvoicedCount = prevInvoicedRes?.paging?.total ?? 0;
-    const prevCanceledCount = prevCanceledRes?.paging?.total ?? 0;
+    currOrders.forEach((o) => {
+      const st = o.status;
+      if (st === 'invoiced') currInvoicedCount++;
+      else if (st === 'handling') currHandlingCount++;
+      else if (st === 'ready-for-handling') currReadyCount++;
+      else if (st === 'canceled') currCanceledCount++;
+    });
+
+    let prevInvoicedCount = 0;
+    let prevCanceledCount = 0;
+
+    prevOrders.forEach((o) => {
+      const st = o.status;
+      if (st === 'invoiced') prevInvoicedCount++;
+      else if (st === 'canceled') prevCanceledCount++;
+    });
 
     const currCancelRate = currTotalOrders > 0 ? (currCanceledCount / currTotalOrders) * 100 : 0;
     const prevCancelRate = prevTotalOrders > 0 ? (prevCanceledCount / prevTotalOrders) * 100 : 0;
@@ -425,7 +467,7 @@ export async function GET(request) {
     const labelA = formatFriendlyDateRange(startDateA, endDateA);
     const labelB = formatFriendlyDateRange(startDateB, endDateB);
 
-    return NextResponse.json({
+    const responsePayload = {
       success: true,
       bcnExchangeRate: BCN_EXCHANGE_RATE,
       periods: {
@@ -527,7 +569,10 @@ export async function GET(request) {
         canceled: currCanceledCount,
       },
       dailyBreakdown,
-    });
+    };
+
+    setCachedAnalytics(cacheKey, responsePayload);
+    return NextResponse.json(responsePayload);
   } catch (err) {
     return NextResponse.json({ success: false, error: err.message }, { status: 500 });
   }
