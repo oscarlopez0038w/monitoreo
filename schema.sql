@@ -64,6 +64,8 @@ CREATE TABLE IF NOT EXISTS public.vtex_orders (
     address_json JSONB NULL,
     marketing_json JSONB NULL,
     detail_json JSONB NULL,
+    ga4_refund_sent BOOLEAN DEFAULT false,
+    ga4_refund_sent_at TIMESTAMPTZ NULL,
     items JSONB NULL,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
@@ -76,6 +78,8 @@ ALTER TABLE public.vtex_orders ADD COLUMN IF NOT EXISTS shipping_cost NUMERIC(12
 ALTER TABLE public.vtex_orders ADD COLUMN IF NOT EXISTS address_json JSONB NULL;
 ALTER TABLE public.vtex_orders ADD COLUMN IF NOT EXISTS marketing_json JSONB NULL;
 ALTER TABLE public.vtex_orders ADD COLUMN IF NOT EXISTS detail_json JSONB NULL;
+ALTER TABLE public.vtex_orders ADD COLUMN IF NOT EXISTS ga4_refund_sent BOOLEAN DEFAULT false;
+ALTER TABLE public.vtex_orders ADD COLUMN IF NOT EXISTS ga4_refund_sent_at TIMESTAMPTZ NULL;
 
 CREATE INDEX IF NOT EXISTS idx_vtex_orders_status ON public.vtex_orders(status);
 CREATE INDEX IF NOT EXISTS idx_vtex_orders_creation ON public.vtex_orders(creation_date DESC);

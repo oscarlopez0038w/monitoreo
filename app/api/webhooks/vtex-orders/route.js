@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { supabaseAdmin, isSupabaseConfigured } from '@/lib/supabase';
 import { fetchVtexOrderDetail } from '@/lib/vtex';
+import { sendGa4RefundEvent } from '@/lib/ga4';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -58,6 +59,43 @@ export async function POST(request) {
       totalPrice: (it.sellingPrice || it.price ? (it.sellingPrice || it.price) * (it.quantity || 1) : 0) / 100,
     }));
 
+    const statusClean = String(orderDetail.status || body.State || 'unknown').toLowerCase();
+    const isCanceled = statusClean === 'canceled' || statusClean === 'cancel';
+
+    let ga4RefundSent = false;
+    let ga4RefundSentAt = null;
+
+    // Verificar en Supabase si ya se notificó el refund a GA4 para esta orden
+    if (isSupabaseConfigured()) {
+      try {
+        const { data: existingRow } = await supabaseAdmin
+          .from('vtex_orders')
+          .select('ga4_refund_sent, ga4_refund_sent_at')
+          .eq('order_id', orderDetail.orderId || orderId)
+          .maybeSingle();
+
+        if (existingRow?.ga4_refund_sent) {
+          ga4RefundSent = true;
+          ga4RefundSentAt = existingRow.ga4_refund_sent_at;
+        }
+      } catch (e) {}
+    }
+
+    // 2. Si la orden está cancelada y aún no se envió a GA4, notificar evento refund
+    if (isCanceled && !ga4RefundSent) {
+      const ga4Res = await sendGa4RefundEvent({
+        orderId: orderDetail.orderId || orderId,
+        amount: orderDetail.value ? orderDetail.value / 100 : 0,
+        currency: 'NIO',
+        items: items,
+      });
+
+      if (ga4Res.success) {
+        ga4RefundSent = true;
+        ga4RefundSentAt = new Date().toISOString();
+      }
+    }
+
     const orderRow = {
       order_id: orderDetail.orderId || orderId,
       sequence: String(orderDetail.sequence || ''),
@@ -74,10 +112,12 @@ export async function POST(request) {
       marketing_json: marketingJson,
       items: items,
       detail_json: orderDetail,
+      ga4_refund_sent: ga4RefundSent,
+      ga4_refund_sent_at: ga4RefundSentAt,
       updated_at: new Date().toISOString(),
     };
 
-    // 2. Guardar/Actualizar (upsert) en Supabase para gatillar Supabase Realtime WebSocket
+    // 3. Guardar/Actualizar (upsert) en Supabase para gatillar Supabase Realtime WebSocket
     if (isSupabaseConfigured()) {
       try {
         const { error } = await supabaseAdmin
@@ -109,6 +149,7 @@ export async function POST(request) {
       success: true,
       orderId: orderRow.order_id,
       status: orderRow.status,
+      ga4RefundSent: orderRow.ga4_refund_sent,
       message: `Orden ${orderRow.order_id} procesada en tiempo real.`,
     });
   } catch (err) {

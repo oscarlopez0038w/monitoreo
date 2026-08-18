@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
 import { supabaseAdmin, isSupabaseConfigured } from '@/lib/supabase';
-import { sendGa4RefundEvent } from '@/lib/ga4';
 import {
   isVtexConfigured,
   fetchVtexTransactionsBatch,
@@ -282,10 +281,7 @@ export async function GET(request) {
             .from('vtex_transactions')
             .upsert([singlePayload], { onConflict: 'transaction_id' });
 
-          // Notificar evento refund a GA4 si es una devolución aún no enviada
-          if (enriched.errorDiagnostics?.isRefund || enriched.status === 'Refunded') {
-            await handleGa4RefundDispatch(singlePayload);
-          }
+          // Nota: El envío del evento refund a GA4 ahora es procesado automáticamente por el Webhook de Órdenes VTEX OMS (/api/webhooks/vtex-orders) cuando una orden es cancelada.
         } catch (dbErr) {
           console.warn('Aviso guardando detalle individual en Supabase:', dbErr.message);
         }
@@ -817,44 +813,4 @@ function normalizeStatus(raw) {
     return 'Pending';
   }
   return raw;
-}
-
-/**
- * Función auxiliar para verificar si una devolución ya fue enviada a GA4 y notificarla si está pendiente
- */
-async function handleGa4RefundDispatch(payload) {
-  if (!payload || !payload.transaction_id || !isSupabaseConfigured()) return;
-
-  try {
-    const { data: existingRow } = await supabaseAdmin
-      .from('vtex_transactions')
-      .select('ga4_refund_sent')
-      .eq('transaction_id', payload.transaction_id)
-      .maybeSingle();
-
-    if (existingRow?.ga4_refund_sent) {
-      return; // Ya se notificó previamente a GA4
-    }
-
-    const ga4Res = await sendGa4RefundEvent({
-      transactionId: payload.transaction_id,
-      orderId: payload.order_id,
-      amount: payload.amount,
-      currency: 'NIO',
-      items: payload.items || payload.raw_payload?.skus || [],
-      clientId: payload.client_email || payload.raw_payload?.client?.email,
-    });
-
-    if (ga4Res.success) {
-      await supabaseAdmin
-        .from('vtex_transactions')
-        .update({
-          ga4_refund_sent: true,
-          ga4_refund_sent_at: new Date().toISOString(),
-        })
-        .eq('transaction_id', payload.transaction_id);
-    }
-  } catch (err) {
-    console.error('Error enviando evento GA4 refund:', err.message);
-  }
 }
