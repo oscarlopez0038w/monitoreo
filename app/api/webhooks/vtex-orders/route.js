@@ -64,7 +64,7 @@ export async function POST(request) {
 
     // Verificar si la orden pasó por aprobación de pago previamente en VTEX OMS
     const statusHistory = orderDetail.statusHistory || [];
-    const hasBeenApproved = statusHistory.some((h) => {
+    const hasApprovedHistory = statusHistory.some((h) => {
       const st = String(typeof h === 'string' ? h : (h.status || '')).toLowerCase();
       return (
         st === 'payment-approved' ||
@@ -75,6 +75,14 @@ export async function POST(request) {
         st.includes('handling')
       );
     });
+
+    const hasBeenApproved = Boolean(
+      orderDetail.authorizedDate ||
+      orderDetail.invoicedDate ||
+      orderDetail.approvedBy ||
+      hasApprovedHistory ||
+      orderDetail.paymentData?.transactions?.[0]?.payments?.[0]?.connectorResponses?.authId
+    );
 
     // OPCIÓN B: Si la orden está cancelada y NUNCA pasó por aprobación de pago (fallo de tarjeta en Checkout), omitir y NO guardar en la base de datos
     if (isCanceled && !hasBeenApproved) {
