@@ -3,7 +3,7 @@
 import { useState, useEffect, Suspense } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Zap, User, Lock, Eye, EyeOff, LogIn, AlertCircle, ShieldCheck } from 'lucide-react';
+import { Zap, User, Lock, Eye, EyeOff, LogIn, AlertCircle, ShieldCheck, Key, CheckCircle2, RefreshCw, X } from 'lucide-react';
 
 function LoginFormContent() {
   const router = useRouter();
@@ -16,6 +16,88 @@ function LoginFormContent() {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+
+  // Estado de Recuperación de Contraseña
+  const [isRecoverModalOpen, setIsRecoverModalOpen] = useState(false);
+  const [recoverStep, setRecoverStep] = useState(1); // 1: Email, 2: New Password, 3: Success
+  const [recoverEmail, setRecoverEmail] = useState('');
+  const [recoverNewPassword, setRecoverNewPassword] = useState('');
+  const [recoverConfirmPassword, setRecoverConfirmPassword] = useState('');
+  const [recoverShowPass, setRecoverShowPass] = useState(false);
+  const [recoverError, setRecoverError] = useState('');
+  const [recoverSuccess, setRecoverSuccess] = useState('');
+  const [recoverLoading, setRecoverLoading] = useState(false);
+
+  const handleOpenRecoverModal = () => {
+    setIsRecoverModalOpen(true);
+    setRecoverStep(1);
+    setRecoverEmail(username.trim());
+    setRecoverNewPassword('');
+    setRecoverConfirmPassword('');
+    setRecoverError('');
+    setRecoverSuccess('');
+  };
+
+  const handleRecoverEmailSubmit = async (e) => {
+    e.preventDefault();
+    setRecoverError('');
+    if (!recoverEmail.trim()) {
+      setRecoverError('Por favor ingresa tu correo electrónico registrado.');
+      return;
+    }
+    setRecoverLoading(true);
+    try {
+      const res = await fetch('/api/auth/reset-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: recoverEmail.trim(), action: 'verify_email' }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setRecoverStep(2);
+        setRecoverError('');
+      } else {
+        setRecoverError(data.error || 'No se pudo verificar la cuenta.');
+      }
+    } catch (err) {
+      setRecoverError('Error de conexión. Intente nuevamente.');
+    } finally {
+      setRecoverLoading(false);
+    }
+  };
+
+  const handleRecoverResetPassword = async (e) => {
+    e.preventDefault();
+    setRecoverError('');
+    if (!recoverNewPassword || recoverNewPassword.length < 6) {
+      setRecoverError('La nueva contraseña debe tener al menos 6 caracteres.');
+      return;
+    }
+    if (recoverNewPassword !== recoverConfirmPassword) {
+      setRecoverError('Las contraseñas no coinciden. Verifíquelas.');
+      return;
+    }
+
+    setRecoverLoading(true);
+    try {
+      const res = await fetch('/api/auth/reset-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: recoverEmail.trim(), newPassword: recoverNewPassword }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setRecoverStep(3);
+        setRecoverSuccess(data.message);
+      } else {
+        setRecoverError(data.error || 'Error al restablecer la contraseña.');
+      }
+    } catch (err) {
+      setRecoverError('Error de red. Intente nuevamente.');
+    } finally {
+      setRecoverLoading(false);
+    }
+  };
 
   // Verificar si ya tiene sesión activa
   useEffect(() => {
@@ -244,18 +326,38 @@ function LoginFormContent() {
 
           {/* Password Input */}
           <div>
-            <label
-              htmlFor="password"
-              style={{
-                display: 'block',
-                fontSize: '0.82rem',
-                fontWeight: 600,
-                color: '#cbd5e1',
-                marginBottom: '0.45rem',
-              }}
-            >
-              Contraseña
-            </label>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.45rem' }}>
+              <label
+                htmlFor="password"
+                style={{
+                  display: 'block',
+                  fontSize: '0.82rem',
+                  fontWeight: 600,
+                  color: '#cbd5e1',
+                  margin: 0,
+                }}
+              >
+                Contraseña
+              </label>
+
+              <button
+                type="button"
+                onClick={handleOpenRecoverModal}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: '#38bdf8',
+                  fontSize: '0.78rem',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  padding: 0,
+                  transition: 'color 0.15s ease',
+                }}
+              >
+                ¿Olvidaste tu contraseña?
+              </button>
+            </div>
+
             <div style={{ position: 'relative' }}>
               <div
                 style={{
@@ -420,6 +522,257 @@ function LoginFormContent() {
           </p>
         </div>
       </div>
+
+      {/* Modal de Recuperación de Contraseña */}
+      {isRecoverModalOpen && (
+        <div
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(7, 10, 19, 0.85)',
+            backdropFilter: 'blur(12px)',
+            WebkitBackdropFilter: 'blur(12px)',
+            zIndex: 99999,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '1rem',
+          }}
+          onClick={() => setIsRecoverModalOpen(false)}
+        >
+          <div
+            style={{
+              background: 'linear-gradient(135deg, rgba(15, 23, 42, 0.98), rgba(30, 41, 59, 0.99))',
+              border: '1px solid rgba(56, 189, 248, 0.35)',
+              boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.9), 0 0 30px rgba(56, 189, 248, 0.2)',
+              borderRadius: '20px',
+              maxWidth: '460px',
+              width: '100%',
+              padding: '1.75rem',
+              color: '#ffffff',
+              boxSizing: 'border-box',
+              position: 'relative',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', borderBottom: '1px solid rgba(255, 255, 255, 0.1)', paddingBottom: '0.85rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                <div style={{ width: '36px', height: '36px', borderRadius: '10px', background: 'rgba(56, 189, 248, 0.15)', border: '1px solid rgba(56, 189, 248, 0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#38bdf8' }}>
+                  <Key size={18} />
+                </div>
+                <div>
+                  <h3 style={{ fontSize: '1.1rem', fontWeight: 700, color: '#ffffff', margin: 0 }}>
+                    Recuperar Contraseña
+                  </h3>
+                  <span style={{ fontSize: '0.74rem', color: '#94a3b8' }}>
+                    {recoverStep === 1 ? 'Paso 1: Verificación de Correo' : recoverStep === 2 ? 'Paso 2: Nueva Contraseña' : 'Completado'}
+                  </span>
+                </div>
+              </div>
+
+              <button
+                onClick={() => setIsRecoverModalOpen(false)}
+                style={{ background: 'transparent', border: 'none', color: '#94a3b8', cursor: 'pointer', padding: '0.2rem' }}
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* Error Message */}
+            {recoverError && (
+              <div style={{ background: 'rgba(239, 68, 68, 0.12)', border: '1px solid rgba(239, 68, 68, 0.3)', borderRadius: '10px', padding: '0.75rem', marginBottom: '1rem', color: '#fca5a5', fontSize: '0.82rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <AlertCircle size={16} style={{ flexShrink: 0 }} />
+                <span>{recoverError}</span>
+              </div>
+            )}
+
+            {/* Step 1: Verificar Correo */}
+            {recoverStep === 1 && (
+              <form onSubmit={handleRecoverEmailSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                <p style={{ fontSize: '0.85rem', color: '#cbd5e1', margin: 0, lineHeight: '1.4' }}>
+                  Ingresa tu correo electrónico corporativo registrado para verificar tu cuenta e iniciar el restablecimiento de contraseña.
+                </p>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, color: '#cbd5e1', marginBottom: '0.4rem' }}>
+                    Correo Electrónico
+                  </label>
+                  <div style={{ position: 'relative' }}>
+                    <User size={18} style={{ position: 'absolute', left: '1rem', top: '50%', transform: 'translateY(-50%)', color: '#64748b' }} />
+                    <input
+                      type="email"
+                      value={recoverEmail}
+                      onChange={(e) => setRecoverEmail(e.target.value)}
+                      placeholder="ejemplo@sinsa.com.ni"
+                      required
+                      disabled={recoverLoading}
+                      style={{
+                        width: '100%',
+                        padding: '0.8rem 1rem 0.8rem 2.6rem',
+                        background: 'rgba(30, 41, 59, 0.6)',
+                        border: '1px solid rgba(255, 255, 255, 0.12)',
+                        borderRadius: '10px',
+                        color: '#ffffff',
+                        fontSize: '0.88rem',
+                        outline: 'none',
+                        boxSizing: 'border-box',
+                      }}
+                    />
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', gap: '0.75rem', marginTop: '0.5rem' }}>
+                  <button
+                    type="button"
+                    onClick={() => setIsRecoverModalOpen(false)}
+                    className="btn-secondary"
+                    style={{ padding: '0.65rem 1rem', fontSize: '0.85rem', flex: 1 }}
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={recoverLoading}
+                    className="btn-primary"
+                    style={{ padding: '0.65rem 1rem', fontSize: '0.85rem', flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem' }}
+                  >
+                    {recoverLoading ? <RefreshCw size={16} className="animate-spin" /> : <Key size={16} />}
+                    {recoverLoading ? 'Verificando...' : 'Verificar Cuenta'}
+                  </button>
+                </div>
+              </form>
+            )}
+
+            {/* Step 2: Ingresar Nueva Contraseña */}
+            {recoverStep === 2 && (
+              <form onSubmit={handleRecoverResetPassword} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                <div style={{ background: 'rgba(56, 189, 248, 0.1)', border: '1px solid rgba(56, 189, 248, 0.25)', padding: '0.75rem', borderRadius: '10px', fontSize: '0.82rem', color: '#38bdf8' }}>
+                  ✅ Cuenta verificada: <strong>{recoverEmail}</strong>. Ingrese su nueva contraseña a continuación.
+                </div>
+
+                {/* Nueva Contraseña */}
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, color: '#cbd5e1', marginBottom: '0.4rem' }}>
+                    Nueva Contraseña (Mín. 6 caracteres)
+                  </label>
+                  <div style={{ position: 'relative' }}>
+                    <Lock size={18} style={{ position: 'absolute', left: '1rem', top: '50%', transform: 'translateY(-50%)', color: '#64748b' }} />
+                    <input
+                      type={recoverShowPass ? 'text' : 'password'}
+                      value={recoverNewPassword}
+                      onChange={(e) => setRecoverNewPassword(e.target.value)}
+                      placeholder="••••••••••••"
+                      required
+                      minLength={6}
+                      disabled={recoverLoading}
+                      style={{
+                        width: '100%',
+                        padding: '0.8rem 2.6rem',
+                        background: 'rgba(30, 41, 59, 0.6)',
+                        border: '1px solid rgba(255, 255, 255, 0.12)',
+                        borderRadius: '10px',
+                        color: '#ffffff',
+                        fontSize: '0.88rem',
+                        outline: 'none',
+                        boxSizing: 'border-box',
+                      }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setRecoverShowPass(!recoverShowPass)}
+                      style={{ position: 'absolute', right: '0.75rem', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: '#64748b', cursor: 'pointer' }}
+                    >
+                      {recoverShowPass ? <EyeOff size={16} /> : <Eye size={16} />}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Confirmar Contraseña */}
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, color: '#cbd5e1', marginBottom: '0.4rem' }}>
+                    Confirmar Nueva Contraseña
+                  </label>
+                  <div style={{ position: 'relative' }}>
+                    <Lock size={18} style={{ position: 'absolute', left: '1rem', top: '50%', transform: 'translateY(-50%)', color: '#64748b' }} />
+                    <input
+                      type={recoverShowPass ? 'text' : 'password'}
+                      value={recoverConfirmPassword}
+                      onChange={(e) => setRecoverConfirmPassword(e.target.value)}
+                      placeholder="••••••••••••"
+                      required
+                      minLength={6}
+                      disabled={recoverLoading}
+                      style={{
+                        width: '100%',
+                        padding: '0.8rem 2.6rem',
+                        background: 'rgba(30, 41, 59, 0.6)',
+                        border: '1px solid rgba(255, 255, 255, 0.12)',
+                        borderRadius: '10px',
+                        color: '#ffffff',
+                        fontSize: '0.88rem',
+                        outline: 'none',
+                        boxSizing: 'border-box',
+                      }}
+                    />
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', gap: '0.75rem', marginTop: '0.5rem' }}>
+                  <button
+                    type="button"
+                    onClick={() => setRecoverStep(1)}
+                    className="btn-secondary"
+                    style={{ padding: '0.65rem 1rem', fontSize: '0.85rem', flex: 1 }}
+                  >
+                    Atrás
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={recoverLoading}
+                    className="btn-primary"
+                    style={{ padding: '0.65rem 1rem', fontSize: '0.85rem', flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem' }}
+                  >
+                    {recoverLoading ? <RefreshCw size={16} className="animate-spin" /> : <CheckCircle2 size={16} />}
+                    {recoverLoading ? 'Guardando...' : 'Cambiar Contraseña'}
+                  </button>
+                </div>
+              </form>
+            )}
+
+            {/* Step 3: Éxito */}
+            {recoverStep === 3 && (
+              <div style={{ textAlign: 'center', padding: '1rem 0' }}>
+                <div style={{ width: '56px', height: '56px', borderRadius: '50%', background: 'rgba(52, 211, 153, 0.15)', border: '1px solid rgba(52, 211, 153, 0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1.25rem auto', color: '#34d399' }}>
+                  <CheckCircle2 size={28} />
+                </div>
+                <h4 style={{ fontSize: '1.1rem', fontWeight: 700, color: '#ffffff', margin: '0 0 0.5rem 0' }}>
+                  ¡Contraseña Restablecida!
+                </h4>
+                <p style={{ fontSize: '0.85rem', color: '#94a3b8', marginBottom: '1.5rem', lineHeight: '1.4' }}>
+                  {recoverSuccess || 'Tu contraseña ha sido actualizada exitosamente. Ya puedes ingresar al sistema.'}
+                </p>
+
+                <button
+                  onClick={() => {
+                    setIsRecoverModalOpen(false);
+                    setUsername(recoverEmail);
+                    setPassword('');
+                  }}
+                  className="btn-primary"
+                  style={{ width: '100%', padding: '0.75rem 1.5rem', fontSize: '0.9rem', fontWeight: 700 }}
+                >
+                  Iniciar Sesión Ahora
+                </button>
+              </div>
+            )}
+
+          </div>
+        </div>
+      )}
 
       <style jsx global>{`
         .input-focus-glow:focus {

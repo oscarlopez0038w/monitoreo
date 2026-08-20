@@ -152,9 +152,9 @@ export async function GET(request) {
     return NextResponse.json({
       success: true,
       skuId,
-      costPrice: priceData.costPrice,
-      basePrice: priceData.basePrice,
-      listPrice: priceData.listPrice,
+      costPrice: priceData.rawCostPrice !== undefined && priceData.rawCostPrice !== null ? priceData.rawCostPrice : priceData.costPrice,
+      basePrice: priceData.rawBasePrice !== undefined && priceData.rawBasePrice !== null ? priceData.rawBasePrice : priceData.basePrice,
+      listPrice: priceData.rawListPrice !== undefined && priceData.rawListPrice !== null ? priceData.rawListPrice : priceData.listPrice,
       fixedPrices: priceData.fixedPrices || [],
     });
   } catch (err) {

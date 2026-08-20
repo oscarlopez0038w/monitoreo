@@ -116,14 +116,20 @@ export async function POST(request) {
     if (isSupabaseConfigured()) {
       try {
         const skuIdNum = parseInt(cleanSkuId, 10);
+        const fValNum = hasFixedPrice && fixedPriceValue !== null && fixedPriceValue !== undefined && fixedPriceValue !== '' ? Number(fixedPriceValue) : null;
+        const fListNum = hasFixedPrice && fixedPriceListPrice !== null && fixedPriceListPrice !== undefined && fixedPriceListPrice !== '' ? Number(fixedPriceListPrice) : null;
+        
+        const effectiveBasePrice = fValNum !== null && !isNaN(fValNum) ? fValNum : baseP;
+        const effectiveListPrice = fListNum !== null && !isNaN(fListNum) ? fListNum : (listP || (fValNum !== null ? baseP : null));
+
         await supabaseAdmin
           .from('vtex_skus')
           .upsert(
             {
               id: skuIdNum,
               cost_price: costP,
-              base_price: baseP,
-              list_price: listP,
+              base_price: effectiveBasePrice,
+              list_price: effectiveListPrice,
               price_updated_at: new Date().toISOString(),
               updated_at: new Date().toISOString(),
             },

@@ -26,6 +26,18 @@ import {
   CheckCircle2,
 } from 'lucide-react';
 
+const formatUtcToLocalInput = (dateStr) => {
+  if (!dateStr) return '';
+  let str = String(dateStr).trim();
+  if (!str.endsWith('Z') && !/[+-]\d{2}:\d{2}$/.test(str)) {
+    str += 'Z';
+  }
+  const d = new Date(str);
+  if (isNaN(d.getTime())) return '';
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+};
+
 export default function PricesTable() {
   const [skus, setSkus] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -88,16 +100,20 @@ export default function PricesTable() {
       const res = await fetch(`/api/prices/sync?skuId=${sku.id}`);
       const fresh = await res.json();
       if (fresh && fresh.success) {
+        const fp = Array.isArray(fresh.fixedPrices) && fresh.fixedPrices.length > 0 ? fresh.fixedPrices[0] : null;
+        const fromDateStr = fp?.dateRange?.from || fp?.startDate || '';
+        const toDateStr = fp?.dateRange?.to || fp?.endDate || '';
+
         setPriceForm({
           costPrice: fresh.costPrice !== null && fresh.costPrice !== undefined ? String(fresh.costPrice) : initialCost,
           basePrice: fresh.basePrice !== null && fresh.basePrice !== undefined ? String(fresh.basePrice) : initialBase,
           listPrice: fresh.listPrice !== null && fresh.listPrice !== undefined ? String(fresh.listPrice) : initialList,
-          hasFixedPrice: Array.isArray(fresh.fixedPrices) && fresh.fixedPrices.length > 0,
-          fixedPriceValue: fresh.fixedPrices?.[0]?.value !== undefined ? String(fresh.fixedPrices[0].value) : '',
-          fixedPriceListPrice: fresh.fixedPrices?.[0]?.listPrice !== undefined && fresh.fixedPrices[0].listPrice !== null ? String(fresh.fixedPrices[0].listPrice) : '',
-          minQuantity: fresh.fixedPrices?.[0]?.minQuantity !== undefined ? String(fresh.fixedPrices[0].minQuantity) : '1',
-          dateFrom: fresh.fixedPrices?.[0]?.dateRange?.from ? fresh.fixedPrices[0].dateRange.from.substring(0, 16) : '',
-          dateTo: fresh.fixedPrices?.[0]?.dateRange?.to ? fresh.fixedPrices[0].dateRange.to.substring(0, 16) : '',
+          hasFixedPrice: Boolean(fp),
+          fixedPriceValue: fp?.value !== undefined && fp?.value !== null ? String(fp.value) : '',
+          fixedPriceListPrice: fp?.listPrice !== undefined && fp?.listPrice !== null ? String(fp.listPrice) : '',
+          minQuantity: fp?.minQuantity !== undefined && fp?.minQuantity !== null ? String(fp.minQuantity) : '1',
+          dateFrom: formatUtcToLocalInput(fromDateStr),
+          dateTo: formatUtcToLocalInput(toDateStr),
         });
       }
     } catch (e) {
@@ -113,6 +129,9 @@ export default function PricesTable() {
 
     setSavingPrice(true);
     try {
+      const isoDateFrom = priceForm.dateFrom ? new Date(priceForm.dateFrom).toISOString() : '';
+      const isoDateTo = priceForm.dateTo ? new Date(priceForm.dateTo).toISOString() : '';
+
       const res = await fetch('/api/prices/update', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -125,18 +144,23 @@ export default function PricesTable() {
           fixedPriceValue: priceForm.fixedPriceValue,
           fixedPriceListPrice: priceForm.fixedPriceListPrice,
           minQuantity: priceForm.minQuantity,
-          dateFrom: priceForm.dateFrom,
-          dateTo: priceForm.dateTo,
+          dateFrom: isoDateFrom,
+          dateTo: isoDateTo,
         }),
       });
 
       const data = await res.json();
       if (data.success) {
         const baseP = parseFloat(priceForm.basePrice || 0);
-        const listP = priceForm.listPrice ? parseFloat(priceForm.listPrice) : null;
+        const fValP = priceForm.hasFixedPrice && priceForm.fixedPriceValue ? parseFloat(priceForm.fixedPriceValue) : null;
+        const fListP = priceForm.hasFixedPrice && priceForm.fixedPriceListPrice ? parseFloat(priceForm.fixedPriceListPrice) : null;
+
+        const effectiveSellingPrice = fValP !== null && !isNaN(fValP) ? fValP : baseP;
+        const effectiveListPrice = fListP !== null && !isNaN(fListP) ? fListP : (priceForm.listPrice ? parseFloat(priceForm.listPrice) : null);
+
         let discPct = 0;
-        if (listP && baseP && listP > baseP) {
-          discPct = parseFloat((((listP - baseP) / listP) * 100).toFixed(1));
+        if (effectiveListPrice && effectiveSellingPrice && effectiveListPrice > effectiveSellingPrice) {
+          discPct = parseFloat((((effectiveListPrice - effectiveSellingPrice) / effectiveListPrice) * 100).toFixed(1));
         }
 
         setSkus((prev) =>
@@ -145,8 +169,8 @@ export default function PricesTable() {
               return {
                 ...item,
                 costPrice: parseFloat(priceForm.costPrice || 0),
-                basePrice: baseP,
-                listPrice: listP,
+                basePrice: effectiveSellingPrice,
+                listPrice: effectiveListPrice,
                 discountPct: discPct,
                 priceUpdatedAt: new Date().toISOString(),
               };
@@ -643,30 +667,6 @@ export default function PricesTable() {
               <option value="with_discount">Solo con Descuento %</option>
               <option value="no_discount">Sin Descuento</option>
             </select>
-
-            {/* Export Excel Button in Table Controls */}
-            <button
-              onClick={handleExportExcel}
-              disabled={exporting}
-              style={{
-                padding: '0.45rem 0.9rem',
-                borderRadius: '8px',
-                border: '1px solid rgba(52, 211, 153, 0.4)',
-                background: 'rgba(52, 211, 153, 0.12)',
-                color: '#34d399',
-                fontSize: '0.82rem',
-                fontWeight: 600,
-                cursor: exporting ? 'wait' : 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '0.4rem',
-                transition: 'all 0.2s ease',
-              }}
-              title="Descargar Excel (.xlsx) con todos los SKUs y precios"
-            >
-              {exporting ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />}
-              {exporting ? 'Generando...' : 'Descargar Excel'}
-            </button>
           </div>
         </div>
 

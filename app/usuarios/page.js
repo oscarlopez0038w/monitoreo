@@ -247,6 +247,7 @@ export default function UsersManagementPage() {
             name: formData.name.trim(),
             role: formData.role,
             is_active: formData.is_active,
+            password: formData.password ? formData.password : undefined,
           }),
         });
 

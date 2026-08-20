@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { supabaseAdmin, isSupabaseConfigured } from '@/lib/supabase';
+import { resetUserPasswordByEmail } from '@/lib/auth';
 
 export const dynamic = 'force-dynamic';
 
@@ -119,7 +120,7 @@ export async function POST(request) {
 
     const userId = authData.user.id;
 
-    // 2. Insertar/Actualizar en public.app_users
+    // 2. Insertar/Actualizar en public.app_users (sin almacenar la contraseña en texto plano)
     const { data: dbUser, error: dbError } = await supabaseAdmin
       .from('app_users')
       .upsert(
@@ -128,7 +129,6 @@ export async function POST(request) {
           email: cleanEmail,
           username: cleanEmail,
           name: name.trim(),
-          password: password,
           role: userRole,
           is_active: isActiveStatus,
         },
@@ -161,7 +161,7 @@ export async function PATCH(request) {
     }
 
     const body = await request.json();
-    const { id, email, is_active, role, name } = body || {};
+    const { id, email, is_active, role, name, password } = body || {};
 
     if (!id && !email) {
       return NextResponse.json({ success: false, error: 'Se requiere el ID o correo del usuario para actualizar.' }, { status: 400 });
@@ -188,10 +188,21 @@ export async function PATCH(request) {
       return NextResponse.json({ success: false, error: 'Error al actualizar datos en app_users.' }, { status: 500 });
     }
 
+    const updatedUser = data ? data[0] : null;
+
+    // Si se especificó una nueva contraseña, actualizar también en Supabase Auth
+    if (password && password.length >= 6 && updatedUser?.email) {
+      try {
+        await resetUserPasswordByEmail(updatedUser.email, password);
+      } catch (passErr) {
+        console.error('Error actualizando contraseña en Auth:', passErr);
+      }
+    }
+
     return NextResponse.json({
       success: true,
-      message: 'Usuario actualizado exitosamente.',
-      data: data ? data[0] : null,
+      message: 'Usuario y permisos actualizados exitosamente.',
+      data: updatedUser,
     });
   } catch (err) {
     console.error('Excepción en PATCH /api/users:', err);

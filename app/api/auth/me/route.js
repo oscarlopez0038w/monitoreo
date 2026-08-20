@@ -18,11 +18,26 @@ export async function GET() {
       );
     }
 
-    return NextResponse.json({
+    const response = NextResponse.json({
       success: true,
       authenticated: true,
       user,
     });
+
+    // Renovar la cookie de sesión por 7 días más al estar activo
+    if (token) {
+      response.cookies.set({
+        name: AUTH_COOKIE_NAME,
+        value: token,
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'lax',
+        path: '/',
+        maxAge: 60 * 60 * 24 * 7,
+      });
+    }
+
+    return response;
   } catch (err) {
     console.error('Error en API auth/me:', err);
     return NextResponse.json(

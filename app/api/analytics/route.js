@@ -294,8 +294,8 @@ export async function GET(request) {
     const defaultStartB = `${prevYearVal}-${String(prevMonthVal + 1).padStart(2, '0')}-01`;
     const defaultEndB = `${prevYearVal}-${String(prevMonthVal + 1).padStart(2, '0')}-${String(prevMonthSameDay).padStart(2, '0')}`;
 
-    const startDateA = searchParams.get('startDateA') || searchParams.get('startA') || defaultStartA;
-    const endDateA = searchParams.get('endDateA') || searchParams.get('endA') || defaultEndA;
+    const startDateA = searchParams.get('startDateA') || searchParams.get('startA') || searchParams.get('startDate') || searchParams.get('start') || defaultStartA;
+    const endDateA = searchParams.get('endDateA') || searchParams.get('endA') || searchParams.get('endDate') || searchParams.get('end') || defaultEndA;
     const startDateB = searchParams.get('startDateB') || searchParams.get('startB') || defaultStartB;
     const endDateB = searchParams.get('endDateB') || searchParams.get('endB') || defaultEndB;
 

@@ -25,7 +25,8 @@ export async function POST(request) {
     }
 
     const accessToken = result.session.access_token;
-    const maxAgeSeconds = rememberMe ? 60 * 60 * 24 * 7 : 60 * 60 * 8;
+    const SEVEN_DAYS_SECONDS = 60 * 60 * 24 * 7;
+    const maxAgeSeconds = SEVEN_DAYS_SECONDS; // 7 días de sesión activa por defecto
 
     const response = NextResponse.json({
       success: true,
