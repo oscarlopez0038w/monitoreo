@@ -62,6 +62,38 @@ export async function GET() {
       }
     }
 
+    // Auto-registrar permiso de Marketing & UTMs si aún no existe
+    if (Array.isArray(permissions) && !permissions.some((p) => p.code === 'marketing:view')) {
+      try {
+        await supabaseAdmin.from('app_permissions').insert({
+          code: 'marketing:view',
+          name: 'Marketing & UTMs',
+          description: 'Ver métricas de atribución de campañas UTMs, fuentes de tráfico y promociones VTEX',
+          category: 'Analítica & Reportes',
+        });
+        const reload = await supabaseAdmin.from('app_permissions').select('*').order('category, code');
+        if (reload.data) permissions = reload.data;
+      } catch (e) {
+        console.warn('No se pudo auto-registrar el permiso marketing:view:', e.message);
+      }
+    }
+
+    // Auto-registrar permiso de Patrones de Compra si aún no existe
+    if (Array.isArray(permissions) && !permissions.some((p) => p.code === 'patrones:view')) {
+      try {
+        await supabaseAdmin.from('app_permissions').insert({
+          code: 'patrones:view',
+          name: 'Patrones de Compra & Horarios Pico',
+          description: 'Analizar patrones de compra por día de la semana, horarios pico e ingresos',
+          category: 'Analítica & Reportes',
+        });
+        const reload = await supabaseAdmin.from('app_permissions').select('*').order('category, code');
+        if (reload.data) permissions = reload.data;
+      } catch (e) {
+        console.warn('No se pudo auto-registrar el permiso patrones:view:', e.message);
+      }
+    }
+
     // 3. Cargar matriz de asignaciones role_permissions
     const { data: rolePermissions, error: rpError } = await supabaseAdmin
       .from('app_role_permissions')

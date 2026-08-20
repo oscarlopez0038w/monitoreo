@@ -17,7 +17,8 @@ const ROUTE_PERMISSIONS = {
   '/vitrinas': { code: 'showcases:manage', name: 'Vitrinas Destacadas Home' },
   '/simulador': { code: 'simulador:use', name: 'Simulador de Carrito' },
   '/ordenes': { code: 'orders:view', name: 'Órdenes VTEX OMS' },
-  '/transacciones': { code: 'transactions:view', name: 'Transacciones & Pasarelas' },
+  '/marketing': { code: 'marketing:view', name: 'Marketing & UTMs' },
+  '/patrones': { code: 'patrones:view', name: 'Patrones de Compra & Horarios' },
   '/usuarios': { code: 'users:manage', name: 'Administración de Usuarios & Permisos' },
 };
 
