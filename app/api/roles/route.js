@@ -94,6 +94,22 @@ export async function GET() {
       }
     }
 
+    // Auto-registrar permiso de Embudo de Checkout si aún no existe
+    if (Array.isArray(permissions) && !permissions.some((p) => p.code === 'embudo:view')) {
+      try {
+        await supabaseAdmin.from('app_permissions').insert({
+          code: 'embudo:view',
+          name: 'Embudo de Checkout & Conversión OMS',
+          description: 'Analizar conversión progresiva de checkout, tasas de aprobación bancaria y fugas',
+          category: 'Analítica & Reportes',
+        });
+        const reload = await supabaseAdmin.from('app_permissions').select('*').order('category, code');
+        if (reload.data) permissions = reload.data;
+      } catch (e) {
+        console.warn('No se pudo auto-registrar el permiso embudo:view:', e.message);
+      }
+    }
+
     // 3. Cargar matriz de asignaciones role_permissions
     const { data: rolePermissions, error: rpError } = await supabaseAdmin
       .from('app_role_permissions')

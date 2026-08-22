@@ -6,6 +6,37 @@ import { getNicaraguaNow } from '@/lib/dateUtils';
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
+function normalizeStoreName(rawName) {
+  if (!rawName) return 'Retiro en Tienda';
+  let s = String(rawName).trim();
+  s = s.replace(/^Retiro\s+en\s+tienda\s*/i, '');
+  s = s.replace(/^Tienda\s*/i, '');
+
+  const lower = s.toLowerCase();
+  if (lower.includes('carretera a masaya') || lower.includes('masaya road')) return 'Carretera a Masaya';
+  if (lower.includes('periodista')) return 'El Periodista';
+  if (lower.includes('radial') || lower.includes('la radial')) return 'La Radial';
+  if (lower.includes('chinandega')) return 'Chinandega';
+  if (lower.includes('esteli') || lower.includes('estelí')) return 'Estelí';
+  if (lower.includes('home center')) return 'Home Center';
+  if (lower.includes('jinotepe')) return 'Jinotepe';
+  if (lower.includes('juigalpa')) return 'Juigalpa';
+  if (lower.includes('leon') || lower.includes('león')) return 'León';
+  if (lower.includes('masaya') && !lower.includes('carretera')) return 'Masaya';
+  if (lower.includes('matagalpa')) return 'Matagalpa';
+  if (lower.includes('rivas')) return 'Rivas';
+  if (lower.includes('norte') || lower.includes('sinsa norte')) return 'Sinsa Norte';
+
+  return s
+    .split(/\s+/)
+    .map((w) => {
+      const l = w.toLowerCase();
+      if (l === 'a' || l === 'de' || l === 'en' || l === 'la') return l;
+      return w.charAt(0).toUpperCase() + w.slice(1).toLowerCase();
+    })
+    .join(' ');
+}
+
 function parseIsoStartEnd(startDateParam, endDateParam) {
   const nicNow = getNicaraguaNow();
   let startStr = (startDateParam || nicNow.firstDayStr).trim();
@@ -165,7 +196,7 @@ export async function GET(request) {
             const isPickup = fulfillmentType === 'pickup' || (pickupStore && pickupStore.length > 0);
             if (isPickup) {
               pickupCount++;
-              const sName = pickupStore || 'Retiro en Tienda';
+              const sName = normalizeStoreName(pickupStore);
               storeCounts[sName] = (storeCounts[sName] || 0) + 1;
             } else {
               deliveryCount++;

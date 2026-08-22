@@ -18,10 +18,13 @@ import {
   User,
   LogOut,
   Users,
-  Package,
-  Sparkles,
   Megaphone,
   Clock,
+  Filter,
+  BookOpen,
+  Truck,
+  Sparkles,
+  Package,
 } from 'lucide-react';
 
 export default function Sidebar({ vtexStatus, supabaseStatus, mobileOpen, onCloseMobile, newTxCount = 0 }) {
@@ -54,6 +57,13 @@ export default function Sidebar({ vtexStatus, supabaseStatus, mobileOpen, onClos
       icon: Clock,
       color: '#fbbf24',
       permission: 'patrones:view',
+    },
+    {
+      label: 'Embudo de Checkout',
+      href: '/embudo',
+      icon: Filter,
+      color: '#34d399',
+      permission: 'embudo:view',
     },
     {
       label: 'Marketing & UTMs',

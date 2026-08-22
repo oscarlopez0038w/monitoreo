@@ -4,7 +4,8 @@ import { useState, useEffect } from 'react';
 import AppLayout from '@/components/AppLayout';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import { getNicaraguaNow } from '@/lib/dateUtils';
-import { ShoppingCart, Calendar, Filter, Search, RefreshCw, ChevronDown, ChevronUp, Package, DollarSign, CheckCircle2, Clock, AlertTriangle, FileText, Zap, Radio, X, MessageSquare, Info, Download, Truck, Store, MapPin, Megaphone, Tag, Gift, User } from 'lucide-react';
+import * as XLSX from 'xlsx';
+import { ShoppingCart, Calendar, Filter, Search, RefreshCw, ChevronDown, ChevronUp, Package, DollarSign, CheckCircle2, Clock, AlertTriangle, FileText, Zap, Radio, X, MessageSquare, Info, Download, Truck, Store, MapPin, Megaphone, Tag, Gift, User, FileSpreadsheet } from 'lucide-react';
 
 export default function OrdenesPage() {
   const nicNow = getNicaraguaNow();
@@ -23,7 +24,105 @@ export default function OrdenesPage() {
   const [liveBanner, setLiveBanner] = useState(null);
   const [showAllStores, setShowAllStores] = useState(false);
   const [syncingOrders, setSyncingOrders] = useState(false);
+  const [exportingCanceled, setExportingCanceled] = useState(false);
+  const [exportingAll, setExportingAll] = useState(false);
   const [globalStats, setGlobalStats] = useState({ total: 0, invoiced: 0, handling: 0, readyForHandling: 0, canceled: 0, pickupCount: 0, deliveryCount: 0, pickupPct: 0, deliveryPct: 0, pickupStores: [] });
+
+  const handleExportCanceledOrders = async () => {
+    setExportingCanceled(true);
+    try {
+      const params = new URLSearchParams({
+        startDate,
+        endDate,
+        status: 'canceled',
+        page: '1',
+      });
+      const res = await fetch(`/api/orders?${params.toString()}`);
+      const json = await res.json();
+      const canceledList = json.data || [];
+
+      if (canceledList.length === 0) {
+        setLiveBanner({ type: 'error', text: 'No se encontraron órdenes canceladas en el período seleccionado.' });
+        return;
+      }
+
+      const exportRows = canceledList.map((o) => ({
+        'ID Orden': o.orderId || o.sequence,
+        'Secuencia': o.sequence || o.orderId,
+        'Fecha Creación': o.creationDate ? new Date(o.creationDate).toLocaleString('es-NI') : '',
+        'Estado': 'Cancelada (canceled)',
+        'Cliente': o.clientName || 'N/A',
+        'Email Cliente': o.clientEmail || 'N/A',
+        'Total C$': o.totalValue ? (o.totalValue / 100).toFixed(2) : '0.00',
+        'Tipo Entrega': o.fulfillmentType === 'pickup' ? 'Retiro en Tienda' : 'Entrega a Domicilio',
+        'Tienda Retiro': o.pickupStore || 'N/A',
+        'Cantidad Items': o.itemsCount || 1,
+      }));
+
+      const wb = XLSX.utils.book_new();
+      const ws = XLSX.utils.json_to_sheet(exportRows);
+      XLSX.utils.book_append_sheet(wb, ws, 'Órdenes Canceladas');
+      XLSX.writeFile(wb, `Ordenes_Canceladas_VTEX_${startDate}_al_${endDate}.xlsx`);
+
+      setLiveBanner({
+        type: 'success',
+        text: `📊 Descargado con éxito: ${canceledList.length} órdenes canceladas en Excel.`,
+      });
+    } catch (err) {
+      console.error('Error exportando canceladas:', err);
+      setLiveBanner({ type: 'error', text: `Error al exportar canceladas: ${err.message}` });
+    } finally {
+      setExportingCanceled(false);
+    }
+  };
+
+  const handleExportAllOrders = async () => {
+    setExportingAll(true);
+    try {
+      const params = new URLSearchParams({
+        startDate,
+        endDate,
+        status: statusFilter,
+        search,
+        page: '1',
+      });
+      const res = await fetch(`/api/orders?${params.toString()}`);
+      const json = await res.json();
+      const list = json.data || [];
+
+      if (list.length === 0) {
+        setLiveBanner({ type: 'error', text: 'No hay órdenes en la lista para exportar.' });
+        return;
+      }
+
+      const exportRows = list.map((o) => ({
+        'ID Orden': o.orderId || o.sequence,
+        'Secuencia': o.sequence || o.orderId,
+        'Fecha Creación': o.creationDate ? new Date(o.creationDate).toLocaleString('es-NI') : '',
+        'Estado': o.statusDescription || o.status,
+        'Cliente': o.clientName || 'N/A',
+        'Email Cliente': o.clientEmail || 'N/A',
+        'Total C$': o.totalValue ? (o.totalValue / 100).toFixed(2) : '0.00',
+        'Tipo Entrega': o.fulfillmentType === 'pickup' ? 'Retiro en Tienda' : 'Entrega a Domicilio',
+        'Tienda Retiro': o.pickupStore || 'N/A',
+        'Cantidad Items': o.itemsCount || 1,
+      }));
+
+      const wb = XLSX.utils.book_new();
+      const ws = XLSX.utils.json_to_sheet(exportRows);
+      XLSX.utils.book_append_sheet(wb, ws, 'Reporte Órdenes');
+      XLSX.writeFile(wb, `Reporte_Ordenes_VTEX_${startDate}_al_${endDate}.xlsx`);
+
+      setLiveBanner({
+        type: 'success',
+        text: `📊 ${list.length} órdenes exportadas a Excel exitosamente.`,
+      });
+    } catch (err) {
+      console.error('Error exportando órdenes:', err);
+    } finally {
+      setExportingAll(false);
+    }
+  };
 
   const handleSyncOrders = async () => {
     setSyncingOrders(true);
@@ -277,6 +376,26 @@ export default function OrdenesPage() {
 
           <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap' }}>
             <button
+              onClick={handleExportAllOrders}
+              disabled={exportingAll}
+              className="btn-secondary"
+              style={{ padding: '0.45rem 0.85rem', fontSize: '0.82rem', borderColor: '#34d399', color: '#34d399' }}
+            >
+              <FileSpreadsheet size={14} className={exportingAll ? 'animate-spin' : ''} />
+              {exportingAll ? 'Exportando...' : 'Exportar Excel'}
+            </button>
+
+            <button
+              onClick={handleExportCanceledOrders}
+              disabled={exportingCanceled}
+              className="btn-secondary"
+              style={{ padding: '0.45rem 0.85rem', fontSize: '0.82rem', borderColor: '#fb7185', color: '#fb7185' }}
+            >
+              <Download size={14} className={exportingCanceled ? 'animate-spin' : ''} />
+              {exportingCanceled ? 'Descargando...' : 'Descargar Canceladas'}
+            </button>
+
+            <button
               onClick={handleActivateWebhook}
               disabled={registeringHook}
               className="btn-primary"
@@ -428,11 +547,38 @@ export default function OrdenesPage() {
           </div>
 
           {/* Card 5: Canceladas */}
-          <div className="glass-card" style={{ padding: '0.75rem 0.85rem', display: 'flex', flexDirection: 'column', justifyContent: 'center', textAlign: 'center', position: 'relative', minHeight: '115px' }}>
-            <span style={{ fontSize: '0.7rem', color: 'var(--text-dim)', textTransform: 'uppercase', fontWeight: 700, letterSpacing: '0.02em' }}>Canceladas</span>
-            <div style={{ fontSize: '1.45rem', fontWeight: 800, color: '#fb7185', marginTop: '0.25rem', lineHeight: 1.1 }}>
-              {canceledCount.toLocaleString()}
+          <div className="glass-card" style={{ padding: '0.75rem 0.85rem', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', textAlign: 'center', position: 'relative', minHeight: '115px' }}>
+            <div>
+              <span style={{ fontSize: '0.7rem', color: 'var(--text-dim)', textTransform: 'uppercase', fontWeight: 700, letterSpacing: '0.02em' }}>Canceladas</span>
+              <div style={{ fontSize: '1.45rem', fontWeight: 800, color: '#fb7185', marginTop: '0.25rem', lineHeight: 1.1 }}>
+                {canceledCount.toLocaleString()}
+              </div>
             </div>
+            <button
+              onClick={handleExportCanceledOrders}
+              disabled={exportingCanceled}
+              title="Descargar reporte Excel de órdenes canceladas"
+              style={{
+                marginTop: '0.35rem',
+                background: 'rgba(251, 113, 133, 0.15)',
+                border: '1px solid rgba(251, 113, 133, 0.35)',
+                borderRadius: '6px',
+                color: '#fb7185',
+                fontSize: '0.68rem',
+                fontWeight: 700,
+                cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '0.25rem',
+                padding: '0.25rem 0.4rem',
+                width: '100%',
+                transition: 'all 0.2s ease',
+              }}
+            >
+              <Download size={11} className={exportingCanceled ? 'animate-spin' : ''} />
+              {exportingCanceled ? 'Descargando...' : 'Descargar Excel'}
+            </button>
           </div>
 
           {/* Card 6: Tipo de Entrega (Pickup vs Delivery) */}
