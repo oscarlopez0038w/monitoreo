@@ -53,8 +53,19 @@ async function fetchAllPeriodOrders(startIso, endIso) {
 
 // Función para consultar los detalles de las órdenes en lotes concurrentes y calcular analítica completa de Marketing & Social Selling
 async function analyzePeriodMarketingDetails(orders) {
-  let socialCount = 0;
-  let socialRevenue = 0;
+  let grossSocialCount = 0;
+  let grossSocialRevenue = 0;
+  let canceledSocialCount = 0;
+  let canceledSocialRevenue = 0;
+  let netSocialCount = 0;
+  let netSocialRevenue = 0;
+
+  let grossWebCount = 0;
+  let grossWebRevenue = 0;
+  let canceledWebCount = 0;
+  let canceledWebRevenue = 0;
+  let netWebCount = 0;
+  let netWebRevenue = 0;
 
   const campMap = {};
   const sourceMap = {};
@@ -70,7 +81,8 @@ async function analyzePeriodMarketingDetails(orders) {
 
   if (!orders || orders.length === 0) {
     return {
-      social: { count: 0, revenue: 0 },
+      social: { grossCount: 0, grossRevenue: 0, canceledCount: 0, canceledRevenue: 0, netCount: 0, netRevenue: 0 },
+      web: { grossCount: 0, grossRevenue: 0, canceledCount: 0, canceledRevenue: 0, netCount: 0, netRevenue: 0 },
       marketing: { utmCampaigns: [], utmSources: [], couponsList: [], vtexPromotions: [], logisticsSummary },
     };
   }
@@ -144,71 +156,92 @@ async function analyzePeriodMarketingDetails(orders) {
     // Procesar métricas para cada orden
     details.forEach((detail, idx) => {
       const origOrder = batch[idx];
-      if (!detail) return;
-      if (detail.status === 'canceled') return;
+      const ordObj = detail || origOrder;
+      if (!ordObj) return;
 
-      const valNio = detail.totalValue ? detail.totalValue / 100 : (detail.value ? detail.value / 100 : (origOrder.totalValue ? origOrder.totalValue / 100 : 0));
-      const mkt = detail.marketingData || {};
-      const utmi = mkt.utmiCampaign || detail.utmiCampaign || mkt.utmicampaign;
-      const mTags = mkt.marketingTags || detail.marketingTags || [];
+      const st = detail?.status || origOrder?.status;
+      const isCanceled = st === 'canceled';
+
+      const valNio = detail?.totalValue ? detail.totalValue / 100 : (detail?.value ? detail.value / 100 : (origOrder?.totalValue ? origOrder.totalValue / 100 : 0));
+      const mkt = detail?.marketingData || {};
+      const utmi = mkt.utmiCampaign || detail?.utmiCampaign || mkt.utmicampaign;
+      const mTags = mkt.marketingTags || detail?.marketingTags || [];
       const hasSocialTag = (Array.isArray(mTags) && mTags.includes('vtexSocialSelling')) || Boolean(utmi && String(utmi).trim().length > 0);
 
-      // Social Selling
       if (hasSocialTag) {
-        socialCount++;
-        socialRevenue += valNio;
-      }
-
-      // Logística
-      const delChan = detail.shippingData?.logisticsInfo?.[0]?.selectedDeliveryChannel;
-      const isPickup = delChan === 'pickup-in-point' || Boolean(detail.shippingData?.logisticsInfo?.[0]?.pickupStoreInfo?.friendlyName);
-      const shipCost = (detail.totals?.find((t) => t.id === 'Shipping')?.value || 0) / 100;
-
-      if (isPickup) {
-        logisticsSummary.pickupCount++;
-        logisticsSummary.pickupRevenue += valNio;
-      } else {
-        logisticsSummary.deliveryCount++;
-        logisticsSummary.deliveryRevenue += valNio;
-      }
-
-      if (shipCost === 0) {
-        logisticsSummary.freeFreightCount++;
-      }
-
-      // UTM Campaign
-      const camp = mkt.utmCampaign || mkt.utm_campaign;
-      const cKey = (camp && String(camp).trim().length > 0) ? String(camp).trim() : 'Sin Campaña Específica (Orgánico / Directo)';
-      campMap[cKey] = campMap[cKey] || { name: cKey, orders: 0, revenueNio: 0 };
-      campMap[cKey].orders += 1;
-      campMap[cKey].revenueNio += valNio;
-
-      // UTM Source / Canal
-      const src = hasSocialTag ? 'Vendedor Interno (Social Selling)' : (mkt.utmSource || mkt.utm_source || 'Orgánico / Directo');
-      const srcKey = String(src).trim();
-      sourceMap[srcKey] = sourceMap[srcKey] || { name: srcKey, orders: 0, revenueNio: 0 };
-      sourceMap[srcKey].orders += 1;
-      sourceMap[srcKey].revenueNio += valNio;
-
-      // Cupón
-      const cpn = mkt.coupon;
-      if (cpn && String(cpn).trim().length > 0) {
-        const cpnKey = String(cpn).trim();
-        couponMap[cpnKey] = couponMap[cpnKey] || { code: cpnKey, orders: 0, revenueNio: 0 };
-        couponMap[cpnKey].orders += 1;
-        couponMap[cpnKey].revenueNio += valNio;
-      }
-
-      // Promociones & Alianzas VTEX
-      const promoArray = detail.ratesAndBenefitsData?.rateAndBenefitsIdentifiers || [];
-      promoArray.forEach((promo) => {
-        const pName = (promo.name || promo.id || '').trim();
-        if (pName) {
-          promoMap[pName] = promoMap[pName] || { name: pName, orders: 0, revenueNio: 0 };
-          promoMap[pName].orders += 1;
-          promoMap[pName].revenueNio += valNio;
+        grossSocialCount++;
+        grossSocialRevenue += valNio;
+        if (isCanceled) {
+          canceledSocialCount++;
+          canceledSocialRevenue += valNio;
+        } else {
+          netSocialCount++;
+          netSocialRevenue += valNio;
         }
-      });
+      } else {
+        grossWebCount++;
+        grossWebRevenue += valNio;
+        if (isCanceled) {
+          canceledWebCount++;
+          canceledWebRevenue += valNio;
+        } else {
+          netWebCount++;
+          netWebRevenue += valNio;
+        }
+      }
+
+      if (!isCanceled) {
+        // Logística
+        const delChan = detail?.shippingData?.logisticsInfo?.[0]?.selectedDeliveryChannel;
+        const isPickup = delChan === 'pickup-in-point' || Boolean(detail?.shippingData?.logisticsInfo?.[0]?.pickupStoreInfo?.friendlyName);
+        const shipCost = (detail?.totals?.find((t) => t.id === 'Shipping')?.value || 0) / 100;
+
+        if (isPickup) {
+          logisticsSummary.pickupCount++;
+          logisticsSummary.pickupRevenue += valNio;
+        } else {
+          logisticsSummary.deliveryCount++;
+          logisticsSummary.deliveryRevenue += valNio;
+        }
+
+        if (shipCost === 0) {
+          logisticsSummary.freeFreightCount++;
+        }
+
+        // UTM Campaign
+        const camp = mkt.utmCampaign || mkt.utm_campaign;
+        const cKey = (camp && String(camp).trim().length > 0) ? String(camp).trim() : 'Sin Campaña Específica (Orgánico / Directo)';
+        campMap[cKey] = campMap[cKey] || { name: cKey, orders: 0, revenueNio: 0 };
+        campMap[cKey].orders += 1;
+        campMap[cKey].revenueNio += valNio;
+
+        // UTM Source / Canal
+        const src = hasSocialTag ? 'Vendedor Interno (Social Selling)' : (mkt.utmSource || mkt.utm_source || 'Orgánico / Directo');
+        const srcKey = String(src).trim();
+        sourceMap[srcKey] = sourceMap[srcKey] || { name: srcKey, orders: 0, revenueNio: 0 };
+        sourceMap[srcKey].orders += 1;
+        sourceMap[srcKey].revenueNio += valNio;
+
+        // Cupón
+        const cpn = mkt.coupon;
+        if (cpn && String(cpn).trim().length > 0) {
+          const cpnKey = String(cpn).trim();
+          couponMap[cpnKey] = couponMap[cpnKey] || { code: cpnKey, orders: 0, revenueNio: 0 };
+          couponMap[cpnKey].orders += 1;
+          couponMap[cpnKey].revenueNio += valNio;
+        }
+
+        // Promociones & Alianzas VTEX
+        const promoArray = detail?.ratesAndBenefitsData?.rateAndBenefitsIdentifiers || [];
+        promoArray.forEach((promo) => {
+          const pName = (promo.name || promo.id || '').trim();
+          if (pName) {
+            promoMap[pName] = promoMap[pName] || { name: pName, orders: 0, revenueNio: 0 };
+            promoMap[pName].orders += 1;
+            promoMap[pName].revenueNio += valNio;
+          }
+        });
+      }
     });
   }
 
@@ -235,7 +268,22 @@ async function analyzePeriodMarketingDetails(orders) {
   })).sort((a, b) => b.revenueNio - a.revenueNio);
 
   return {
-    social: { count: socialCount, revenue: socialRevenue },
+    social: {
+      grossCount: grossSocialCount,
+      grossRevenue: grossSocialRevenue,
+      canceledCount: canceledSocialCount,
+      canceledRevenue: canceledSocialRevenue,
+      netCount: netSocialCount,
+      netRevenue: netSocialRevenue,
+    },
+    web: {
+      grossCount: grossWebCount,
+      grossRevenue: grossWebRevenue,
+      canceledCount: canceledWebCount,
+      canceledRevenue: canceledWebRevenue,
+      netCount: netWebCount,
+      netRevenue: netWebRevenue,
+    },
     marketing: {
       utmCampaigns,
       utmSources,
@@ -317,58 +365,60 @@ export async function GET(request) {
       fetchAllPeriodOrders(prevStartIso, prevEndIso),
     ]);
 
-    const currValidOrders = currOrders.filter((o) => o.status !== 'canceled');
-    const currTotalRevenue = currValidOrders.reduce((sum, o) => sum + (o.totalValue ? o.totalValue / 100 : 0), 0);
-    const currTotalOrders = currOrders.length;
-    const currAvgTicket = currValidOrders.length > 0 ? currTotalRevenue / currValidOrders.length : 0;
+    const currGrossRevenue = currOrders.reduce((sum, o) => sum + (o.totalValue ? o.totalValue / 100 : 0), 0);
+    const currCanceledRevenue = currOrders.filter((o) => o.status === 'canceled').reduce((sum, o) => sum + (o.totalValue ? o.totalValue / 100 : 0), 0);
+    const currNetRevenue = currGrossRevenue - currCanceledRevenue;
 
-    const prevValidOrders = prevOrders.filter((o) => o.status !== 'canceled');
-    const prevTotalRevenue = prevValidOrders.reduce((sum, o) => sum + (o.totalValue ? o.totalValue / 100 : 0), 0);
+    const currTotalOrders = currOrders.length;
+    const currCanceledCount = currOrders.filter((o) => o.status === 'canceled').length;
+    const currValidCount = currTotalOrders - currCanceledCount;
+
+    const currGrossAvgTicket = currTotalOrders > 0 ? currGrossRevenue / currTotalOrders : 0;
+    const currNetAvgTicket = currValidCount > 0 ? currNetRevenue / currValidCount : 0;
+
+    const prevGrossRevenue = prevOrders.reduce((sum, o) => sum + (o.totalValue ? o.totalValue / 100 : 0), 0);
+    const prevCanceledRevenue = prevOrders.filter((o) => o.status === 'canceled').reduce((sum, o) => sum + (o.totalValue ? o.totalValue / 100 : 0), 0);
+    const prevNetRevenue = prevGrossRevenue - prevCanceledRevenue;
+
     const prevTotalOrders = prevOrders.length;
-    const prevAvgTicket = prevValidOrders.length > 0 ? prevTotalRevenue / prevValidOrders.length : 0;
+    const prevCanceledCount = prevOrders.filter((o) => o.status === 'canceled').length;
+    const prevValidCount = prevTotalOrders - prevCanceledCount;
+
+    const prevGrossAvgTicket = prevTotalOrders > 0 ? prevGrossRevenue / prevTotalOrders : 0;
+    const prevNetAvgTicket = prevValidCount > 0 ? prevNetRevenue / prevValidCount : 0;
 
     // Calcular estados en memoria sin peticiones externas redundantes a VTEX
     let currInvoicedCount = 0;
     let currHandlingCount = 0;
     let currReadyCount = 0;
-    let currCanceledCount = 0;
+    let currCanceledCountMap = 0;
+    let currOtherCount = 0;
 
     currOrders.forEach((o) => {
       const st = o.status;
       if (st === 'invoiced') currInvoicedCount++;
       else if (st === 'handling') currHandlingCount++;
       else if (st === 'ready-for-handling') currReadyCount++;
-      else if (st === 'canceled') currCanceledCount++;
+      else if (st === 'canceled') currCanceledCountMap++;
+      else currOtherCount++;
     });
 
     let prevInvoicedCount = 0;
-    let prevCanceledCount = 0;
+    let prevCanceledCountMap = 0;
 
     prevOrders.forEach((o) => {
       const st = o.status;
       if (st === 'invoiced') prevInvoicedCount++;
-      else if (st === 'canceled') prevCanceledCount++;
+      else if (st === 'canceled') prevCanceledCountMap++;
     });
 
     const currCancelRate = currTotalOrders > 0 ? (currCanceledCount / currTotalOrders) * 100 : 0;
     const prevCancelRate = prevTotalOrders > 0 ? (prevCanceledCount / prevTotalOrders) * 100 : 0;
 
     const [currAnalysis, prevAnalysis] = await Promise.all([
-      analyzePeriodMarketingDetails(currValidOrders),
-      analyzePeriodMarketingDetails(prevValidOrders),
+      analyzePeriodMarketingDetails(currOrders),
+      analyzePeriodMarketingDetails(prevOrders),
     ]);
-
-    const socialSellingOrdersCount = currAnalysis.social.count;
-    const socialSellingRevenue = currAnalysis.social.revenue;
-    const socialSellingPct = currValidOrders.length > 0 ? (socialSellingOrdersCount / currValidOrders.length) * 100 : 0;
-    const webDirectPct = 100 - socialSellingPct;
-    const webDirectRevenue = Math.max(0, currTotalRevenue - socialSellingRevenue);
-
-    const prevSocialSellingOrdersCount = prevAnalysis.social.count;
-    const prevSocialSellingRevenue = prevAnalysis.social.revenue;
-    const prevSocialSellingPct = prevValidOrders.length > 0 ? (prevSocialSellingOrdersCount / prevValidOrders.length) * 100 : 0;
-    const prevWebDirectPct = 100 - prevSocialSellingPct;
-    const prevWebDirectRevenue = Math.max(0, prevTotalRevenue - prevSocialSellingRevenue);
 
     const BCN_EXCHANGE_RATE = 36.6243;
 
@@ -387,14 +437,19 @@ export async function GET(request) {
         date: dayStr,
         dayNum,
         dayLabel,
+        totalOrders: 0,
         approvedOrders: 0,
         canceledOrders: 0,
+        grossSalesNio: 0,
+        grossSalesUsd: 0,
         salesNio: 0,
         salesUsd: 0,
         refundsNio: 0,
         refundsUsd: 0,
         avgTicketNio: 0,
         avgTicketUsd: 0,
+        grossAvgTicketNio: 0,
+        grossAvgTicketUsd: 0,
       };
     }
 
@@ -412,19 +467,28 @@ export async function GET(request) {
           date: dayStr,
           dayNum,
           dayLabel,
+          totalOrders: 0,
           approvedOrders: 0,
           canceledOrders: 0,
+          grossSalesNio: 0,
+          grossSalesUsd: 0,
           salesNio: 0,
           salesUsd: 0,
           refundsNio: 0,
           refundsUsd: 0,
           avgTicketNio: 0,
           avgTicketUsd: 0,
+          grossAvgTicketNio: 0,
+          grossAvgTicketUsd: 0,
         };
       }
 
       const valNio = o.totalValue ? o.totalValue / 100 : 0;
       const valUsd = valNio / BCN_EXCHANGE_RATE;
+
+      dailyMap[dayStr].totalOrders += 1;
+      dailyMap[dayStr].grossSalesNio += valNio;
+      dailyMap[dayStr].grossSalesUsd += valUsd;
 
       if (o.status === 'canceled') {
         dailyMap[dayStr].canceledOrders += 1;
@@ -441,14 +505,20 @@ export async function GET(request) {
       .map((d) => {
         const avgN = d.approvedOrders > 0 ? d.salesNio / d.approvedOrders : 0;
         const avgU = d.approvedOrders > 0 ? d.salesUsd / d.approvedOrders : 0;
+        const grossAvgN = d.totalOrders > 0 ? d.grossSalesNio / d.totalOrders : 0;
+        const grossAvgU = d.totalOrders > 0 ? d.grossSalesUsd / d.totalOrders : 0;
         return {
           ...d,
+          grossSalesNio: parseFloat(d.grossSalesNio.toFixed(2)),
+          grossSalesUsd: parseFloat(d.grossSalesUsd.toFixed(2)),
           salesNio: parseFloat(d.salesNio.toFixed(2)),
           salesUsd: parseFloat(d.salesUsd.toFixed(2)),
           refundsNio: parseFloat(d.refundsNio.toFixed(2)),
           refundsUsd: parseFloat(d.refundsUsd.toFixed(2)),
           avgTicketNio: parseFloat(avgN.toFixed(2)),
           avgTicketUsd: parseFloat(avgU.toFixed(2)),
+          grossAvgTicketNio: parseFloat(grossAvgN.toFixed(2)),
+          grossAvgTicketUsd: parseFloat(grossAvgU.toFixed(2)),
         };
       })
       .sort((a, b) => a.date.localeCompare(b.date));
@@ -485,28 +555,53 @@ export async function GET(request) {
         },
       },
       kpis: {
+        grossRevenue: {
+          currentNio: parseFloat(currGrossRevenue.toFixed(2)),
+          currentUsd: parseFloat((currGrossRevenue / BCN_EXCHANGE_RATE).toFixed(2)),
+          previousNio: parseFloat(prevGrossRevenue.toFixed(2)),
+          previousUsd: parseFloat((prevGrossRevenue / BCN_EXCHANGE_RATE).toFixed(2)),
+          changePct: calcChange(currGrossRevenue, prevGrossRevenue),
+        },
+        canceledRevenue: {
+          currentNio: parseFloat(currCanceledRevenue.toFixed(2)),
+          currentUsd: parseFloat((currCanceledRevenue / BCN_EXCHANGE_RATE).toFixed(2)),
+          previousNio: parseFloat(prevCanceledRevenue.toFixed(2)),
+          previousUsd: parseFloat((prevCanceledRevenue / BCN_EXCHANGE_RATE).toFixed(2)),
+          changePct: calcChange(currCanceledRevenue, prevCanceledRevenue),
+        },
         totalRevenue: {
-          currentNio: parseFloat(currTotalRevenue.toFixed(2)),
-          currentUsd: parseFloat((currTotalRevenue / BCN_EXCHANGE_RATE).toFixed(2)),
-          previousNio: parseFloat(prevTotalRevenue.toFixed(2)),
-          previousUsd: parseFloat((prevTotalRevenue / BCN_EXCHANGE_RATE).toFixed(2)),
-          current: parseFloat(currTotalRevenue.toFixed(2)),
-          previous: parseFloat(prevTotalRevenue.toFixed(2)),
-          changePct: calcChange(currTotalRevenue, prevTotalRevenue),
+          currentNio: parseFloat(currNetRevenue.toFixed(2)),
+          currentUsd: parseFloat((currNetRevenue / BCN_EXCHANGE_RATE).toFixed(2)),
+          previousNio: parseFloat(prevNetRevenue.toFixed(2)),
+          previousUsd: parseFloat((prevNetRevenue / BCN_EXCHANGE_RATE).toFixed(2)),
+          current: parseFloat(currNetRevenue.toFixed(2)),
+          previous: parseFloat(prevNetRevenue.toFixed(2)),
+          changePct: calcChange(currNetRevenue, prevNetRevenue),
         },
         totalOrders: {
           current: currTotalOrders,
           previous: prevTotalOrders,
+          validCurrent: currValidCount,
+          validPrevious: prevValidCount,
+          canceledCurrent: currCanceledCount,
+          canceledPrevious: prevCanceledCount,
           changePct: calcChange(currTotalOrders, prevTotalOrders),
         },
+        grossAvgTicket: {
+          currentNio: parseFloat(currGrossAvgTicket.toFixed(2)),
+          currentUsd: parseFloat((currGrossAvgTicket / BCN_EXCHANGE_RATE).toFixed(2)),
+          previousNio: parseFloat(prevGrossAvgTicket.toFixed(2)),
+          previousUsd: parseFloat((prevGrossAvgTicket / BCN_EXCHANGE_RATE).toFixed(2)),
+          changePct: calcChange(currGrossAvgTicket, prevGrossAvgTicket),
+        },
         avgTicket: {
-          currentNio: parseFloat(currAvgTicket.toFixed(2)),
-          currentUsd: parseFloat((currAvgTicket / BCN_EXCHANGE_RATE).toFixed(2)),
-          previousNio: parseFloat(prevAvgTicket.toFixed(2)),
-          previousUsd: parseFloat((prevAvgTicket / BCN_EXCHANGE_RATE).toFixed(2)),
-          current: parseFloat(currAvgTicket.toFixed(2)),
-          previous: parseFloat(prevAvgTicket.toFixed(2)),
-          changePct: calcChange(currAvgTicket, prevAvgTicket),
+          currentNio: parseFloat(currNetAvgTicket.toFixed(2)),
+          currentUsd: parseFloat((currNetAvgTicket / BCN_EXCHANGE_RATE).toFixed(2)),
+          previousNio: parseFloat(prevNetAvgTicket.toFixed(2)),
+          previousUsd: parseFloat((prevNetAvgTicket / BCN_EXCHANGE_RATE).toFixed(2)),
+          current: parseFloat(currNetAvgTicket.toFixed(2)),
+          previous: parseFloat(prevNetAvgTicket.toFixed(2)),
+          changePct: calcChange(currNetAvgTicket, prevNetAvgTicket),
         },
         invoicedOrders: {
           current: currInvoicedCount,
@@ -522,37 +617,57 @@ export async function GET(request) {
       channels: {
         socialSelling: {
           current: {
-            count: socialSellingOrdersCount,
-            pct: parseFloat(socialSellingPct.toFixed(1)),
-            revenueNio: parseFloat(socialSellingRevenue.toFixed(2)),
-            revenueUsd: parseFloat((socialSellingRevenue / BCN_EXCHANGE_RATE).toFixed(2)),
-            revenue: parseFloat(socialSellingRevenue.toFixed(2)),
+            grossCount: currAnalysis.social.grossCount,
+            grossRevenueNio: parseFloat(currAnalysis.social.grossRevenue.toFixed(2)),
+            grossRevenueUsd: parseFloat((currAnalysis.social.grossRevenue / BCN_EXCHANGE_RATE).toFixed(2)),
+            canceledCount: currAnalysis.social.canceledCount,
+            canceledRevenueNio: parseFloat(currAnalysis.social.canceledRevenue.toFixed(2)),
+            canceledRevenueUsd: parseFloat((currAnalysis.social.canceledRevenue / BCN_EXCHANGE_RATE).toFixed(2)),
+            netCount: currAnalysis.social.netCount,
+            netRevenueNio: parseFloat(currAnalysis.social.netRevenue.toFixed(2)),
+            netRevenueUsd: parseFloat((currAnalysis.social.netRevenue / BCN_EXCHANGE_RATE).toFixed(2)),
+            pct: currTotalOrders > 0 ? parseFloat(((currAnalysis.social.grossCount / currTotalOrders) * 100).toFixed(1)) : 0,
           },
           previous: {
-            count: prevSocialSellingOrdersCount,
-            pct: parseFloat(prevSocialSellingPct.toFixed(1)),
-            revenueNio: parseFloat(prevSocialSellingRevenue.toFixed(2)),
-            revenueUsd: parseFloat((prevSocialSellingRevenue / BCN_EXCHANGE_RATE).toFixed(2)),
-            revenue: parseFloat(prevSocialSellingRevenue.toFixed(2)),
+            grossCount: prevAnalysis.social.grossCount,
+            grossRevenueNio: parseFloat(prevAnalysis.social.grossRevenue.toFixed(2)),
+            grossRevenueUsd: parseFloat((prevAnalysis.social.grossRevenue / BCN_EXCHANGE_RATE).toFixed(2)),
+            canceledCount: prevAnalysis.social.canceledCount,
+            canceledRevenueNio: parseFloat(prevAnalysis.social.canceledRevenue.toFixed(2)),
+            canceledRevenueUsd: parseFloat((prevAnalysis.social.canceledRevenue / BCN_EXCHANGE_RATE).toFixed(2)),
+            netCount: prevAnalysis.social.netCount,
+            netRevenueNio: parseFloat(prevAnalysis.social.netRevenue.toFixed(2)),
+            netRevenueUsd: parseFloat((prevAnalysis.social.netRevenue / BCN_EXCHANGE_RATE).toFixed(2)),
+            pct: prevTotalOrders > 0 ? parseFloat(((prevAnalysis.social.grossCount / prevTotalOrders) * 100).toFixed(1)) : 0,
           },
-          changePct: calcChange(socialSellingRevenue, prevSocialSellingRevenue),
+          changePct: calcChange(currAnalysis.social.netRevenue, prevAnalysis.social.netRevenue),
         },
         webDirect: {
           current: {
-            count: currValidOrders.length - socialSellingOrdersCount,
-            pct: parseFloat(webDirectPct.toFixed(1)),
-            revenueNio: parseFloat(webDirectRevenue.toFixed(2)),
-            revenueUsd: parseFloat((webDirectRevenue / BCN_EXCHANGE_RATE).toFixed(2)),
-            revenue: parseFloat(webDirectRevenue.toFixed(2)),
+            grossCount: currAnalysis.web.grossCount,
+            grossRevenueNio: parseFloat(currAnalysis.web.grossRevenue.toFixed(2)),
+            grossRevenueUsd: parseFloat((currAnalysis.web.grossRevenue / BCN_EXCHANGE_RATE).toFixed(2)),
+            canceledCount: currAnalysis.web.canceledCount,
+            canceledRevenueNio: parseFloat(currAnalysis.web.canceledRevenue.toFixed(2)),
+            canceledRevenueUsd: parseFloat((currAnalysis.web.canceledRevenue / BCN_EXCHANGE_RATE).toFixed(2)),
+            netCount: currAnalysis.web.netCount,
+            netRevenueNio: parseFloat(currAnalysis.web.netRevenue.toFixed(2)),
+            netRevenueUsd: parseFloat((currAnalysis.web.netRevenue / BCN_EXCHANGE_RATE).toFixed(2)),
+            pct: currTotalOrders > 0 ? parseFloat(((currAnalysis.web.grossCount / currTotalOrders) * 100).toFixed(1)) : 0,
           },
           previous: {
-            count: prevValidOrders.length - prevSocialSellingOrdersCount,
-            pct: parseFloat(prevWebDirectPct.toFixed(1)),
-            revenueNio: parseFloat(prevWebDirectRevenue.toFixed(2)),
-            revenueUsd: parseFloat((prevWebDirectRevenue / BCN_EXCHANGE_RATE).toFixed(2)),
-            revenue: parseFloat(prevWebDirectRevenue.toFixed(2)),
+            grossCount: prevAnalysis.web.grossCount,
+            grossRevenueNio: parseFloat(prevAnalysis.web.grossRevenue.toFixed(2)),
+            grossRevenueUsd: parseFloat((prevAnalysis.web.grossRevenue / BCN_EXCHANGE_RATE).toFixed(2)),
+            canceledCount: prevAnalysis.web.canceledCount,
+            canceledRevenueNio: parseFloat(prevAnalysis.web.canceledRevenue.toFixed(2)),
+            canceledRevenueUsd: parseFloat((prevAnalysis.web.canceledRevenue / BCN_EXCHANGE_RATE).toFixed(2)),
+            netCount: prevAnalysis.web.netCount,
+            netRevenueNio: parseFloat(prevAnalysis.web.netRevenue.toFixed(2)),
+            netRevenueUsd: parseFloat((prevAnalysis.web.netRevenue / BCN_EXCHANGE_RATE).toFixed(2)),
+            pct: prevTotalOrders > 0 ? parseFloat(((prevAnalysis.web.grossCount / prevTotalOrders) * 100).toFixed(1)) : 0,
           },
-          changePct: calcChange(webDirectRevenue, prevWebDirectRevenue),
+          changePct: calcChange(currAnalysis.web.netRevenue, prevAnalysis.web.netRevenue),
         },
       },
       marketingAnalytics: {
@@ -566,7 +681,8 @@ export async function GET(request) {
         invoiced: currInvoicedCount,
         readyForHandling: currReadyCount,
         handling: currHandlingCount,
-        canceled: currCanceledCount,
+        canceled: currCanceledCountMap,
+        otherInProcess: currOtherCount,
       },
       dailyBreakdown,
     };

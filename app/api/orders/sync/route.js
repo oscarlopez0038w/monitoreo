@@ -54,16 +54,11 @@ export async function POST(request) {
     const startIso = new Date(`${startDateParam}T00:00:00-06:00`).toISOString();
     const endIso = new Date(`${endDateParam}T23:59:59-06:00`).toISOString();
 
-    // 1. Obtener órdenes oficiales de VTEX OMS por estados reales (excluyendo borradores/intentos de transacciones)
-    const [invoicedList, handlingList, readyList, canceledList] = await Promise.all([
-      fetchAllOrdersForStatus(startIso, endIso, 'invoiced'),
-      fetchAllOrdersForStatus(startIso, endIso, 'handling'),
-      fetchAllOrdersForStatus(startIso, endIso, 'ready-for-handling'),
-      fetchAllOrdersForStatus(startIso, endIso, 'canceled'),
-    ]);
+    // 1. Obtener TODAS las órdenes de VTEX OMS para el período sin filtrar estados
+    const allList = await fetchAllOrdersForStatus(startIso, endIso, '');
 
     const allOfficialOrdersMap = {};
-    [...invoicedList, ...handlingList, ...readyList, ...canceledList].forEach((o) => {
+    (allList || []).forEach((o) => {
       if (o.orderId) allOfficialOrdersMap[o.orderId] = o;
     });
 
