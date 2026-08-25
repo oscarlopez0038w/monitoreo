@@ -138,14 +138,22 @@ export default function AppLayout({ children }) {
     }
   }
 
-  // Buscar primera ruta permitida para botón de retorno
+  // Buscar primera ruta permitida para el usuario según el orden de módulos en el menú
   const firstAllowedRoute = user
     ? Object.keys(ROUTE_PERMISSIONS).find((path) => {
+        if (path === '/') return false;
         if (user.role === 'Administrador Ejecutivo') return true;
         if (user.permissions?.includes('*')) return true;
         return user.permissions?.includes(ROUTE_PERMISSIONS[path].code);
-      }) || '/dashboard'
-    : '/dashboard';
+      }) || '/'
+    : '/';
+
+  // Redirección automática e instantánea al módulo autorizado
+  useEffect(() => {
+    if (isMounted && !isLoadingUser && user && !isAccessAllowed && firstAllowedRoute && firstAllowedRoute !== pathname) {
+      router.replace(firstAllowedRoute);
+    }
+  }, [isMounted, isLoadingUser, user, isAccessAllowed, firstAllowedRoute, pathname, router]);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', background: 'var(--bg-dark)' }}>
@@ -231,66 +239,14 @@ export default function AppLayout({ children }) {
           }}
           className="app-main-content"
         >
-          {!isMounted || isLoadingUser ? (
+          {!isMounted || isLoadingUser || !isAccessAllowed ? (
             <div style={{ display: 'flex', flex: 1, alignItems: 'center', justifyContent: 'center', minHeight: '60vh' }}>
               <div style={{ textAlign: 'center', color: '#94a3b8' }}>
                 <RefreshCw size={32} color="#38bdf8" className="animate-spin" style={{ margin: '0 auto 1rem auto', display: 'block' }} />
-                <span style={{ fontSize: '0.9rem', fontWeight: 600, color: '#ffffff' }}>Verificando permisos de acceso RBAC...</span>
+                <span style={{ fontSize: '0.9rem', fontWeight: 600, color: '#ffffff' }}>
+                  {!isAccessAllowed ? 'Redirigiendo a tu módulo autorizado...' : 'Verificando permisos de acceso RBAC...'}
+                </span>
               </div>
-            </div>
-          ) : !isAccessAllowed ? (
-            <div
-              style={{
-                maxWidth: '650px',
-                margin: '4rem auto',
-                background: 'rgba(15, 23, 42, 0.75)',
-                backdropFilter: 'blur(20px)',
-                border: '1px solid rgba(239, 68, 68, 0.3)',
-                borderRadius: '24px',
-                padding: '2.5rem',
-                textAlign: 'center',
-                boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.7)',
-              }}
-            >
-              <div
-                style={{
-                  display: 'inline-flex',
-                  padding: '1.1rem',
-                  background: 'rgba(239, 68, 68, 0.15)',
-                  borderRadius: '50%',
-                  color: '#f87171',
-                  marginBottom: '1.25rem',
-                }}
-              >
-                <Lock size={42} />
-              </div>
-              <h2 style={{ color: '#ffffff', fontSize: '1.6rem', fontWeight: 800, margin: '0 0 0.5rem 0' }}>
-                Acceso Restringido (Permiso RBAC Insuficiente)
-              </h2>
-              <p style={{ color: '#94a3b8', fontSize: '0.92rem', margin: '0 0 1.5rem 0', lineHeight: '1.6' }}>
-                Tu usuario actual (<strong>{user?.name || user?.email}</strong>) tiene asignado el rol <strong>"{user?.role}"</strong>, el cual no posee el permiso concedido para acceder al módulo <strong>"{missingPermName}"</strong>.
-              </p>
-
-              <button
-                onClick={() => router.push(firstAllowedRoute)}
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '0.6rem',
-                  padding: '0.8rem 1.5rem',
-                  background: 'linear-gradient(135deg, #38bdf8 0%, #2563eb 100%)',
-                  border: 'none',
-                  borderRadius: '12px',
-                  color: '#ffffff',
-                  fontWeight: 700,
-                  fontSize: '0.9rem',
-                  cursor: 'pointer',
-                  boxShadow: '0 8px 20px -4px rgba(56, 189, 248, 0.4)',
-                }}
-              >
-                <ArrowLeft size={18} />
-                Regresar a un Módulo Autorizado
-              </button>
             </div>
           ) : (
             children

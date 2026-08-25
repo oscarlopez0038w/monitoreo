@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { supabaseAdmin, isSupabaseConfigured } from '@/lib/supabase';
-import { fetchVtexOrderDetail } from '@/lib/vtex';
+import { fetchVtexOrderDetail, fetchRealClientEmail } from '@/lib/vtex';
 import { sendGa4RefundEvent } from '@/lib/ga4';
 
 export const dynamic = 'force-dynamic';
@@ -31,7 +31,14 @@ export async function POST(request) {
     const firstName = clientData.firstName || '';
     const lastName = clientData.lastName || '';
     const clientName = `${firstName} ${lastName}`.trim() || clientData.email || 'Cliente General';
-    const clientEmail = clientData.email || null;
+    let clientEmail = clientData.email || null;
+
+    if (clientEmail && clientEmail.includes('@ct.vtex.com.br') && clientData.userProfileId) {
+      const real = await fetchRealClientEmail(clientData.userProfileId, clientEmail);
+      if (real && !real.includes('@ct.vtex.com.br')) {
+        clientEmail = real;
+      }
+    }
 
     // Extracción de datos de envío y entrega
     const logInfo = orderDetail.shippingData?.logisticsInfo?.[0];

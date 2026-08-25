@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { supabaseAdmin, isSupabaseConfigured } from '@/lib/supabase';
-import { isVtexConfigured, fetchVtexOrders, fetchVtexOrderDetail } from '@/lib/vtex';
+import { isVtexConfigured, fetchVtexOrders, fetchVtexOrderDetail, fetchRealClientEmail } from '@/lib/vtex';
 import { getNicaraguaNow } from '@/lib/dateUtils';
 
 export const dynamic = 'force-dynamic';
@@ -103,72 +103,77 @@ export async function POST(request) {
         batch.map((o) => fetchVtexOrderDetail(o.orderId).catch(() => null))
       );
 
-      const upsertRows = [];
+      const upsertRows = await Promise.all(
+        batch.map(async (o, idx) => {
+          const detail = details[idx];
 
-      batch.forEach((o, idx) => {
-        const detail = details[idx];
+          const clientData = detail?.clientProfileData || {};
+          const firstName = clientData.firstName || '';
+          const lastName = clientData.lastName || '';
+          const clientName = `${firstName} ${lastName}`.trim() || clientData.email || o.clientName || 'Cliente General';
+          let clientEmail = clientData.email || null;
 
-        const clientData = detail?.clientProfileData || {};
-        const firstName = clientData.firstName || '';
-        const lastName = clientData.lastName || '';
-        const clientName = `${firstName} ${lastName}`.trim() || clientData.email || o.clientName || 'Cliente General';
-        const clientEmail = clientData.email || null;
+          if (clientEmail && clientEmail.includes('@ct.vtex.com.br') && clientData.userProfileId) {
+            const real = await fetchRealClientEmail(clientData.userProfileId, clientEmail);
+            if (real && !real.includes('@ct.vtex.com.br')) {
+              clientEmail = real;
+            }
+          }
 
-        const logInfo = detail?.shippingData?.logisticsInfo?.[0];
-        const channel = logInfo?.selectedDeliveryChannel || detail?.shippingData?.selectedAddresses?.[0]?.addressType || '';
-        const isPickup = channel === 'pickup-in-point' || channel === 'pickup';
-        const fulfillmentType = isPickup ? 'pickup' : 'delivery';
-        const pickupStore = isPickup
-          ? (logInfo?.pickupStoreInfo?.friendlyName || logInfo?.deliveryCompany || 'Retiro en Tienda').trim()
-          : '';
+          const logInfo = detail?.shippingData?.logisticsInfo?.[0];
+          const channel = logInfo?.selectedDeliveryChannel || detail?.shippingData?.selectedAddresses?.[0]?.addressType || '';
+          const isPickup = channel === 'pickup-in-point' || channel === 'pickup';
+          const fulfillmentType = isPickup ? 'pickup' : 'delivery';
+          const pickupStore = isPickup
+            ? (logInfo?.pickupStoreInfo?.friendlyName || logInfo?.deliveryCompany || 'Retiro en Tienda').trim()
+            : '';
 
-        const shippingVal = detail?.totals?.find((t) => t.id === 'Shipping')?.value;
-        const shippingCost = shippingVal !== undefined ? shippingVal / 100 : 0;
+          const shippingVal = detail?.totals?.find((t) => t.id === 'Shipping')?.value;
+          const shippingCost = shippingVal !== undefined ? shippingVal / 100 : 0;
 
-        const addressJson = detail?.shippingData?.address || null;
-        const marketingJson = detail?.marketingData || null;
+          const addressJson = detail?.shippingData?.address || null;
+          const marketingJson = detail?.marketingData || null;
 
-        const rawItems = (detail?.items || o.items || []).map((it) => ({
-          id: it.id || it.sellerSku,
-          name: it.name || it.skuName,
-          quantity: it.quantity || 1,
-          price: it.price ? it.price / 100 : 0,
-          sellingPrice: it.sellingPrice ? it.sellingPrice / 100 : (it.price ? it.price / 100 : 0),
-          listPrice: it.listPrice ? it.listPrice / 100 : (it.price ? it.price / 100 : 0),
-          totalPrice: (it.sellingPrice || it.price ? (it.sellingPrice || it.price) * (it.quantity || 1) : 0) / 100,
-        }));
+          const rawItems = (detail?.items || o.items || []).map((it) => ({
+            id: it.id || it.sellerSku,
+            name: it.name || it.skuName,
+            quantity: it.quantity || 1,
+            price: it.price ? it.price / 100 : 0,
+            sellingPrice: it.sellingPrice ? it.sellingPrice / 100 : (it.price ? it.price / 100 : 0),
+            listPrice: it.listPrice ? it.listPrice / 100 : (it.price ? it.price / 100 : 0),
+            totalPrice: (it.sellingPrice || it.price ? (it.sellingPrice || it.price) * (it.quantity || 1) : 0) / 100,
+          }));
 
-        const itemsPayload = {
-          list: rawItems,
-          fulfillmentType,
-          pickupStore,
-          shippingCost,
-          address: addressJson,
-          marketing: marketingJson,
-          detail: detail || null,
-        };
+          const itemsPayload = {
+            list: rawItems,
+            fulfillmentType,
+            pickupStore,
+            shippingCost,
+            address: addressJson,
+            marketing: marketingJson,
+            detail: detail || null,
+          };
 
-        const row = {
-          order_id: o.orderId,
-          sequence: String(o.sequence || detail?.sequence || ''),
-          status: o.status || detail?.status || 'unknown',
-          status_description: detail?.statusDescription || o.statusDescription || o.status || '',
-          creation_date: o.creationDate || detail?.creationDate || new Date().toISOString(),
-          client_name: clientName,
-          client_email: clientEmail,
-          total_value: o.totalValue ? o.totalValue / 100 : (detail?.value ? detail.value / 100 : 0),
-          fulfillment_type: fulfillmentType,
-          pickup_store: pickupStore,
-          shipping_cost: shippingCost,
-          address_json: addressJson,
-          marketing_json: marketingJson,
-          items: itemsPayload,
-          detail_json: detail || null,
-          updated_at: new Date().toISOString(),
-        };
-
-        upsertRows.push(row);
-      });
+          return {
+            order_id: o.orderId,
+            sequence: String(o.sequence || detail?.sequence || ''),
+            status: o.status || detail?.status || 'unknown',
+            status_description: detail?.statusDescription || o.statusDescription || o.status || '',
+            creation_date: o.creationDate || detail?.creationDate || new Date().toISOString(),
+            client_name: clientName,
+            client_email: clientEmail,
+            total_value: o.totalValue ? o.totalValue / 100 : (detail?.value ? detail.value / 100 : 0),
+            fulfillment_type: fulfillmentType,
+            pickup_store: pickupStore,
+            shipping_cost: shippingCost,
+            address_json: addressJson,
+            marketing_json: marketingJson,
+            items: itemsPayload,
+            detail_json: detail || null,
+            updated_at: new Date().toISOString(),
+          };
+        })
+      );
 
       if (upsertRows.length > 0) {
         try {

@@ -1,10 +1,20 @@
 import { NextResponse } from 'next/server';
 import { supabaseAdmin, isSupabaseConfigured } from '@/lib/supabase';
-import { isVtexConfigured, fetchVtexOrders, fetchVtexOrderDetail } from '@/lib/vtex';
+import { isVtexConfigured, fetchVtexOrders, fetchVtexOrderDetail, fetchRealClientEmail } from '@/lib/vtex';
 import { getNicaraguaNow } from '@/lib/dateUtils';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
+
+function cleanEmailDisplay(email) {
+  if (!email || typeof email !== 'string') return 'N/A';
+  const trimmed = email.trim();
+  if (!trimmed || trimmed === 'N/A') return 'N/A';
+  if (trimmed.includes('@ct.vtex.com.br')) {
+    return 'Enmascarado por VTEX';
+  }
+  return trimmed;
+}
 
 function normalizeStoreName(rawName) {
   if (!rawName) return 'Retiro en Tienda';
@@ -125,7 +135,8 @@ export async function GET(request) {
     const statusParam = (searchParams.get('status') || '').trim();
     const searchParam = (searchParams.get('search') || '').trim();
     const pageParam = parseInt(searchParams.get('page') || '1', 10);
-    const pageSize = 30;
+    const isExport = searchParams.get('export') === 'true';
+    const pageSize = isExport ? 5000 : 30;
 
     const { startIso, endIso, startStr, endStr } = parseIsoStartEnd(startDateParam, endDateParam);
 
@@ -148,16 +159,22 @@ export async function GET(request) {
 
         if (searchParam) {
           const cleanSearch = searchParam.trim();
-          query = query.or(`order_id.ilike.%${cleanSearch}%,sequence.ilike.%${cleanSearch}%,client_name.ilike.%${cleanSearch}%,client_email.ilike.%${cleanSearch}%,items::text.ilike.%${cleanSearch}%`);
+          query = query.or(`order_id.ilike.%${cleanSearch}%,sequence.ilike.%${cleanSearch}%,client_name.ilike.%${cleanSearch}%,client_email.ilike.%${cleanSearch}%,pickup_store.ilike.%${cleanSearch}%`);
         }
 
         query = query.order('creation_date', { ascending: false });
 
-        const from = (pageParam - 1) * pageSize;
-        const to = from + pageSize - 1;
-        query = query.range(from, to);
+        if (!isExport) {
+          const from = (pageParam - 1) * pageSize;
+          const to = from + pageSize - 1;
+          query = query.range(from, to);
+        }
 
         const { data: rows, count, error } = await query;
+
+        if (error) {
+          console.error('Error consultando Supabase vtex_orders query:', error);
+        }
 
         if (!error && rows && rows.length > 0) {
           useSupabase = true;
@@ -166,7 +183,7 @@ export async function GET(request) {
           // Conteos y Estadísticas globales en Supabase para el período (< 10ms)
           const { data: periodRows } = await supabaseAdmin
             .from('vtex_orders')
-            .select('status, fulfillment_type, pickup_store, items')
+            .select('status, fulfillment_type, pickup_store, items, detail_json')
             .gte('creation_date', startIso)
             .lte('creation_date', endIso);
 
@@ -188,12 +205,22 @@ export async function GET(request) {
             let fulfillmentType = r.fulfillment_type || 'delivery';
             let pickupStore = r.pickup_store || '';
 
+            if (r.detail_json?.shippingData) {
+              const logInfo = r.detail_json.shippingData.logisticsInfo?.[0];
+              const channel = logInfo?.selectedDeliveryChannel || r.detail_json.shippingData.selectedAddresses?.[0]?.addressType || '';
+              const isPickupFromDetail = channel === 'pickup-in-point' || channel === 'pickup' || Boolean(logInfo?.pickupStoreInfo?.friendlyName);
+              if (isPickupFromDetail) {
+                fulfillmentType = 'pickup';
+                pickupStore = logInfo?.pickupStoreInfo?.friendlyName || logInfo?.deliveryCompany || pickupStore || 'Retiro en Tienda';
+              }
+            }
+
             if (r.items && !Array.isArray(r.items) && typeof r.items === 'object') {
               fulfillmentType = r.items.fulfillmentType || fulfillmentType;
               pickupStore = r.items.pickupStore || pickupStore;
             }
 
-            const isPickup = fulfillmentType === 'pickup' || (pickupStore && pickupStore.length > 0);
+            const isPickup = fulfillmentType === 'pickup' || (pickupStore && pickupStore.trim().length > 0);
             if (isPickup) {
               pickupCount++;
               const sName = normalizeStoreName(pickupStore);
@@ -233,12 +260,41 @@ export async function GET(request) {
             let fulfillmentType = r.fulfillment_type || 'delivery';
             let pickupStore = r.pickup_store || '';
 
+            if (r.detail_json?.shippingData) {
+              const logInfo = r.detail_json.shippingData.logisticsInfo?.[0];
+              const channel = logInfo?.selectedDeliveryChannel || r.detail_json.shippingData.selectedAddresses?.[0]?.addressType || '';
+              const isPickupFromDetail = channel === 'pickup-in-point' || channel === 'pickup' || Boolean(logInfo?.pickupStoreInfo?.friendlyName);
+              if (isPickupFromDetail) {
+                fulfillmentType = 'pickup';
+                pickupStore = logInfo?.pickupStoreInfo?.friendlyName || logInfo?.deliveryCompany || pickupStore || 'Retiro en Tienda';
+              }
+            }
+
             if (r.items && !Array.isArray(r.items) && typeof r.items === 'object') {
               itemsList = r.items.list || [];
               fulfillmentType = r.items.fulfillmentType || fulfillmentType;
               pickupStore = r.items.pickupStore || pickupStore;
             } else if (Array.isArray(r.items)) {
               itemsList = r.items;
+            }
+
+            if (pickupStore && pickupStore.trim().length > 0) {
+              fulfillmentType = 'pickup';
+            }
+
+            let cancelReason = null;
+            let comments = null;
+            if (r.detail_json) {
+              const d = r.detail_json;
+              cancelReason =
+                d.cancelReason ||
+                (typeof d.cancellationData === 'object' ? d.cancellationData?.reason : d.cancellationData) ||
+                (typeof d.openTextField === 'object' ? d.openTextField?.value : d.openTextField) ||
+                null;
+              comments = typeof d.openTextField === 'object' ? d.openTextField?.value : (d.openTextField || null);
+            }
+            if (r.status === 'canceled' && !cancelReason) {
+              cancelReason = 'Sin motivo registrado por el sistema';
             }
 
             return {
@@ -248,14 +304,45 @@ export async function GET(request) {
               statusDescription: r.status_description || r.status,
               creationDate: r.creation_date,
               clientName: r.client_name || 'Cliente General',
-              clientEmail: r.client_email,
+              clientEmail: cleanEmailDisplay(r.client_email),
               totalValue: Math.round((r.total_value || 0) * 100),
               fulfillmentType: fulfillmentType,
               pickupStore: pickupStore,
               itemsCount: itemsList.length || 1,
+              cancelReason: cancelReason,
+              comments: comments,
               isFromDb: true,
             };
           });
+
+          if (isExport && isVtexConfigured()) {
+            const missingCanceled = dbOrders.filter(
+              (o) => o.status === 'canceled' && (!o.cancelReason || o.cancelReason === 'Sin motivo registrado por el sistema')
+            );
+            if (missingCanceled.length > 0) {
+              const BATCH_SIZE = 15;
+              for (let i = 0; i < missingCanceled.length; i += BATCH_SIZE) {
+                const batch = missingCanceled.slice(i, i + BATCH_SIZE);
+                const details = await Promise.all(
+                  batch.map((o) => fetchVtexOrderDetail(o.orderId).catch(() => null))
+                );
+                details.forEach((d, idx) => {
+                  if (d) {
+                    const target = batch[idx];
+                    const reason =
+                      d.cancelReason ||
+                      (typeof d.cancellationData === 'object' ? d.cancellationData?.reason : d.cancellationData) ||
+                      (typeof d.openTextField === 'object' ? d.openTextField?.value : d.openTextField) ||
+                      'Sin motivo registrado por el sistema';
+                    target.cancelReason = reason;
+                    if (d.openTextField) {
+                      target.comments = typeof d.openTextField === 'object' ? d.openTextField?.value : d.openTextField;
+                    }
+                  }
+                });
+              }
+            }
+          }
         }
       } catch (dbErr) {
         console.error('Error consultando Supabase vtex_orders:', dbErr);
@@ -263,7 +350,7 @@ export async function GET(request) {
     }
 
     if (useSupabase && dbOrders.length > 0) {
-      const totalPages = Math.ceil(totalDbCount / pageSize) || 1;
+      const totalPages = isExport ? 1 : (Math.ceil(totalDbCount / pageSize) || 1);
       return NextResponse.json({
         success: true,
         data: dbOrders,
@@ -276,32 +363,109 @@ export async function GET(request) {
     }
 
     if (isVtexConfigured()) {
-      const ordersData = await fetchVtexOrders(startIso, endIso, statusParam, searchParam, pageParam, pageSize);
-      const rawList = ordersData.list || [];
-      const enrichedList = rawList.map((o) => ({
-        ...o,
-        fulfillmentType: 'delivery',
-        pickupStore: '',
-        itemsCount: 1,
-      }));
+      let rawList = [];
+      let pagingInfo = { total: 0, pages: 1, currentPage: pageParam };
+
+      if (isExport) {
+        let p = 1;
+        let maxP = 50;
+        while (p <= maxP) {
+          const resData = await fetchVtexOrders(startIso, endIso, statusParam, searchParam, p, 100).catch(() => null);
+          if (!resData || !resData.list || resData.list.length === 0) break;
+          rawList.push(...resData.list);
+          const totalPages = resData.paging?.pages || 1;
+          if (p >= totalPages) break;
+          p++;
+        }
+        pagingInfo = { total: rawList.length, pages: 1, currentPage: 1 };
+      } else {
+        const ordersData = await fetchVtexOrders(startIso, endIso, statusParam, searchParam, pageParam, pageSize);
+        rawList = ordersData.list || [];
+        pagingInfo = ordersData.paging || { total: 0, pages: 0, currentPage: pageParam };
+      }
+
+      // Enriquecer la lista de órdenes leyendo sus detalles para determinar con precisión el tipo de entrega (Pickup vs Delivery)
+      const details = await Promise.all(
+        rawList.map((o) => fetchVtexOrderDetail(o.orderId).catch(() => null))
+      );
+
+      let pickupCount = 0;
+      let deliveryCount = 0;
+      const storeCounts = {};
+
+      const enrichedList = rawList.map((o, idx) => {
+        const d = details[idx];
+        let fulfillmentType = 'delivery';
+        let pickupStore = '';
+
+        if (d?.shippingData) {
+          const logInfo = d.shippingData.logisticsInfo?.[0];
+          const channel = logInfo?.selectedDeliveryChannel || d.shippingData.selectedAddresses?.[0]?.addressType || '';
+          const isPickup = channel === 'pickup-in-point' || channel === 'pickup' || Boolean(logInfo?.pickupStoreInfo?.friendlyName);
+          if (isPickup) {
+            fulfillmentType = 'pickup';
+            pickupStore = logInfo?.pickupStoreInfo?.friendlyName || logInfo?.deliveryCompany || 'Retiro en Tienda';
+          }
+        }
+
+        if (fulfillmentType === 'pickup') {
+          pickupCount++;
+          const sName = normalizeStoreName(pickupStore);
+          storeCounts[sName] = (storeCounts[sName] || 0) + 1;
+        } else {
+          deliveryCount++;
+        }
+
+        const cancelReason = d ? (
+          d.cancelReason ||
+          (typeof d.cancellationData === 'object' ? d.cancellationData?.reason : d.cancellationData) ||
+          (typeof d.openTextField === 'object' ? d.openTextField?.value : d.openTextField) ||
+          (o.status === 'canceled' ? 'Sin motivo registrado por el sistema' : null)
+        ) : (o.status === 'canceled' ? 'Sin motivo registrado por el sistema' : null);
+
+        const comments = d ? (typeof d.openTextField === 'object' ? d.openTextField?.value : (d.openTextField || null)) : null;
+
+        return {
+          ...o,
+          clientName: d?.clientProfileData ? `${d.clientProfileData.firstName || ''} ${d.clientProfileData.lastName || ''}`.trim() : (o.clientName || 'Cliente General'),
+          clientEmail: cleanEmailDisplay(d?.clientProfileData?.email || o.clientEmail),
+          fulfillmentType,
+          pickupStore,
+          itemsCount: d?.items?.length || 1,
+          cancelReason,
+          comments,
+        };
+      });
+
+      const totalFulfillment = pickupCount + deliveryCount;
+      const pickupPct = totalFulfillment > 0 ? Math.round((pickupCount / totalFulfillment) * 100) : 0;
+      const deliveryPct = totalFulfillment > 0 ? 100 - pickupPct : 0;
+
+      const pickupStores = Object.entries(storeCounts)
+        .map(([store, count]) => ({
+          store,
+          count,
+          pct: pickupCount > 0 ? Math.round((count / pickupCount) * 100) : 0,
+        }))
+        .sort((a, b) => b.count - a.count);
 
       const stats = {
-        total: ordersData.paging?.total || 0,
-        invoiced: 0,
-        handling: 0,
-        readyForHandling: 0,
-        canceled: 0,
-        pickupCount: 0,
-        deliveryCount: rawList.length,
-        pickupPct: 0,
-        deliveryPct: 100,
-        pickupStores: [],
+        total: pagingInfo.total || 0,
+        invoiced: enrichedList.filter((o) => o.status === 'invoiced').length,
+        handling: enrichedList.filter((o) => o.status === 'handling').length,
+        readyForHandling: enrichedList.filter((o) => o.status === 'ready-for-handling').length,
+        canceled: enrichedList.filter((o) => o.status === 'canceled').length,
+        pickupCount,
+        deliveryCount,
+        pickupPct,
+        deliveryPct,
+        pickupStores,
       };
 
       return NextResponse.json({
         success: true,
         data: enrichedList,
-        paging: ordersData.paging || { total: 0, pages: 0, currentPage: pageParam },
+        paging: pagingInfo,
         stats,
         source: 'vtex_live_fallback',
         startDate: startStr,
