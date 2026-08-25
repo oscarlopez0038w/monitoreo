@@ -28,6 +28,7 @@ import {
   MapPin,
   Gift,
   FileSpreadsheet,
+  ChevronDown,
 } from 'lucide-react';
 
 // Generador de curvas Bezier suaves para SVG
@@ -431,11 +432,7 @@ function DailyInteractiveTrendChart({ dailyBreakdown = [], formatCurrency, bcnRa
 export default function DashboardPage() {
   const nicNow = getNicaraguaNow();
 
-  // Período A por defecto: Mes Actual (inicio de mes hasta hoy)
-  const [startDateA, setStartDateA] = useState(nicNow.firstDayStr);
-  const [endDateA, setEndDateA] = useState(nicNow.todayStr);
-
-  // Período B por defecto: Mismísimos Días (MTD) para que la carga inicial sea ultra-rápida (1 al 5 vs. 1 al 5)
+  // Cálculo de mes anterior y mismo día para Período B
   let pY = nicNow.year;
   let pM = nicNow.month - 1;
   if (pM < 0) {
@@ -448,10 +445,123 @@ export default function DashboardPage() {
 
   const defaultStartB = `${pY}-${pMStr}-01`;
   const defaultFullEndB = `${pY}-${pMStr}-${String(lastDayPM).padStart(2, '0')}`;
-  const defaultMtdEndB = `${pY}-${pMStr}-${String(sameDayPM).padStart(2, '0')}`;
+  const sameDayPMStr = `${pY}-${pMStr}-${String(sameDayPM).padStart(2, '0')}`;
 
-  const [startDateB, setStartDateB] = useState(defaultStartB);
-  const [endDateB, setEndDateB] = useState(defaultMtdEndB);
+  // Período A por defecto: HOY (todayStr)
+  const [startDateA, setStartDateA] = useState(nicNow.todayStr);
+  const [endDateA, setEndDateA] = useState(nicNow.todayStr);
+
+  // Período B por defecto: Mismo día del mes anterior (1 día a 1 día)
+  const [startDateB, setStartDateB] = useState(sameDayPMStr);
+  const [endDateB, setEndDateB] = useState(sameDayPMStr);
+
+  const [selectedPreset, setSelectedPreset] = useState('today');
+  const [showRangeDropdown, setShowRangeDropdown] = useState(false);
+
+  const presetOptions = [
+    { id: 'today', label: 'Today' },
+    { id: 'yesterday', label: 'Yesterday' },
+    { id: 'last_7_days', label: 'Last 7 Days' },
+    { id: 'current_month', label: 'Current month' },
+    { id: 'last_30_days', label: 'Last 30 days' },
+    { id: 'custom', label: 'Custom' },
+  ];
+
+  const updateCustomDates = (newSA, newEA) => {
+    const sA = newSA !== undefined ? newSA : startDateA;
+    const eA = newEA !== undefined ? newEA : endDateA;
+    setStartDateA(sA);
+    setEndDateA(eA);
+    setSelectedPreset('custom');
+
+    if (sA && eA) {
+      const [sY, sM, sD] = sA.split('-').map(Number);
+      const [eY, eM, eD] = eA.split('-').map(Number);
+
+      let pSY = sY;
+      let pSM = sM - 2;
+      if (pSM < 0) { pSM += 12; pSY -= 1; }
+
+      let pEY = eY;
+      let pEM = eM - 2;
+      if (pEM < 0) { pEM += 12; pEY -= 1; }
+
+      const lastDayPSM = new Date(pSY, pSM + 1, 0).getDate();
+      const lastDayPEM = new Date(pEY, pEM + 1, 0).getDate();
+
+      const pSD = Math.min(sD, lastDayPSM);
+      const pED = Math.min(eD, lastDayPEM);
+
+      const sB = `${pSY}-${String(pSM + 1).padStart(2, '0')}-${String(pSD).padStart(2, '0')}`;
+      const eB = `${pEY}-${String(pEM + 1).padStart(2, '0')}-${String(pED).padStart(2, '0')}`;
+
+      setStartDateB(sB);
+      setEndDateB(eB);
+    }
+  };
+
+  const handleSelectPreset = (presetId) => {
+    setSelectedPreset(presetId);
+    if (presetId === 'custom') {
+      return;
+    }
+
+    const todayObj = new Date();
+    const todayStr = nicNow.todayStr;
+
+    const formatDateStr = (d) => {
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      return `${y}-${m}-${day}`;
+    };
+
+    let sA = todayStr;
+    let eA = todayStr;
+    let sB = sameDayPMStr;
+    let eB = sameDayPMStr;
+
+    if (presetId === 'today') {
+      sA = todayStr;
+      eA = todayStr;
+      sB = sameDayPMStr;
+      eB = sameDayPMStr;
+    } else if (presetId === 'yesterday') {
+      const yest = new Date(todayObj.getTime() - 24 * 3600 * 1000);
+      const yestStr = formatDateStr(yest);
+      sA = yestStr;
+      eA = yestStr;
+      const yestDayPM = Math.min(yest.getDate(), lastDayPM);
+      const yestPMStr = `${pY}-${pMStr}-${String(yestDayPM).padStart(2, '0')}`;
+      sB = yestPMStr;
+      eB = yestPMStr;
+    } else if (presetId === 'last_7_days') {
+      const d7 = new Date(todayObj.getTime() - 6 * 24 * 3600 * 1000);
+      sA = formatDateStr(d7);
+      eA = todayStr;
+      const d7DayPM = Math.min(d7.getDate(), lastDayPM);
+      sB = `${pY}-${pMStr}-${String(d7DayPM).padStart(2, '0')}`;
+      eB = sameDayPMStr;
+    } else if (presetId === 'current_month') {
+      sA = nicNow.firstDayStr;
+      eA = todayStr;
+      sB = defaultStartB;
+      eB = sameDayPMStr;
+    } else if (presetId === 'last_30_days') {
+      const d30 = new Date(todayObj.getTime() - 29 * 24 * 3600 * 1000);
+      sA = formatDateStr(d30);
+      eA = todayStr;
+      const d30PrevEnd = new Date(d30.getTime() - 24 * 3600 * 1000);
+      const d30PrevStart = new Date(d30PrevEnd.getTime() - 29 * 24 * 3600 * 1000);
+      sB = formatDateStr(d30PrevStart);
+      eB = formatDateStr(d30PrevEnd);
+    }
+
+    setStartDateA(sA);
+    setEndDateA(eA);
+    setStartDateB(sB);
+    setEndDateB(eB);
+  };
 
   // Selector de Modo de Moneda: 'usd' por defecto (Dólares USD $), 'nio' (Córdobas C$)
   const [currencyMode, setCurrencyMode] = useState('usd');
@@ -485,8 +595,38 @@ export default function DashboardPage() {
   };
 
   useEffect(() => {
-    fetchAnalytics(startDateA, endDateA, startDateB, endDateB);
+    fetchAnalytics();
   }, []);
+  // Cálculo del número de días en cada período para comparación justa (Like-for-Like)
+  const getDaysCount = (startStr, endStr) => {
+    if (!startStr || !endStr) return 0;
+    const s = new Date(startStr);
+    const e = new Date(endStr);
+    const diff = Math.round((e - s) / (1000 * 60 * 60 * 24)) + 1;
+    return diff > 0 ? diff : 0;
+  };
+
+  const daysCountA = getDaysCount(startDateA, endDateA);
+  const daysCountB = getDaysCount(startDateB, endDateB);
+  const isLikeForLike = daysCountA > 0 && daysCountA === daysCountB;
+
+  // Función para igualar el número de días del Período B con los días transcurridos del Período A
+  const equalizePeriodBToMatchA = () => {
+    if (!startDateB || daysCountA <= 0) return;
+    const parts = startDateB.split('-');
+    if (parts.length !== 3) return;
+    const sB = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+    const newEBDate = new Date(sB.valueOf());
+    newEBDate.setDate(newEBDate.getDate() + daysCountA - 1);
+
+    const yyyy = newEBDate.getFullYear();
+    const mm = String(newEBDate.getMonth() + 1).padStart(2, '0');
+    const dd = String(newEBDate.getDate()).padStart(2, '0');
+    const newEndB = `${yyyy}-${mm}-${dd}`;
+
+    setEndDateB(newEndB);
+    fetchAnalytics(startDateA, endDateA, startDateB, newEndB);
+  };
 
   // Función para aplicar presets de meses específicos (0 = Mes Actual, 1 = Mes Anterior, 2 = Hace 2 Meses, 3 = Hace 3 Meses)
   const applyMonthPreset = (monthOffset) => {
@@ -676,27 +816,142 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* Dynamic Compact Dual Date Range Picker Bar */}
-        <div className="glass-card" style={{ padding: '0.65rem 0.95rem', marginBottom: '0.9rem' }}>
-          <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '0.6rem', justifyContent: 'space-between' }}>
+        {/* Dynamic Compact Date Range Picker with Presets Dropdown */}
+        <div className="glass-card" style={{ padding: '0.65rem 0.95rem', marginBottom: '0.9rem', position: 'relative', zIndex: 100, overflow: 'visible' }}>
+          <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem', justifyContent: 'space-between' }}>
             
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap', flex: 1 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.78rem', fontWeight: 700, color: '#ffffff', marginRight: '0.4rem' }}>
-                <Calendar size={15} color="var(--accent-primary)" />
-                <span>Rango de Fechas:</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+              
+              {/* Dropdown Selector de Preset (matching screenshot style) */}
+              <div style={{ position: 'relative', zIndex: 101 }}>
+                <button
+                  onClick={() => setShowRangeDropdown(!showRangeDropdown)}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.5rem',
+                    padding: '0.4rem 0.85rem',
+                    borderRadius: '8px',
+                    fontSize: '0.8rem',
+                    fontWeight: 600,
+                    color: '#ffffff',
+                    background: 'rgba(56, 189, 248, 0.12)',
+                    border: '1px solid rgba(56, 189, 248, 0.4)',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s',
+                  }}
+                >
+                  <Calendar size={14} color="#38bdf8" />
+                  <span>Created: <strong style={{ color: '#38bdf8' }}>{
+                    presetOptions.find(p => p.id === selectedPreset)?.label || 'Custom'
+                  }</strong></span>
+                  <ChevronDown size={14} color="#94a3b8" />
+                </button>
+
+                {showRangeDropdown && (
+                  <div
+                    style={{
+                      position: 'absolute',
+                      top: '115%',
+                      left: 0,
+                      zIndex: 9999,
+                      background: '#0f172a',
+                      border: '1px solid rgba(255, 255, 255, 0.2)',
+                      borderRadius: '12px',
+                      boxShadow: '0 25px 50px -12px rgba(0,0,0,0.9), 0 0 25px rgba(56, 189, 248, 0.2)',
+                      padding: '0.85rem 1rem',
+                      width: '260px',
+                    }}
+                  >
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.45rem' }}>
+                      {presetOptions.map((opt) => (
+                        <label
+                          key={opt.id}
+                          onClick={() => handleSelectPreset(opt.id)}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '0.65rem',
+                            fontSize: '0.82rem',
+                            color: selectedPreset === opt.id ? '#ffffff' : '#94a3b8',
+                            cursor: 'pointer',
+                            padding: '0.35rem 0.5rem',
+                            borderRadius: '6px',
+                            background: selectedPreset === opt.id ? 'rgba(56, 189, 248, 0.15)' : 'transparent',
+                            fontWeight: selectedPreset === opt.id ? 700 : 500,
+                          }}
+                        >
+                          <input
+                            type="radio"
+                            name="presetRadio"
+                            checked={selectedPreset === opt.id}
+                            onChange={() => handleSelectPreset(opt.id)}
+                            style={{ accentColor: '#38bdf8', cursor: 'pointer' }}
+                          />
+                          {opt.label}
+                        </label>
+                      ))}
+
+                      {/* Campos Custom From / To si la opción Custom está activa */}
+                      {selectedPreset === 'custom' && (
+                        <div style={{ marginTop: '0.4rem', display: 'flex', flexDirection: 'column', gap: '0.5rem', borderTop: '1px solid rgba(255, 255, 255, 0.1)', paddingTop: '0.6rem' }}>
+                          <div>
+                            <label style={{ fontSize: '0.74rem', color: '#94a3b8', display: 'block', marginBottom: '0.2rem', fontWeight: 600 }}>
+                              From
+                            </label>
+                            <input
+                              type="date"
+                              value={startDateA}
+                              onChange={(e) => updateCustomDates(e.target.value, endDateA)}
+                              className="glass-input"
+                              style={{ width: '100%', fontSize: '0.78rem', padding: '0.3rem 0.5rem', borderRadius: '6px' }}
+                            />
+                          </div>
+                          <div>
+                            <label style={{ fontSize: '0.74rem', color: '#94a3b8', display: 'block', marginBottom: '0.2rem', fontWeight: 600 }}>
+                              To
+                            </label>
+                            <input
+                              type="date"
+                              value={endDateA}
+                              onChange={(e) => updateCustomDates(startDateA, e.target.value)}
+                              className="glass-input"
+                              style={{ width: '100%', fontSize: '0.78rem', padding: '0.3rem 0.5rem', borderRadius: '6px' }}
+                            />
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Botón Apply */}
+                      <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '0.6rem' }}>
+                        <button
+                          onClick={() => {
+                            setShowRangeDropdown(false);
+                            fetchAnalytics(startDateA, endDateA, startDateB, endDateB);
+                          }}
+                          className="btn-primary"
+                          style={{ padding: '0.35rem 1.1rem', fontSize: '0.78rem', backgroundColor: '#2563eb', borderRadius: '6px' }}
+                        >
+                          Apply
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
-                
-                {/* Período A */}
+
+              {/* Rango de Fechas A y B (visibles para confirmación / ajuste fino) */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', background: 'rgba(56, 189, 248, 0.08)', padding: '0.2rem 0.5rem', borderRadius: '8px', border: '1px solid rgba(56, 189, 248, 0.25)' }}>
                   <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#38bdf8', whiteSpace: 'nowrap' }}>
-                    🔵 Período A:
+                    🔵 A:
                   </span>
                   <input
                     type="date"
                     className="glass-input"
                     style={{ fontSize: '0.75rem', padding: '0.2rem 0.4rem', minHeight: '28px' }}
                     value={startDateA}
-                    onChange={(e) => setStartDateA(e.target.value)}
+                    onChange={(e) => { setStartDateA(e.target.value); setSelectedPreset('custom'); }}
                   />
                   <span style={{ color: 'var(--text-dim)', fontSize: '0.72rem' }}>a</span>
                   <input
@@ -704,23 +959,22 @@ export default function DashboardPage() {
                     className="glass-input"
                     style={{ fontSize: '0.75rem', padding: '0.2rem 0.4rem', minHeight: '28px' }}
                     value={endDateA}
-                    onChange={(e) => setEndDateA(e.target.value)}
+                    onChange={(e) => { setEndDateA(e.target.value); setSelectedPreset('custom'); }}
                   />
                 </div>
 
-                <span style={{ color: 'var(--text-dim)', fontWeight: 700, fontSize: '0.78rem', padding: '0 0.15rem' }}>vs.</span>
+                <span style={{ color: 'var(--text-dim)', fontWeight: 700, fontSize: '0.75rem' }}>vs.</span>
 
-                {/* Período B */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', background: 'rgba(129, 140, 248, 0.08)', padding: '0.2rem 0.5rem', borderRadius: '8px', border: '1px solid rgba(129, 140, 248, 0.25)' }}>
                   <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#a5b4fc', whiteSpace: 'nowrap' }}>
-                    🟣 Período B:
+                    🟣 B:
                   </span>
                   <input
                     type="date"
                     className="glass-input"
                     style={{ fontSize: '0.75rem', padding: '0.2rem 0.4rem', minHeight: '28px' }}
                     value={startDateB}
-                    onChange={(e) => setStartDateB(e.target.value)}
+                    onChange={(e) => { setStartDateB(e.target.value); setSelectedPreset('custom'); }}
                   />
                   <span style={{ color: 'var(--text-dim)', fontSize: '0.72rem' }}>a</span>
                   <input
@@ -728,24 +982,25 @@ export default function DashboardPage() {
                     className="glass-input"
                     style={{ fontSize: '0.75rem', padding: '0.2rem 0.4rem', minHeight: '28px' }}
                     value={endDateB}
-                    onChange={(e) => setEndDateB(e.target.value)}
+                    onChange={(e) => { setEndDateB(e.target.value); setSelectedPreset('custom'); }}
                   />
                 </div>
-
               </div>
 
-              {/* Botón Aplicar Filtrado */}
-              <button
-                onClick={() => fetchAnalytics(startDateA, endDateA, startDateB, endDateB)}
-                disabled={loading}
-                className="btn-primary"
-                style={{ padding: '0.35rem 0.95rem', fontSize: '0.78rem', minHeight: '30px', flexShrink: 0 }}
-              >
-                <Filter size={13} />
-                {loading ? 'Consultando...' : 'Aplicar Comparación'}
-              </button>
-
             </div>
+
+            {/* Botón Aplicar Filtrado */}
+            <button
+              onClick={() => fetchAnalytics(startDateA, endDateA, startDateB, endDateB)}
+              disabled={loading}
+              className="btn-primary"
+              style={{ padding: '0.35rem 0.95rem', fontSize: '0.78rem', minHeight: '30px', flexShrink: 0 }}
+            >
+              <Filter size={13} />
+              {loading ? 'Consultando...' : 'Aplicar Comparación'}
+            </button>
+
+          </div>
         </div>
 
         {/* Global Loading & Error Status Banners */}
@@ -961,10 +1216,10 @@ export default function DashboardPage() {
                   <div style={{ marginBottom: '0.6rem' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.78rem', marginBottom: '0.2rem' }}>
                       <span style={{ color: 'var(--text-muted)' }}>
-                        <strong style={{ color: '#34d399' }}>{periods?.current?.label}:</strong> {channels?.socialSelling?.current?.grossCount || channels?.socialSelling?.current?.count || 0} órdenes totales ({channels?.socialSelling?.current?.netCount || 0} apr. / {channels?.socialSelling?.current?.canceledCount || 0} canc.)
+                        <strong style={{ color: '#34d399' }}>{periods?.current?.label}:</strong> {channels?.socialSelling?.current?.netCount || 0} órdenes aprobadas <span style={{ opacity: 0.75, fontSize: '0.74rem' }}>({channels?.socialSelling?.current?.grossCount || 0} totales: {channels?.socialSelling?.current?.canceledCount || 0} canc.)</span>
                       </span>
                       <span style={{ color: '#34d399', fontWeight: 700 }}>
-                        {channels?.socialSelling?.current?.pct || 0}% ({formatCurrency(channels?.socialSelling?.current?.grossRevenueNio || channels?.socialSelling?.current?.revenueNio || 0, channels?.socialSelling?.current?.grossRevenueUsd || channels?.socialSelling?.current?.revenueUsd || 0)})
+                        {channels?.socialSelling?.current?.pct || 0}% ({formatCurrency(channels?.socialSelling?.current?.netRevenueNio || channels?.socialSelling?.current?.revenueNio || 0, channels?.socialSelling?.current?.netRevenueUsd || channels?.socialSelling?.current?.revenueUsd || 0)})
                       </span>
                     </div>
                     <div style={{ width: '100%', height: '8px', borderRadius: '4px', background: 'rgba(255, 255, 255, 0.08)', overflow: 'hidden' }}>
@@ -972,7 +1227,7 @@ export default function DashboardPage() {
                     </div>
                     {Boolean(channels?.socialSelling?.current?.canceledRevenueNio > 0) && (
                       <div style={{ fontSize: '0.7rem', color: '#fb7185', marginTop: '0.25rem' }}>
-                        ⚠️ Monto cancelado en Social Selling: {formatCurrency(channels?.socialSelling?.current?.canceledRevenueNio, channels?.socialSelling?.current?.canceledRevenueUsd)} (Neto: {formatCurrency(channels?.socialSelling?.current?.netRevenueNio, channels?.socialSelling?.current?.netRevenueUsd)})
+                        ⚠️ Monto cancelado en Social Selling: {formatCurrency(channels?.socialSelling?.current?.canceledRevenueNio, channels?.socialSelling?.current?.canceledRevenueUsd)} (Bruto: {formatCurrency(channels?.socialSelling?.current?.grossRevenueNio, channels?.socialSelling?.current?.grossRevenueUsd)})
                       </div>
                     )}
                   </div>
@@ -981,15 +1236,20 @@ export default function DashboardPage() {
                   <div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.78rem', marginBottom: '0.2rem' }}>
                       <span style={{ color: 'var(--text-dim)' }}>
-                        <strong>{periods?.previous?.label}:</strong> {channels?.socialSelling?.previous?.grossCount || channels?.socialSelling?.previous?.count || 0} órdenes totales
+                        <strong>{periods?.previous?.label}:</strong> {channels?.socialSelling?.previous?.netCount || 0} órdenes aprobadas <span style={{ opacity: 0.75, fontSize: '0.74rem' }}>({channels?.socialSelling?.previous?.grossCount || 0} totales: {channels?.socialSelling?.previous?.canceledCount || 0} canc.)</span>
                       </span>
                       <span style={{ color: 'var(--text-dim)', fontWeight: 600 }}>
-                        {channels?.socialSelling?.previous?.pct || 0}% ({formatCurrency(channels?.socialSelling?.previous?.grossRevenueNio || channels?.socialSelling?.previous?.revenueNio || 0, channels?.socialSelling?.previous?.grossRevenueUsd || channels?.socialSelling?.previous?.revenueUsd || 0)})
+                        {channels?.socialSelling?.previous?.pct || 0}% ({formatCurrency(channels?.socialSelling?.previous?.netRevenueNio || channels?.socialSelling?.previous?.revenueNio || 0, channels?.socialSelling?.previous?.netRevenueUsd || channels?.socialSelling?.previous?.revenueUsd || 0)})
                       </span>
                     </div>
                     <div style={{ width: '100%', height: '6px', borderRadius: '3px', background: 'rgba(255, 255, 255, 0.05)', overflow: 'hidden' }}>
                       <div style={{ width: `${channels?.socialSelling?.previous?.pct || 0}%`, height: '100%', background: 'rgba(148, 163, 184, 0.45)', borderRadius: '3px', transition: 'width 0.6s ease' }} />
                     </div>
+                    {Boolean(channels?.socialSelling?.previous?.canceledRevenueNio > 0) && (
+                      <div style={{ fontSize: '0.7rem', color: '#fb7185', marginTop: '0.25rem' }}>
+                        ⚠️ Monto cancelado en Social Selling ({periods?.previous?.label}): {formatCurrency(channels?.socialSelling?.previous?.canceledRevenueNio, channels?.socialSelling?.previous?.canceledRevenueUsd)} (Bruto: {formatCurrency(channels?.socialSelling?.previous?.grossRevenueNio, channels?.socialSelling?.previous?.grossRevenueUsd)})
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -1006,10 +1266,10 @@ export default function DashboardPage() {
                   <div style={{ marginBottom: '0.6rem' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.78rem', marginBottom: '0.2rem' }}>
                       <span style={{ color: 'var(--text-muted)' }}>
-                        <strong style={{ color: '#38bdf8' }}>{periods?.current?.label}:</strong> {channels?.webDirect?.current?.grossCount || channels?.webDirect?.current?.count || 0} órdenes totales ({channels?.webDirect?.current?.netCount || 0} apr. / {channels?.webDirect?.current?.canceledCount || 0} canc.)
+                        <strong style={{ color: '#38bdf8' }}>{periods?.current?.label}:</strong> {channels?.webDirect?.current?.netCount || 0} órdenes aprobadas <span style={{ opacity: 0.75, fontSize: '0.74rem' }}>({channels?.webDirect?.current?.grossCount || 0} totales: {channels?.webDirect?.current?.canceledCount || 0} canc.)</span>
                       </span>
                       <span style={{ color: '#38bdf8', fontWeight: 700 }}>
-                        {channels?.webDirect?.current?.pct || 0}% ({formatCurrency(channels?.webDirect?.current?.grossRevenueNio || channels?.webDirect?.current?.revenueNio || 0, channels?.webDirect?.current?.grossRevenueUsd || channels?.webDirect?.current?.revenueUsd || 0)})
+                        {channels?.webDirect?.current?.pct || 0}% ({formatCurrency(channels?.webDirect?.current?.netRevenueNio || channels?.webDirect?.current?.revenueNio || 0, channels?.webDirect?.current?.netRevenueUsd || channels?.webDirect?.current?.revenueUsd || 0)})
                       </span>
                     </div>
                     <div style={{ width: '100%', height: '8px', borderRadius: '4px', background: 'rgba(255, 255, 255, 0.08)', overflow: 'hidden' }}>
@@ -1017,7 +1277,7 @@ export default function DashboardPage() {
                     </div>
                     {Boolean(channels?.webDirect?.current?.canceledRevenueNio > 0) && (
                       <div style={{ fontSize: '0.7rem', color: '#fb7185', marginTop: '0.25rem' }}>
-                        ⚠️ Monto cancelado en Web Directa: {formatCurrency(channels?.webDirect?.current?.canceledRevenueNio, channels?.webDirect?.current?.canceledRevenueUsd)} (Neto: {formatCurrency(channels?.webDirect?.current?.netRevenueNio, channels?.webDirect?.current?.netRevenueUsd)})
+                        ⚠️ Monto cancelado en Web Directa: {formatCurrency(channels?.webDirect?.current?.canceledRevenueNio, channels?.webDirect?.current?.canceledRevenueUsd)} (Bruto: {formatCurrency(channels?.webDirect?.current?.grossRevenueNio, channels?.webDirect?.current?.grossRevenueUsd)})
                       </div>
                     )}
                   </div>
@@ -1026,15 +1286,20 @@ export default function DashboardPage() {
                   <div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.78rem', marginBottom: '0.2rem' }}>
                       <span style={{ color: 'var(--text-dim)' }}>
-                        <strong>{periods?.previous?.label}:</strong> {channels?.webDirect?.previous?.grossCount || channels?.webDirect?.previous?.count || 0} órdenes totales
+                        <strong>{periods?.previous?.label}:</strong> {channels?.webDirect?.previous?.netCount || 0} órdenes aprobadas <span style={{ opacity: 0.75, fontSize: '0.74rem' }}>({channels?.webDirect?.previous?.grossCount || 0} totales: {channels?.webDirect?.previous?.canceledCount || 0} canc.)</span>
                       </span>
                       <span style={{ color: 'var(--text-dim)', fontWeight: 600 }}>
-                        {channels?.webDirect?.previous?.pct || 0}% ({formatCurrency(channels?.webDirect?.previous?.grossRevenueNio || channels?.webDirect?.previous?.revenueNio || 0, channels?.webDirect?.previous?.grossRevenueUsd || channels?.webDirect?.previous?.revenueUsd || 0)})
+                        {channels?.webDirect?.previous?.pct || 0}% ({formatCurrency(channels?.webDirect?.previous?.netRevenueNio || channels?.webDirect?.previous?.revenueNio || 0, channels?.webDirect?.previous?.netRevenueUsd || channels?.webDirect?.previous?.revenueUsd || 0)})
                       </span>
                     </div>
                     <div style={{ width: '100%', height: '6px', borderRadius: '3px', background: 'rgba(255, 255, 255, 0.05)', overflow: 'hidden' }}>
                       <div style={{ width: `${channels?.webDirect?.previous?.pct || 0}%`, height: '100%', background: 'rgba(148, 163, 184, 0.45)', borderRadius: '3px', transition: 'width 0.6s ease' }} />
                     </div>
+                    {Boolean(channels?.webDirect?.previous?.canceledRevenueNio > 0) && (
+                      <div style={{ fontSize: '0.7rem', color: '#fb7185', marginTop: '0.25rem' }}>
+                        ⚠️ Monto cancelado en Web Directa ({periods?.previous?.label}): {formatCurrency(channels?.webDirect?.previous?.canceledRevenueNio, channels?.webDirect?.previous?.canceledRevenueUsd)} (Bruto: {formatCurrency(channels?.webDirect?.previous?.grossRevenueNio, channels?.webDirect?.previous?.grossRevenueUsd)})
+                      </div>
+                    )}
                   </div>
                 </div>
 

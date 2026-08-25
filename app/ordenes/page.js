@@ -196,14 +196,6 @@ export default function OrdenesPage() {
     }
   }, []);
 
-  // Disparar búsqueda debounced al escribir y de forma instantánea al borrar/limpiar
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      fetchOrders(1);
-    }, search.trim() ? 350 : 0);
-
-    return () => clearTimeout(timer);
-  }, [startDate, endDate, statusFilter, search]);
 
   // Activar Hook Webhook VTEX en 1 clic
   const handleActivateWebhook = async () => {
@@ -393,7 +385,7 @@ export default function OrdenesPage() {
 
         {/* Date & Filter Bar */}
         <div className="glass-card" style={{ padding: '1.25rem', marginBottom: '1.5rem' }}>
-          <form onSubmit={handleSearchSubmit} style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '1rem', alignItems: 'flex-end' }}>
+          <form onSubmit={handleSearchSubmit} style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '1rem', alignItems: 'flex-end' }}>
             
             {/* Fecha Inicio */}
             <div>
@@ -479,6 +471,33 @@ export default function OrdenesPage() {
                   </button>
                 )}
               </div>
+            </div>
+
+            {/* Botón Buscar */}
+            <div>
+              <button
+                type="submit"
+                disabled={loading}
+                className="btn-primary"
+                style={{
+                  width: '100%',
+                  minHeight: '38px',
+                  fontSize: '0.85rem',
+                  fontWeight: 600,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '0.4rem',
+                  backgroundColor: '#2563eb',
+                  borderRadius: '8px',
+                  cursor: loading ? 'not-allowed' : 'pointer',
+                  opacity: loading ? 0.7 : 1,
+                  transition: 'all 0.2s',
+                }}
+              >
+                <Search size={15} />
+                {loading ? 'Buscando...' : 'Buscar'}
+              </button>
             </div>
 
           </form>

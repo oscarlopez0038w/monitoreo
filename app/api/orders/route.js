@@ -180,6 +180,18 @@ export async function GET(request) {
           useSupabase = true;
           totalDbCount = count || rows.length;
 
+          // Verificar si VTEX OMS tiene más órdenes que Supabase para este rango (evita conteos incompletos)
+          if (isVtexConfigured() && !statusParam && !searchParam) {
+            const vtexCheck = await fetchVtexOrders(startIso, endIso, '', '', 1, 1).catch(() => null);
+            const vtexTotal = vtexCheck?.paging?.total || 0;
+            if (vtexTotal > totalDbCount) {
+              console.log(`Aviso: Supabase (${totalDbCount}) tiene menos órdenes que VTEX (${vtexTotal}). Usando VTEX OMS para obtener el 100% completo.`);
+              useSupabase = false;
+            }
+          }
+        }
+
+        if (useSupabase) {
           // Conteos y Estadísticas globales en Supabase para el período (< 10ms)
           const { data: periodRows } = await supabaseAdmin
             .from('vtex_orders')
