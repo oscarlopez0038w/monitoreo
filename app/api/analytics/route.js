@@ -382,17 +382,25 @@ export async function GET(request) {
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
 
     let chartStartDateObj = new Date(startDateObj);
+    let chartStartBObj = new Date(`${startDateB}T00:00:00-06:00`);
+    let chartStartCObj = new Date(`${startDateC}T00:00:00-06:00`);
+
     if (diffDays < 3) {
       const extraPrevDays = 3 - diffDays;
       chartStartDateObj.setDate(chartStartDateObj.getDate() - extraPrevDays);
+      chartStartBObj.setDate(chartStartBObj.getDate() - extraPrevDays);
+      chartStartCObj.setDate(chartStartCObj.getDate() - extraPrevDays);
     }
-    const chartStartIso = new Date(`${chartStartDateObj.toISOString().split('T')[0]}T00:00:00-06:00`).toISOString();
 
-    // Obtener órdenes del período A (gráfico), período B y período C en paralelo
+    const chartStartIsoA = chartStartDateObj.toISOString();
+    const chartStartIsoB = chartStartBObj.toISOString();
+    const chartStartIsoC = chartStartCObj.toISOString();
+
+    // Obtener órdenes de los períodos en paralelo (incluye los 2 días anteriores para A, B y C cuando el filtro es 1 día)
     const [chartOrders, prevOrders, prev2Orders] = await Promise.all([
-      fetchAllPeriodOrders(chartStartIso, currentEndIso),
-      fetchAllPeriodOrders(prevStartIso, prevEndIso),
-      fetchAllPeriodOrders(prev2StartIso, prev2EndIso),
+      fetchAllPeriodOrders(chartStartIsoA, currentEndIso),
+      fetchAllPeriodOrders(chartStartIsoB, prevEndIso),
+      fetchAllPeriodOrders(chartStartIsoC, prev2EndIso),
     ]);
 
     // Filtrar órdenes exactas del Período A para métricas KPI y análisis
@@ -534,12 +542,7 @@ export async function GET(request) {
 
     // Desglose diario para Período B
     const dailyMapB = {};
-    const startBObj = new Date(`${startDateB}T00:00:00-06:00`);
     const endBObj = new Date(`${endDateB}T00:00:00-06:00`);
-    let chartStartBObj = new Date(startBObj);
-    if (diffDays < 3) {
-      chartStartBObj.setDate(chartStartBObj.getDate() - (3 - diffDays));
-    }
     for (let d = new Date(chartStartBObj); d <= endBObj; d.setDate(d.getDate() + 1)) {
       const dayStr = d.toISOString().split('T')[0];
       const dayNum = d.getDate();
@@ -563,12 +566,7 @@ export async function GET(request) {
 
     // Desglose diario para Período C
     const dailyMapC = {};
-    const startCObj = new Date(`${startDateC}T00:00:00-06:00`);
     const endCObj = new Date(`${endDateC}T00:00:00-06:00`);
-    let chartStartCObj = new Date(startCObj);
-    if (diffDays < 3) {
-      chartStartCObj.setDate(chartStartCObj.getDate() - (3 - diffDays));
-    }
     for (let d = new Date(chartStartCObj); d <= endCObj; d.setDate(d.getDate() + 1)) {
       const dayStr = d.toISOString().split('T')[0];
       const dayNum = d.getDate();
