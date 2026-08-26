@@ -58,8 +58,14 @@ export async function GET() {
       },
       {
         code: 'marketing:view',
-        name: 'Publicidad & Extractor PDP (Publitas)',
-        description: 'Extraer PDPs, imágenes HD, feed para Publitas y métricas de atribución publicitaria',
+        name: 'Campañas & UTMs Marketing',
+        description: 'Ver métricas de atribución publicitaria, campañas utm_campaign, fuentes utm_source y promociones VTEX',
+        category: 'Catálogo & Publicidad',
+      },
+      {
+        code: 'publitas:view',
+        name: 'Catálogos & Feed Publitas',
+        description: 'Generar feeds de catálogo, extraer PDPs e imágenes HD para la plataforma Publitas',
         category: 'Catálogo & Publicidad',
       },
       {
@@ -123,6 +129,26 @@ export async function GET() {
       await supabaseAdmin.from('app_permissions').upsert(MASTER_MODULE_PERMISSIONS, { onConflict: 'code' });
       const reload = await supabaseAdmin.from('app_permissions').select('*').order('category, code');
       if (reload.data) permissions = reload.data;
+
+      // Migration suave: Conceder publitas:view a roles con marketing:view
+      const mktPerm = (permissions || []).find((p) => p.code === 'marketing:view');
+      const pubPerm = (permissions || []).find((p) => p.code === 'publitas:view');
+      if (mktPerm && pubPerm) {
+        const { data: mktRoles } = await supabaseAdmin
+          .from('app_role_permissions')
+          .select('role_id')
+          .eq('permission_id', mktPerm.id);
+
+        if (mktRoles && mktRoles.length > 0) {
+          const pubAssignments = mktRoles.map((r) => ({
+            role_id: r.role_id,
+            permission_id: pubPerm.id,
+          }));
+          await supabaseAdmin
+            .from('app_role_permissions')
+            .upsert(pubAssignments, { onConflict: 'role_id,permission_id' });
+        }
+      }
     } catch (e) {
       console.warn('Error al auto-sincronizar permisos en app_permissions:', e.message);
     }

@@ -134,6 +134,7 @@ export async function GET(request) {
     const endDateParam = searchParams.get('endDate');
     const statusParam = (searchParams.get('status') || '').trim();
     const searchParam = (searchParams.get('search') || '').trim();
+    const sortByParam = (searchParams.get('sortBy') || 'date_desc').trim();
     const pageParam = parseInt(searchParams.get('page') || '1', 10);
     const isExport = searchParams.get('export') === 'true';
     const pageSize = isExport ? 5000 : 30;
@@ -162,7 +163,15 @@ export async function GET(request) {
           query = query.or(`order_id.ilike.%${cleanSearch}%,sequence.ilike.%${cleanSearch}%,client_name.ilike.%${cleanSearch}%,client_email.ilike.%${cleanSearch}%,pickup_store.ilike.%${cleanSearch}%`);
         }
 
-        query = query.order('creation_date', { ascending: false });
+        if (sortByParam === 'amount_desc') {
+          query = query.order('total_value', { ascending: false });
+        } else if (sortByParam === 'amount_asc') {
+          query = query.order('total_value', { ascending: true });
+        } else if (sortByParam === 'date_asc') {
+          query = query.order('creation_date', { ascending: true });
+        } else {
+          query = query.order('creation_date', { ascending: false });
+        }
 
         if (!isExport) {
           const from = (pageParam - 1) * pageSize;

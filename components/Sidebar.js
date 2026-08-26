@@ -66,11 +66,18 @@ export default function Sidebar({ vtexStatus, supabaseStatus, mobileOpen, onClos
       permission: 'embudo:view',
     },
     {
-      label: 'Publicidad & Extractor PDP',
+      label: 'Campañas & UTMs Marketing',
       href: '/marketing',
       icon: Megaphone,
       color: '#a5b4fc',
       permission: 'marketing:view',
+    },
+    {
+      label: 'Catálogos & Feed Publitas',
+      href: '/publitas',
+      icon: Sparkles,
+      color: '#34d399',
+      permission: 'publitas:view',
     },
     {
       label: 'Inventario & SKUs',

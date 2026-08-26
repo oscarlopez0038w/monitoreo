@@ -10,10 +10,11 @@ import { ShoppingCart, Calendar, Filter, Search, RefreshCw, ChevronDown, Chevron
 export default function OrdenesPage() {
   const nicNow = getNicaraguaNow();
 
-  const [startDate, setStartDate] = useState(nicNow.firstDayStr);
+  const [startDate, setStartDate] = useState(nicNow.todayStr);
   const [endDate, setEndDate] = useState(nicNow.todayStr);
   const [statusFilter, setStatusFilter] = useState('');
   const [search, setSearch] = useState('');
+  const [sortBy, setSortBy] = useState('date_desc'); // 'date_desc' | 'date_asc' | 'amount_desc' | 'amount_asc'
   const [loading, setLoading] = useState(false);
   const [registeringHook, setRegisteringHook] = useState(false);
   const [orders, setOrders] = useState([]);
@@ -107,7 +108,7 @@ export default function OrdenesPage() {
     }
   };
 
-  const fetchOrders = async (page = 1) => {
+  const fetchOrders = async (page = 1, currentSort = sortBy) => {
     setLoading(true);
     try {
       const params = new URLSearchParams({
@@ -115,6 +116,7 @@ export default function OrdenesPage() {
         endDate,
         status: statusFilter,
         search,
+        sortBy: currentSort,
         page: String(page),
       });
 
@@ -134,6 +136,10 @@ export default function OrdenesPage() {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    fetchOrders(1, sortBy);
+  }, [sortBy]);
 
   useEffect(() => {
     fetchOrders(1);
@@ -473,6 +479,24 @@ export default function OrdenesPage() {
               </div>
             </div>
 
+            {/* Ordenar Por */}
+            <div>
+              <label style={{ fontSize: '0.75rem', color: 'var(--text-dim)', fontWeight: 600, textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: '0.3rem', marginBottom: '0.35rem' }}>
+                <DollarSign size={13} color="var(--accent-primary)" /> Ordenar Por
+              </label>
+              <select
+                className="glass-input"
+                style={{ width: '100%', fontSize: '0.85rem' }}
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value)}
+              >
+                <option value="date_desc">Fecha (Más recientes primero)</option>
+                <option value="date_asc">Fecha (Más antiguas primero)</option>
+                <option value="amount_desc">Monto C$ (Mayor a Menor)</option>
+                <option value="amount_asc">Monto C$ (Menor a Mayor)</option>
+              </select>
+            </div>
+
             {/* Botón Buscar */}
             <div>
               <button
@@ -716,7 +740,22 @@ export default function OrdenesPage() {
                   <th style={{ padding: '0.55rem 0.6rem' }}>Fecha Creación</th>
                   <th style={{ padding: '0.55rem 0.6rem' }}>Cliente</th>
                   <th style={{ padding: '0.55rem 0.6rem', textAlign: 'center' }}>Método Entrega</th>
-                  <th style={{ padding: '0.55rem 0.6rem', textAlign: 'right' }}>Total (C$)</th>
+                  <th
+                    onClick={() => {
+                      if (sortBy === 'amount_desc') setSortBy('amount_asc');
+                      else setSortBy('amount_desc');
+                    }}
+                    style={{
+                      padding: '0.55rem 0.6rem',
+                      textAlign: 'right',
+                      cursor: 'pointer',
+                      userSelect: 'none',
+                      color: sortBy.startsWith('amount') ? '#38bdf8' : 'inherit',
+                    }}
+                    title="Clic para ordenar por Monto (C$)"
+                  >
+                    Total (C$) {sortBy === 'amount_desc' ? '▼' : sortBy === 'amount_asc' ? '▲' : '↕'}
+                  </th>
                   <th style={{ padding: '0.55rem 0.6rem', textAlign: 'center' }}>Estado OMS</th>
                   <th style={{ padding: '0.55rem 0.6rem', textAlign: 'center' }}>Acción</th>
                 </tr>

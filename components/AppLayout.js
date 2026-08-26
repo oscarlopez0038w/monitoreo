@@ -18,6 +18,7 @@ const ROUTE_PERMISSIONS = {
   '/simulador': { code: 'simulador:use', name: 'Simulador de Carrito' },
   '/ordenes': { code: 'orders:view', name: 'Órdenes VTEX OMS' },
   '/marketing': { code: 'marketing:view', name: 'Marketing & UTMs' },
+  '/publitas': { code: 'publitas:view', name: 'Catálogos & Feed Publitas' },
   '/patrones': { code: 'patrones:view', name: 'Patrones de Compra & Horarios' },
   '/embudo': { code: 'embudo:view', name: 'Embudo de Checkout & Conversión' },
   '/usuarios': { code: 'users:manage', name: 'Administración de Usuarios & Permisos' },
