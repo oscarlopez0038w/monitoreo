@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import AppLayout from '@/components/AppLayout';
 import { getNicaraguaNow } from '@/lib/dateUtils';
 import * as XLSX from 'xlsx';
@@ -29,6 +29,7 @@ import {
   Gift,
   FileSpreadsheet,
   ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
 
 // Generador de curvas Bezier suaves para SVG
@@ -49,8 +50,8 @@ function buildSvgPath(points) {
   return d;
 }
 
-// Componente Ejecutivo de Gráfica de Tendencia Diaria con Puntos Interactivos (Hover Ampliado)
-function DailyInteractiveTrendChart({ dailyBreakdown = [], formatCurrency, bcnRate = 36.6243, periodLabel = '' }) {
+// Componente Ejecutivo de Gráfica de Tendencia Diaria con Puntos Interactivos (Multi-Período A vs B vs C)
+function DailyInteractiveTrendChart({ dailyBreakdown = [], formatCurrency, bcnRate = 36.6243, periodLabel = '', periods = null }) {
   const [hoveredIdx, setHoveredIdx] = useState(null);
 
   if (!dailyBreakdown || dailyBreakdown.length === 0) return null;
@@ -66,22 +67,39 @@ function DailyInteractiveTrendChart({ dailyBreakdown = [], formatCurrency, bcnRa
   const chartW = svgWidth - paddingLeft - paddingRight;
   const chartH = svgHeight - paddingTop - paddingBottom;
 
-  const maxVal = Math.max(...dailyBreakdown.map((d) => Math.max(d.salesNio, d.refundsNio)), 1000);
+  const maxVal = Math.max(
+    ...dailyBreakdown.map((d) => Math.max(d.salesNio || 0, d.salesNioB || 0, d.salesNioC || 0, d.refundsNio || 0)),
+    1000
+  );
 
-  // Calcular puntos de coordenadas (X, Y) para Ventas y Devoluciones
+  // Calcular puntos de coordenadas (X, Y) para Ventas (Período A, B y C) y Devoluciones
   const pointsSales = dailyBreakdown.map((d, i) => {
     const x = paddingLeft + (i / (dailyBreakdown.length - 1 || 1)) * chartW;
-    const y = paddingTop + chartH - (d.salesNio / maxVal) * chartH;
+    const y = paddingTop + chartH - ((d.salesNio || 0) / maxVal) * chartH;
+    return { x, y, day: d, index: i };
+  });
+
+  const pointsSalesB = dailyBreakdown.map((d, i) => {
+    const x = paddingLeft + (i / (dailyBreakdown.length - 1 || 1)) * chartW;
+    const y = paddingTop + chartH - ((d.salesNioB || 0) / maxVal) * chartH;
+    return { x, y, day: d, index: i };
+  });
+
+  const pointsSalesC = dailyBreakdown.map((d, i) => {
+    const x = paddingLeft + (i / (dailyBreakdown.length - 1 || 1)) * chartW;
+    const y = paddingTop + chartH - ((d.salesNioC || 0) / maxVal) * chartH;
     return { x, y, day: d, index: i };
   });
 
   const pointsRefunds = dailyBreakdown.map((d, i) => {
     const x = paddingLeft + (i / (dailyBreakdown.length - 1 || 1)) * chartW;
-    const y = paddingTop + chartH - (d.refundsNio / maxVal) * chartH;
+    const y = paddingTop + chartH - ((d.refundsNio || 0) / maxVal) * chartH;
     return { x, y, day: d, index: i };
   });
 
   const pathSales = buildSvgPath(pointsSales);
+  const pathSalesB = buildSvgPath(pointsSalesB);
+  const pathSalesC = buildSvgPath(pointsSalesC);
   const pathRefunds = buildSvgPath(pointsRefunds);
 
   // Paths de área para degradados inferiores
@@ -90,7 +108,6 @@ function DailyInteractiveTrendChart({ dailyBreakdown = [], formatCurrency, bcnRa
     : '';
 
   const activeDay = hoveredIdx !== null ? dailyBreakdown[hoveredIdx] : null;
-  const activeSalesPt = hoveredIdx !== null ? pointsSales[hoveredIdx] : null;
 
   // Días con órdenes válidas para determinar Ticket Promedio más alto y más bajo
   const daysWithTicket = dailyBreakdown
@@ -98,8 +115,8 @@ function DailyInteractiveTrendChart({ dailyBreakdown = [], formatCurrency, bcnRa
     .filter((d) => (d.approvedOrders || 0) > 0 && (d.avgTicketNio || 0) > 0);
 
   let highestTicketIdx = null;
-  let lowestTicketIdx = null;
   let highestTicketDay = null;
+  let lowestTicketIdx = null;
   let lowestTicketDay = null;
 
   if (daysWithTicket.length > 0) {
@@ -111,15 +128,13 @@ function DailyInteractiveTrendChart({ dailyBreakdown = [], formatCurrency, bcnRa
     }
     highestTicketIdx = maxD.idx;
     highestTicketDay = maxD;
-    if (minD.idx !== maxD.idx) {
-      lowestTicketIdx = minD.idx;
-      lowestTicketDay = minD;
-    }
+    lowestTicketIdx = minD.idx;
+    lowestTicketDay = minD;
   }
 
-  // Posicionamiento 100% Inmune a Recortes (Anclado al Contenedor Principal de la Tarjeta)
-  const xPct = activeSalesPt ? (activeSalesPt.x / svgWidth) * 100 : 50;
-  const isRightSide = xPct > 50;
+  const activeSalesPt = hoveredIdx !== null ? pointsSales[hoveredIdx] : null;
+  const xPct = activeSalesPt ? (activeSalesPt.x / svgWidth) * 100 : 0;
+  const isRightSide = xPct > 55;
 
   return (
     <div style={{ background: 'rgba(15, 23, 42, 0.8)', borderRadius: '14px', border: '1px solid rgba(255, 255, 255, 0.1)', padding: '0.9rem 1.15rem', position: 'relative', marginBottom: '0.9rem', overflow: 'visible' }}>
@@ -129,51 +144,50 @@ function DailyInteractiveTrendChart({ dailyBreakdown = [], formatCurrency, bcnRa
         <div>
           <h3 style={{ fontSize: '0.95rem', fontWeight: 700, color: '#ffffff', display: 'flex', alignItems: 'center', gap: '0.4rem', margin: 0 }}>
             <TrendingUp size={16} color="#10b981" />
-            Tendencia Diaria de Ventas & Devoluciones ({periodLabel || 'Período Seleccionado'})
+            Tendencia Comparativa Diaria de Ventas ({periods?.current?.label || periodLabel || 'Período A'} vs. {periods?.previous?.label || 'B'} vs. {periods?.previous2?.label || 'C'})
           </h3>
           <p style={{ margin: '0.15rem 0 0 0', fontSize: '0.75rem', color: '#94a3b8' }}>
-            Pasa el cursor sobre los nodos/puntos para ampliar los detalles de cada día en tiempo real.
+            Pasa el cursor sobre los nodos/puntos para comparar las ventas diarias de los 3 períodos en tiempo real.
           </p>
         </div>
 
-        {/* Leyenda interactiva + Banners de Ticket Máx / Mín */}
+        {/* Leyenda interactiva multi-período */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
           {activeDay ? (
             <div
               style={{
-                background: 'rgba(56, 189, 248, 0.12)',
-                border: '1px solid rgba(56, 189, 248, 0.35)',
-                color: '#38bdf8',
+                background: 'rgba(15, 23, 42, 0.95)',
+                border: '1px solid rgba(56, 189, 248, 0.4)',
                 borderRadius: '10px',
                 padding: '0.35rem 0.85rem',
-                fontSize: '0.82rem',
+                fontSize: '0.8rem',
                 fontWeight: 700,
                 display: 'flex',
                 alignItems: 'center',
                 gap: '0.6rem',
-                transition: 'all 0.25s ease',
+                flexWrap: 'wrap',
+                boxShadow: '0 4px 12px rgba(0,0,0,0.5)',
               }}
             >
-              <span>📅 {activeDay.dayLabel}:</span>
-              <span style={{ color: '#10b981' }}>Ventas {formatCurrency(activeDay.salesNio, activeDay.salesUsd)}</span>
-              <span>• {activeDay.approvedOrders} ord.</span>
+              <span style={{ color: '#ffffff' }}>📅 Día {activeDay.dayNum} ({activeDay.dayLabel}):</span>
+              <span style={{ color: '#34d399' }}>🔵 A: {formatCurrency(activeDay.salesNio, activeDay.salesUsd)}</span>
+              <span style={{ color: '#a5b4fc' }}>🟣 B: {formatCurrency(activeDay.salesNioB, activeDay.salesUsdB)}</span>
+              <span style={{ color: '#38bdf8' }}>🟢 C: {formatCurrency(activeDay.salesNioC, activeDay.salesUsdC)}</span>
             </div>
           ) : (
             <div style={{ display: 'flex', gap: '0.9rem', alignItems: 'center', fontSize: '0.75rem', flexWrap: 'wrap' }}>
-              <span style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', color: '#10b981', fontWeight: 700 }}>
-                <span style={{ width: '10px', height: '10px', borderRadius: '50%', backgroundColor: '#10b981', boxShadow: '0 0 8px #10b981' }} /> Ventas
+              <span style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', color: '#34d399', fontWeight: 700 }}>
+                <span style={{ width: '12px', height: '3px', backgroundColor: '#34d399', borderRadius: '2px', boxShadow: '0 0 8px #34d399' }} /> Período A
               </span>
-              <span style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', color: '#fb7185', fontWeight: 700 }}>
-                <span style={{ width: '10px', height: '10px', borderRadius: '50%', backgroundColor: '#fb7185', boxShadow: '0 0 8px #fb7185' }} /> Devoluciones
+              <span style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', color: '#a5b4fc', fontWeight: 700 }}>
+                <span style={{ width: '12px', height: '2px', borderTop: '2px dashed #a5b4fc' }} /> Período B
+              </span>
+              <span style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', color: '#38bdf8', fontWeight: 700 }}>
+                <span style={{ width: '12px', height: '2px', borderTop: '2px dotted #38bdf8' }} /> Período C
               </span>
               {highestTicketDay && (
                 <span style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', color: '#34d399', fontWeight: 700, background: 'rgba(16, 185, 129, 0.15)', padding: '0.15rem 0.45rem', borderRadius: '6px', border: '1px solid rgba(16, 185, 129, 0.35)' }}>
                   🏆 Ticket Máx: {highestTicketDay.dayLabel} ({formatCurrency(highestTicketDay.avgTicketNio, highestTicketDay.avgTicketUsd)})
-                </span>
-              )}
-              {lowestTicketDay && (
-                <span style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', color: '#f59e0b', fontWeight: 700, background: 'rgba(245, 158, 11, 0.15)', padding: '0.15rem 0.45rem', borderRadius: '6px', border: '1px solid rgba(245, 158, 11, 0.35)' }}>
-                  ⚠️ Ticket Mín: {lowestTicketDay.dayLabel} ({formatCurrency(lowestTicketDay.avgTicketNio, lowestTicketDay.avgTicketUsd)})
                 </span>
               )}
             </div>
@@ -186,14 +200,9 @@ function DailyInteractiveTrendChart({ dailyBreakdown = [], formatCurrency, bcnRa
         <svg viewBox={`0 0 ${svgWidth} ${svgHeight}`} style={{ width: '100%', height: 'auto', minWidth: '700px', display: 'block', overflow: 'visible' }}>
           
           <defs>
-            {/* Degradados para líneas y áreas */}
             <linearGradient id="gradSalesArea" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="#10b981" stopOpacity="0.25" />
+              <stop offset="0%" stopColor="#10b981" stopOpacity="0.22" />
               <stop offset="100%" stopColor="#10b981" stopOpacity="0.0" />
-            </linearGradient>
-            <linearGradient id="gradRefundsArea" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="#fb7185" stopOpacity="0.2" />
-              <stop offset="100%" stopColor="#fb7185" stopOpacity="0.0" />
             </linearGradient>
           </defs>
 
@@ -211,14 +220,17 @@ function DailyInteractiveTrendChart({ dailyBreakdown = [], formatCurrency, bcnRa
             );
           })}
 
-          {/* Degradado bajo curvas */}
+          {/* Degradado bajo curva Período A */}
           {areaSales && <path d={areaSales} fill="url(#gradSalesArea)" />}
 
-          {/* Curva de Devoluciones (Rosa Elegante Fina) */}
-          <path d={pathRefunds} fill="none" stroke="#fb7185" strokeWidth="1.5" strokeLinecap="round" opacity="0.8" />
+          {/* Curva Período C (Azul Cian Dotted) */}
+          <path d={pathSalesC} fill="none" stroke="#38bdf8" strokeWidth="1.6" strokeDasharray="3 3" opacity="0.8" />
 
-          {/* Curva de Ventas (Verde Neón Elegante Fina) */}
-          <path d={pathSales} fill="none" stroke="#10b981" strokeWidth="1.8" strokeLinecap="round" />
+          {/* Curva Período B (Púrpura Dashed) */}
+          <path d={pathSalesB} fill="none" stroke="#a5b4fc" strokeWidth="1.8" strokeDasharray="5 5" opacity="0.85" />
+
+          {/* Curva Período A (Verde Neón Solida Principal) */}
+          <path d={pathSales} fill="none" stroke="#10b981" strokeWidth="2.2" strokeLinecap="round" />
 
           {/* Columna / Franja vertical interactiva al hacer Hover */}
           {hoveredIdx !== null && (
@@ -232,40 +244,59 @@ function DailyInteractiveTrendChart({ dailyBreakdown = [], formatCurrency, bcnRa
             />
           )}
 
-          {/* NODOS Y PUNTOS CIRCULARES ELEGANTES (SE AMPLÍAN CON FLUIDEZ AL HACER HOVER) */}
+          {/* Nodos de los 3 Períodos */}
           {dailyBreakdown.map((d, i) => {
             const ptS = pointsSales[i];
+            const ptB = pointsSalesB[i];
+            const ptC = pointsSalesC[i];
             const ptR = pointsRefunds[i];
             const isHovered = hoveredIdx === i;
+            const isHighestTicket = i === highestTicketIdx;
+            const isLowestTicket = i === lowestTicketIdx;
             const totalDays = dailyBreakdown.length;
-            const isHighestTicket = highestTicketIdx === i;
-            const isLowestTicket = lowestTicketIdx === i;
 
-            // Formato de etiqueta en X sin amontonamiento
             const showXLabel = totalDays <= 16 || i % 2 === 0 || isHovered || i === totalDays - 1;
             const xLabelText = String(d.dayNum || i + 1).padStart(2, '0');
 
             return (
               <g
-                key={d.date}
+                key={i}
                 onMouseEnter={() => setHoveredIdx(i)}
                 onMouseLeave={() => setHoveredIdx(null)}
                 style={{ cursor: 'pointer' }}
               >
-                {/* Etiqueta del Día en Eje X */}
+                {/* Puntos Período C */}
+                <circle cx={ptC.x} cy={ptC.y} r={isHovered ? 4 : 2} fill="#38bdf8" opacity={isHovered ? 1 : 0.6} />
+
+                {/* Puntos Período B */}
+                <circle cx={ptB.x} cy={ptB.y} r={isHovered ? 4 : 2.5} fill="#a5b4fc" opacity={isHovered ? 1 : 0.7} />
+
+                {/* Punto Principal Período A */}
+                <circle
+                  cx={ptS.x}
+                  cy={ptS.y}
+                  r={isHovered ? 6 : 3.5}
+                  fill={isHovered ? '#34d399' : '#10b981'}
+                  stroke="#0f172a"
+                  strokeWidth={isHovered ? 2 : 1}
+                  style={{ transition: 'all 0.15s ease' }}
+                />
+
+                {/* Etiqueta Eje X */}
                 {showXLabel && (
                   <text
                     x={ptS.x}
-                    y={svgHeight - 12}
-                            fill={isHovered ? '#38bdf8' : isHighestTicket ? '#34d399' : isLowestTicket ? '#f59e0b' : '#64748b'}
-                    fontSize={isHovered || isHighestTicket || isLowestTicket ? '11' : '10'}
-                    fontWeight={isHovered || isHighestTicket || isLowestTicket ? '800' : '600'}
+                    y={svgHeight - 4}
+                    textAnchor="middle"
+                    fill={isHovered ? '#38bdf8' : '#94a3b8'}
+                    fontSize={isHovered ? '11' : '10'}
+                    fontWeight={isHovered ? '700' : '500'}
                   >
                     {xLabelText}
                   </text>
                 )}
 
-                {/* Halo Destacado de Ticket Promedio Más Alto (Verde Success) */}
+                {/* Halo Destacado de Ticket Promedio Más Alto (Verde) */}
                 {isHighestTicket && (
                   <g>
                     <circle
@@ -447,6 +478,21 @@ export default function DashboardPage() {
   const defaultFullEndB = `${pY}-${pMStr}-${String(lastDayPM).padStart(2, '0')}`;
   const sameDayPMStr = `${pY}-${pMStr}-${String(sameDayPM).padStart(2, '0')}`;
 
+  // Cálculo de hace 2 meses y mismo día para Período C
+  let pY2 = nicNow.year;
+  let pM2 = nicNow.month - 2;
+  if (pM2 < 0) {
+    pM2 += 12;
+    pY2 -= 1;
+  }
+  const pM2Str = String(pM2 + 1).padStart(2, '0');
+  const lastDayPM2 = new Date(pY2, pM2 + 1, 0).getDate();
+  const sameDayPM2 = Math.min(nicNow.day, lastDayPM2);
+
+  const defaultStartC = `${pY2}-${pM2Str}-01`;
+  const defaultFullEndC = `${pY2}-${pM2Str}-${String(lastDayPM2).padStart(2, '0')}`;
+  const sameDayPM2Str = `${pY2}-${pM2Str}-${String(sameDayPM2).padStart(2, '0')}`;
+
   // Período A por defecto: HOY (todayStr)
   const [startDateA, setStartDateA] = useState(nicNow.todayStr);
   const [endDateA, setEndDateA] = useState(nicNow.todayStr);
@@ -455,16 +501,35 @@ export default function DashboardPage() {
   const [startDateB, setStartDateB] = useState(sameDayPMStr);
   const [endDateB, setEndDateB] = useState(sameDayPMStr);
 
+  // Período C por defecto: Mismo día de hace 2 meses
+  const [startDateC, setStartDateC] = useState(sameDayPM2Str);
+  const [endDateC, setEndDateC] = useState(sameDayPM2Str);
+
   const [selectedPreset, setSelectedPreset] = useState('today');
   const [showRangeDropdown, setShowRangeDropdown] = useState(false);
+  const [showMoreDetails, setShowMoreDetails] = useState(false);
+  const dropdownRef = useRef(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+        setShowRangeDropdown(false);
+      }
+    };
+    if (showRangeDropdown) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showRangeDropdown]);
 
   const presetOptions = [
-    { id: 'today', label: 'Today' },
-    { id: 'yesterday', label: 'Yesterday' },
-    { id: 'last_7_days', label: 'Last 7 Days' },
-    { id: 'current_month', label: 'Current month' },
-    { id: 'last_30_days', label: 'Last 30 days' },
-    { id: 'custom', label: 'Custom' },
+    { id: 'today', label: 'Hoy' },
+    { id: 'yesterday', label: 'Ayer' },
+    { id: 'last_7_days', label: 'Últimos 7 Días' },
+    { id: 'current_month', label: 'Mes Actual' },
+    { id: 'last_30_days', label: 'Últimos 30 Días' },
   ];
 
   const updateCustomDates = (newSA, newEA) => {
@@ -497,6 +562,26 @@ export default function DashboardPage() {
 
       setStartDateB(sB);
       setEndDateB(eB);
+
+      let pSY2 = sY;
+      let pSM2 = sM - 3;
+      if (pSM2 < 0) { pSM2 += 12; pSY2 -= 1; }
+
+      let pEY2 = eY;
+      let pEM2 = eM - 3;
+      if (pEM2 < 0) { pEM2 += 12; pEY2 -= 1; }
+
+      const lastDayPSM2 = new Date(pSY2, pSM2 + 1, 0).getDate();
+      const lastDayPEM2 = new Date(pEY2, pEM2 + 1, 0).getDate();
+
+      const pSD2 = Math.min(sD, lastDayPSM2);
+      const pED2 = Math.min(eD, lastDayPEM2);
+
+      const sC = `${pSY2}-${String(pSM2 + 1).padStart(2, '0')}-${String(pSD2).padStart(2, '0')}`;
+      const eC = `${pEY2}-${String(pEM2 + 1).padStart(2, '0')}-${String(pED2).padStart(2, '0')}`;
+
+      setStartDateC(sC);
+      setEndDateC(eC);
     }
   };
 
@@ -520,21 +605,27 @@ export default function DashboardPage() {
     let eA = todayStr;
     let sB = sameDayPMStr;
     let eB = sameDayPMStr;
+    let sC = sameDayPM2Str;
+    let eC = sameDayPM2Str;
 
     if (presetId === 'today') {
       sA = todayStr;
       eA = todayStr;
       sB = sameDayPMStr;
       eB = sameDayPMStr;
+      sC = sameDayPM2Str;
+      eC = sameDayPM2Str;
     } else if (presetId === 'yesterday') {
       const yest = new Date(todayObj.getTime() - 24 * 3600 * 1000);
       const yestStr = formatDateStr(yest);
       sA = yestStr;
       eA = yestStr;
       const yestDayPM = Math.min(yest.getDate(), lastDayPM);
-      const yestPMStr = `${pY}-${pMStr}-${String(yestDayPM).padStart(2, '0')}`;
-      sB = yestPMStr;
-      eB = yestPMStr;
+      sB = `${pY}-${pMStr}-${String(yestDayPM).padStart(2, '0')}`;
+      eB = sB;
+      const yestDayPM2 = Math.min(yest.getDate(), lastDayPM2);
+      sC = `${pY2}-${pM2Str}-${String(yestDayPM2).padStart(2, '0')}`;
+      eC = sC;
     } else if (presetId === 'last_7_days') {
       const d7 = new Date(todayObj.getTime() - 6 * 24 * 3600 * 1000);
       sA = formatDateStr(d7);
@@ -542,11 +633,16 @@ export default function DashboardPage() {
       const d7DayPM = Math.min(d7.getDate(), lastDayPM);
       sB = `${pY}-${pMStr}-${String(d7DayPM).padStart(2, '0')}`;
       eB = sameDayPMStr;
+      const d7DayPM2 = Math.min(d7.getDate(), lastDayPM2);
+      sC = `${pY2}-${pM2Str}-${String(d7DayPM2).padStart(2, '0')}`;
+      eC = sameDayPM2Str;
     } else if (presetId === 'current_month') {
       sA = nicNow.firstDayStr;
       eA = todayStr;
       sB = defaultStartB;
       eB = sameDayPMStr;
+      sC = defaultStartC;
+      eC = sameDayPM2Str;
     } else if (presetId === 'last_30_days') {
       const d30 = new Date(todayObj.getTime() - 29 * 24 * 3600 * 1000);
       sA = formatDateStr(d30);
@@ -555,12 +651,18 @@ export default function DashboardPage() {
       const d30PrevStart = new Date(d30PrevEnd.getTime() - 29 * 24 * 3600 * 1000);
       sB = formatDateStr(d30PrevStart);
       eB = formatDateStr(d30PrevEnd);
+      const d30Prev2End = new Date(d30PrevStart.getTime() - 24 * 3600 * 1000);
+      const d30Prev2Start = new Date(d30Prev2End.getTime() - 29 * 24 * 3600 * 1000);
+      sC = formatDateStr(d30Prev2Start);
+      eC = formatDateStr(d30Prev2End);
     }
 
     setStartDateA(sA);
     setEndDateA(eA);
     setStartDateB(sB);
     setEndDateB(eB);
+    setStartDateC(sC);
+    setEndDateC(eC);
   };
 
   // Selector de Modo de Moneda: 'usd' por defecto (Dólares USD $), 'nio' (Córdobas C$)
@@ -570,7 +672,7 @@ export default function DashboardPage() {
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
 
-  const fetchAnalytics = async (sA = startDateA, eA = endDateA, sB = startDateB, eB = endDateB) => {
+  const fetchAnalytics = async (sA = startDateA, eA = endDateA, sB = startDateB, eB = endDateB, sC = startDateC, eC = endDateC) => {
     setLoading(true);
     setError(null);
     try {
@@ -579,6 +681,8 @@ export default function DashboardPage() {
         endDateA: eA,
         startDateB: sB,
         endDateB: eB,
+        startDateC: sC,
+        endDateC: eC,
       });
       const res = await fetch(`/api/analytics?${params.toString()}`);
       const json = await res.json();
@@ -750,7 +854,7 @@ export default function DashboardPage() {
               Dashboard Ejecutivo de Ventas & Analytics Comparativo
             </h1>
             <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', margin: '0.15rem 0 0 0' }}>
-              Comparación en tiempo real: <strong style={{ color: 'var(--accent-primary)' }}>{periods?.current?.label || 'Período A'}</strong> vs. <span style={{ color: '#38bdf8', fontWeight: 600 }}>{periods?.previous?.label || 'Período B'}</span>.
+              Comparación en tiempo real: <strong style={{ color: 'var(--accent-primary)' }}>{periods?.current?.label || 'Período A'}</strong> vs. <span style={{ color: '#38bdf8', fontWeight: 600 }}>{periods?.previous?.label || 'Período B'}</span> vs. <span style={{ color: '#34d399', fontWeight: 600 }}>{periods?.previous2?.label || 'Período C'}</span>.
             </p>
           </div>
 
@@ -823,7 +927,7 @@ export default function DashboardPage() {
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
               
               {/* Dropdown Selector de Preset (matching screenshot style) */}
-              <div style={{ position: 'relative', zIndex: 101 }}>
+              <div ref={dropdownRef} style={{ position: 'relative', zIndex: 101 }}>
                 <button
                   onClick={() => setShowRangeDropdown(!showRangeDropdown)}
                   style={{
@@ -842,8 +946,8 @@ export default function DashboardPage() {
                   }}
                 >
                   <Calendar size={14} color="#38bdf8" />
-                  <span>Created: <strong style={{ color: '#38bdf8' }}>{
-                    presetOptions.find(p => p.id === selectedPreset)?.label || 'Custom'
+                  <span>Creado: <strong style={{ color: '#38bdf8' }}>{
+                    presetOptions.find(p => p.id === selectedPreset)?.label || 'Personalizado'
                   }</strong></span>
                   <ChevronDown size={14} color="#94a3b8" />
                 </button>
@@ -892,47 +996,17 @@ export default function DashboardPage() {
                         </label>
                       ))}
 
-                      {/* Campos Custom From / To si la opción Custom está activa */}
-                      {selectedPreset === 'custom' && (
-                        <div style={{ marginTop: '0.4rem', display: 'flex', flexDirection: 'column', gap: '0.5rem', borderTop: '1px solid rgba(255, 255, 255, 0.1)', paddingTop: '0.6rem' }}>
-                          <div>
-                            <label style={{ fontSize: '0.74rem', color: '#94a3b8', display: 'block', marginBottom: '0.2rem', fontWeight: 600 }}>
-                              From
-                            </label>
-                            <input
-                              type="date"
-                              value={startDateA}
-                              onChange={(e) => updateCustomDates(e.target.value, endDateA)}
-                              className="glass-input"
-                              style={{ width: '100%', fontSize: '0.78rem', padding: '0.3rem 0.5rem', borderRadius: '6px' }}
-                            />
-                          </div>
-                          <div>
-                            <label style={{ fontSize: '0.74rem', color: '#94a3b8', display: 'block', marginBottom: '0.2rem', fontWeight: 600 }}>
-                              To
-                            </label>
-                            <input
-                              type="date"
-                              value={endDateA}
-                              onChange={(e) => updateCustomDates(startDateA, e.target.value)}
-                              className="glass-input"
-                              style={{ width: '100%', fontSize: '0.78rem', padding: '0.3rem 0.5rem', borderRadius: '6px' }}
-                            />
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Botón Apply */}
+                      {/* Botón Aplicar */}
                       <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '0.6rem' }}>
                         <button
                           onClick={() => {
                             setShowRangeDropdown(false);
-                            fetchAnalytics(startDateA, endDateA, startDateB, endDateB);
+                            fetchAnalytics(startDateA, endDateA, startDateB, endDateB, startDateC, endDateC);
                           }}
                           className="btn-primary"
                           style={{ padding: '0.35rem 1.1rem', fontSize: '0.78rem', backgroundColor: '#2563eb', borderRadius: '6px' }}
                         >
-                          Apply
+                          Aplicar
                         </button>
                       </div>
                     </div>
@@ -940,7 +1014,7 @@ export default function DashboardPage() {
                 )}
               </div>
 
-              {/* Rango de Fechas A y B (visibles para confirmación / ajuste fino) */}
+              {/* Rango de Fechas A, B y C (visibles para confirmación / ajuste fino) */}
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', background: 'rgba(56, 189, 248, 0.08)', padding: '0.2rem 0.5rem', borderRadius: '8px', border: '1px solid rgba(56, 189, 248, 0.25)' }}>
                   <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#38bdf8', whiteSpace: 'nowrap' }}>
@@ -985,13 +1059,36 @@ export default function DashboardPage() {
                     onChange={(e) => { setEndDateB(e.target.value); setSelectedPreset('custom'); }}
                   />
                 </div>
+
+                <span style={{ color: 'var(--text-dim)', fontWeight: 700, fontSize: '0.75rem' }}>vs.</span>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', background: 'rgba(52, 211, 153, 0.08)', padding: '0.2rem 0.5rem', borderRadius: '8px', border: '1px solid rgba(52, 211, 153, 0.25)' }}>
+                  <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#34d399', whiteSpace: 'nowrap' }}>
+                    🟢 C:
+                  </span>
+                  <input
+                    type="date"
+                    className="glass-input"
+                    style={{ fontSize: '0.75rem', padding: '0.2rem 0.4rem', minHeight: '28px' }}
+                    value={startDateC}
+                    onChange={(e) => { setStartDateC(e.target.value); setSelectedPreset('custom'); }}
+                  />
+                  <span style={{ color: 'var(--text-dim)', fontSize: '0.72rem' }}>a</span>
+                  <input
+                    type="date"
+                    className="glass-input"
+                    style={{ fontSize: '0.75rem', padding: '0.2rem 0.4rem', minHeight: '28px' }}
+                    value={endDateC}
+                    onChange={(e) => { setEndDateC(e.target.value); setSelectedPreset('custom'); }}
+                  />
+                </div>
               </div>
 
             </div>
 
             {/* Botón Aplicar Filtrado */}
             <button
-              onClick={() => fetchAnalytics(startDateA, endDateA, startDateB, endDateB)}
+              onClick={() => fetchAnalytics(startDateA, endDateA, startDateB, endDateB, startDateC, endDateC)}
               disabled={loading}
               className="btn-primary"
               style={{ padding: '0.35rem 0.95rem', fontSize: '0.78rem', minHeight: '30px', flexShrink: 0 }}
@@ -1007,7 +1104,7 @@ export default function DashboardPage() {
         {loading && (
           <div className="glass-card" style={{ padding: '1.5rem', textAlign: 'center', marginBottom: '0.9rem', color: 'var(--text-muted)' }}>
             <RefreshCw size={20} className="animate-spin" color="var(--accent-primary)" style={{ margin: '0 auto 0.5rem auto' }} />
-            Obteniendo analíticas y analizando 100% de órdenes del Período A y B...
+            Obteniendo analíticas y analizando 100% de órdenes del Período A, B y C...
           </div>
         )}
 
@@ -1020,165 +1117,192 @@ export default function DashboardPage() {
         {/* Analytics Main Dashboard Grid */}
         {data && !loading && (
           <>
-            {/* Top Key Executive Performance Indicators (Rejilla Estricta 4x2 de 8 Tarjetas) */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.85rem', marginBottom: '1.25rem' }}>
-              
-              {/* Card 1: Ingresos Brutos */}
-              <div className="glass-card" style={{ padding: '0.9rem 1.05rem', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', minHeight: '118px' }}>
-                <div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.35rem', gap: '0.25rem' }}>
-                    <span style={{ fontSize: '0.72rem', color: 'var(--text-dim)', textTransform: 'uppercase', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.3rem', whiteSpace: 'nowrap' }}>
-                      <CircleDollarSign size={13} color="#38bdf8" /> Ingresos Brutos
-                    </span>
-                    {renderTrendBadge(kpis?.grossRevenue?.changePct || 0)}
+            {/* Top Key Executive Performance Indicators (Rejilla Estricta 4x1 o 4x2) */}
+            <div style={{ marginBottom: '1.25rem' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.85rem' }}>
+                {/* Card 1: Ventas Netas (Principal) */}
+                <div className="glass-card" style={{ padding: '0.9rem 1.05rem', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', minHeight: '118px' }}>
+                  <div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.35rem', gap: '0.25rem' }}>
+                      <span style={{ fontSize: '0.72rem', color: 'var(--text-dim)', textTransform: 'uppercase', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.3rem', whiteSpace: 'nowrap' }}>
+                        <DollarSign size={13} color="#34d399" /> Ventas Netas
+                      </span>
+                      {renderTrendBadge(kpis?.totalRevenue?.changePct || 0)}
+                    </div>
+                    <div style={{ fontSize: '1.32rem', fontWeight: 800, color: '#34d399', letterSpacing: '-0.02em', lineHeight: 1.15 }}>
+                      {formatCurrency(kpis?.totalRevenue?.currentNio || kpis?.totalRevenue?.current || 0, kpis?.totalRevenue?.currentUsd || 0)}
+                    </div>
                   </div>
-                  <div style={{ fontSize: '1.32rem', fontWeight: 800, color: '#ffffff', letterSpacing: '-0.02em', lineHeight: 1.15 }}>
-                    {formatCurrency(kpis?.grossRevenue?.currentNio || 0, kpis?.grossRevenue?.currentUsd || 0)}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginTop: '0.45rem', gap: '0.5rem' }}>
+                    <div style={{ fontSize: '0.71rem', color: 'var(--text-dim)', lineHeight: '1.3' }}>
+                      <div>vs. B: {formatCurrency(kpis?.totalRevenue?.previousNio || kpis?.totalRevenue?.previous || 0, kpis?.totalRevenue?.previousUsd || 0)} | C: {formatCurrency(kpis?.totalRevenue?.previous2Nio || kpis?.totalRevenue?.previous2 || 0, kpis?.totalRevenue?.previous2Usd || 0)}</div>
+                      <div style={{ color: '#34d399', opacity: 0.85, fontSize: '0.66rem' }}>(Órdenes aprobadas)</div>
+                    </div>
+                    <button
+                      onClick={() => setShowMoreDetails(!showMoreDetails)}
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        padding: 0,
+                        fontSize: '0.73rem',
+                        fontWeight: 600,
+                        color: '#38bdf8',
+                        cursor: 'pointer',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '0.25rem',
+                        whiteSpace: 'nowrap',
+                        transition: 'all 0.2s',
+                      }}
+                    >
+                      {showMoreDetails ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+                      <span>{showMoreDetails ? 'Ocultar detalles' : 'Ver más detalles'}</span>
+                    </button>
                   </div>
                 </div>
-                <div style={{ fontSize: '0.71rem', color: 'var(--text-dim)', marginTop: '0.45rem', lineHeight: '1.3' }}>
-                  <div>vs. {formatCurrency(kpis?.grossRevenue?.previousNio || 0, kpis?.grossRevenue?.previousUsd || 0)}</div>
-                  <div style={{ opacity: 0.65, fontSize: '0.66rem' }}>(100% órdenes registradas)</div>
-                </div>
-              </div>
 
-              {/* Card 2: Monto Cancelado */}
-              <div className="glass-card" style={{ padding: '0.9rem 1.05rem', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', minHeight: '118px' }}>
-                <div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.35rem', gap: '0.25rem' }}>
-                    <span style={{ fontSize: '0.72rem', color: 'var(--text-dim)', textTransform: 'uppercase', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.3rem', whiteSpace: 'nowrap' }}>
-                      <AlertTriangle size={13} color="#fb7185" /> Monto Cancelado
-                    </span>
-                    {renderTrendBadge(kpis?.canceledRevenue?.changePct || 0, true)}
+                {/* Card 2: Total Órdenes (Principal) */}
+                <div className="glass-card" style={{ padding: '0.9rem 1.05rem', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', minHeight: '118px' }}>
+                  <div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.35rem', gap: '0.25rem' }}>
+                      <span style={{ fontSize: '0.72rem', color: 'var(--text-dim)', textTransform: 'uppercase', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.3rem', whiteSpace: 'nowrap' }}>
+                        <ShoppingCart size={13} color="#38bdf8" /> Total Órdenes
+                      </span>
+                      {renderTrendBadge(kpis?.totalOrders?.changePct || 0)}
+                    </div>
+                    <div style={{ fontSize: '1.32rem', fontWeight: 800, color: '#ffffff', letterSpacing: '-0.02em', lineHeight: 1.15 }}>
+                      {(kpis?.totalOrders?.current || 0).toLocaleString()} órdenes
+                    </div>
                   </div>
-                  <div style={{ fontSize: '1.32rem', fontWeight: 800, color: '#fb7185', letterSpacing: '-0.02em', lineHeight: 1.15 }}>
-                    {formatCurrency(kpis?.canceledRevenue?.currentNio || 0, kpis?.canceledRevenue?.currentUsd || 0)}
+                  <div style={{ fontSize: '0.71rem', color: 'var(--text-dim)', marginTop: '0.45rem', lineHeight: '1.3' }}>
+                    <div>vs. B: {(kpis?.totalOrders?.previous || 0).toLocaleString()} | C: {(kpis?.totalOrders?.previous2 || 0).toLocaleString()} ord.</div>
+                    <div style={{ fontSize: '0.66rem' }}>
+                      <span style={{ color: '#34d399', fontWeight: 600 }}>{kpis?.totalOrders?.validCurrent || 0} apr.</span> | <span style={{ color: '#fb7185', fontWeight: 600 }}>{kpis?.totalOrders?.canceledCurrent || 0} canc.</span>
+                    </div>
                   </div>
                 </div>
-                <div style={{ fontSize: '0.71rem', color: 'var(--text-dim)', marginTop: '0.45rem', lineHeight: '1.3' }}>
-                  <div>vs. {formatCurrency(kpis?.canceledRevenue?.previousNio || 0, kpis?.canceledRevenue?.previousUsd || 0)}</div>
-                  <div style={{ color: '#fb7185', opacity: 0.85, fontSize: '0.66rem' }}>({kpis?.totalOrders?.canceledCurrent || 0} órdenes canceladas)</div>
-                </div>
-              </div>
 
-              {/* Card 3: Ventas Netas */}
-              <div className="glass-card" style={{ padding: '0.9rem 1.05rem', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', minHeight: '118px' }}>
-                <div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.35rem', gap: '0.25rem' }}>
-                    <span style={{ fontSize: '0.72rem', color: 'var(--text-dim)', textTransform: 'uppercase', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.3rem', whiteSpace: 'nowrap' }}>
-                      <DollarSign size={13} color="#34d399" /> Ventas Netas
-                    </span>
-                    {renderTrendBadge(kpis?.totalRevenue?.changePct || 0)}
+                {/* Card 3: Tasa Cancelación (Principal) */}
+                <div className="glass-card" style={{ padding: '0.9rem 1.05rem', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', minHeight: '118px' }}>
+                  <div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.35rem', gap: '0.25rem' }}>
+                      <span style={{ fontSize: '0.72rem', color: 'var(--text-dim)', textTransform: 'uppercase', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.3rem', whiteSpace: 'nowrap' }}>
+                        <AlertTriangle size={13} color="#fb7185" /> Tasa Cancelación
+                      </span>
+                      {renderTrendBadge(kpis?.cancelRate?.changePct || 0, true)}
+                    </div>
+                    <div style={{ fontSize: '1.32rem', fontWeight: 800, color: '#ffffff', letterSpacing: '-0.02em', lineHeight: 1.15 }}>
+                      {kpis?.cancelRate?.current || 0}%
+                    </div>
                   </div>
-                  <div style={{ fontSize: '1.32rem', fontWeight: 800, color: '#34d399', letterSpacing: '-0.02em', lineHeight: 1.15 }}>
-                    {formatCurrency(kpis?.totalRevenue?.currentNio || kpis?.totalRevenue?.current || 0, kpis?.totalRevenue?.currentUsd || 0)}
+                  <div style={{ fontSize: '0.71rem', color: 'var(--text-dim)', marginTop: '0.45rem', lineHeight: '1.3' }}>
+                    <div>vs. B: {kpis?.cancelRate?.previous || 0}% | C: {kpis?.cancelRate?.previous2 || 0}%</div>
+                    <div style={{ color: '#fb7185', opacity: 0.85, fontSize: '0.66rem' }}>({kpis?.totalOrders?.canceledCurrent || 0} de {kpis?.totalOrders?.current || 0} órdenes)</div>
                   </div>
                 </div>
-                <div style={{ fontSize: '0.71rem', color: 'var(--text-dim)', marginTop: '0.45rem', lineHeight: '1.3' }}>
-                  <div>vs. {formatCurrency(kpis?.totalRevenue?.previousNio || kpis?.totalRevenue?.previous || 0, kpis?.totalRevenue?.previousUsd || 0)}</div>
-                  <div style={{ color: '#34d399', opacity: 0.85, fontSize: '0.66rem' }}>(Órdenes aprobadas)</div>
-                </div>
-              </div>
 
-              {/* Card 4: Tasa Cancelación */}
-              <div className="glass-card" style={{ padding: '0.9rem 1.05rem', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', minHeight: '118px' }}>
-                <div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.35rem', gap: '0.25rem' }}>
-                    <span style={{ fontSize: '0.72rem', color: 'var(--text-dim)', textTransform: 'uppercase', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.3rem', whiteSpace: 'nowrap' }}>
-                      <AlertTriangle size={13} color="#fb7185" /> Tasa Cancelación
-                    </span>
-                    {renderTrendBadge(kpis?.cancelRate?.changePct || 0, true)}
+                {/* Card 4: Ticket Promedio Neto (Principal) */}
+                <div className="glass-card" style={{ padding: '0.9rem 1.05rem', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', minHeight: '118px' }}>
+                  <div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.35rem', gap: '0.25rem' }}>
+                      <span style={{ fontSize: '0.72rem', color: 'var(--text-dim)', textTransform: 'uppercase', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.3rem', whiteSpace: 'nowrap' }}>
+                        <Receipt size={13} color="#34d399" /> Ticket Prom. Neto
+                      </span>
+                      {renderTrendBadge(kpis?.avgTicket?.changePct || 0)}
+                    </div>
+                    <div style={{ fontSize: '1.32rem', fontWeight: 800, color: '#34d399', letterSpacing: '-0.02em', lineHeight: 1.15 }}>
+                      {formatCurrency(kpis?.avgTicket?.currentNio || kpis?.avgTicket?.current || 0, kpis?.avgTicket?.currentUsd || 0)}
+                    </div>
                   </div>
-                  <div style={{ fontSize: '1.32rem', fontWeight: 800, color: '#ffffff', letterSpacing: '-0.02em', lineHeight: 1.15 }}>
-                    {kpis?.cancelRate?.current || 0}%
+                  <div style={{ fontSize: '0.71rem', color: 'var(--text-dim)', marginTop: '0.45rem', lineHeight: '1.3' }}>
+                    <div>vs. B: {formatCurrency(kpis?.avgTicket?.previousNio || kpis?.avgTicket?.previous || 0, kpis?.avgTicket?.previousUsd || 0)} | C: {formatCurrency(kpis?.avgTicket?.previous2Nio || kpis?.avgTicket?.previous2 || 0, kpis?.avgTicket?.previous2Usd || 0)}</div>
+                    <div style={{ color: '#34d399', opacity: 0.85, fontSize: '0.66rem' }}>(Basado en aprobadas)</div>
                   </div>
                 </div>
-                <div style={{ fontSize: '0.71rem', color: 'var(--text-dim)', marginTop: '0.45rem', lineHeight: '1.3' }}>
-                  <div>vs. {kpis?.cancelRate?.previous || 0}%</div>
-                  <div style={{ color: '#fb7185', opacity: 0.85, fontSize: '0.66rem' }}>({kpis?.totalOrders?.canceledCurrent || 0} de {kpis?.totalOrders?.current || 0} órdenes)</div>
-                </div>
-              </div>
 
-              {/* Card 5: Total Órdenes */}
-              <div className="glass-card" style={{ padding: '0.9rem 1.05rem', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', minHeight: '118px' }}>
-                <div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.35rem', gap: '0.25rem' }}>
-                    <span style={{ fontSize: '0.72rem', color: 'var(--text-dim)', textTransform: 'uppercase', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.3rem', whiteSpace: 'nowrap' }}>
-                      <ShoppingCart size={13} color="#38bdf8" /> Total Órdenes
-                    </span>
-                    {renderTrendBadge(kpis?.totalOrders?.changePct || 0)}
-                  </div>
-                  <div style={{ fontSize: '1.32rem', fontWeight: 800, color: '#ffffff', letterSpacing: '-0.02em', lineHeight: 1.15 }}>
-                    {(kpis?.totalOrders?.current || 0).toLocaleString()} órdenes
-                  </div>
-                </div>
-                <div style={{ fontSize: '0.71rem', color: 'var(--text-dim)', marginTop: '0.45rem', lineHeight: '1.3' }}>
-                  <div>vs. {(kpis?.totalOrders?.previous || 0).toLocaleString()} órdenes</div>
-                  <div style={{ fontSize: '0.66rem' }}>
-                    <span style={{ color: '#34d399', fontWeight: 600 }}>{kpis?.totalOrders?.validCurrent || 0} apr.</span> | <span style={{ color: '#fb7185', fontWeight: 600 }}>{kpis?.totalOrders?.canceledCurrent || 0} canc.</span>
-                  </div>
-                </div>
-              </div>
+                {/* Fila 2: Tarjetas Adicionales (Visibles solo si showMoreDetails es true) */}
+                {showMoreDetails && (
+                  <>
+                    {/* Card 5: Ingresos Brutos (Detalle - Col 1) */}
+                    <div className="glass-card" style={{ padding: '0.9rem 1.05rem', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', minHeight: '118px' }}>
+                      <div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.35rem', gap: '0.25rem' }}>
+                          <span style={{ fontSize: '0.72rem', color: 'var(--text-dim)', textTransform: 'uppercase', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.3rem', whiteSpace: 'nowrap' }}>
+                            <CircleDollarSign size={13} color="#38bdf8" /> Ingresos Brutos
+                          </span>
+                          {renderTrendBadge(kpis?.grossRevenue?.changePct || 0)}
+                        </div>
+                        <div style={{ fontSize: '1.32rem', fontWeight: 800, color: '#ffffff', letterSpacing: '-0.02em', lineHeight: 1.15 }}>
+                          {formatCurrency(kpis?.grossRevenue?.currentNio || 0, kpis?.grossRevenue?.currentUsd || 0)}
+                        </div>
+                      </div>
+                      <div style={{ fontSize: '0.71rem', color: 'var(--text-dim)', marginTop: '0.45rem', lineHeight: '1.3' }}>
+                        <div>vs. B: {formatCurrency(kpis?.grossRevenue?.previousNio || 0, kpis?.grossRevenue?.previousUsd || 0)} | C: {formatCurrency(kpis?.grossRevenue?.previous2Nio || 0, kpis?.grossRevenue?.previous2Usd || 0)}</div>
+                        <div style={{ opacity: 0.65, fontSize: '0.66rem' }}>(100% órdenes registradas)</div>
+                      </div>
+                    </div>
 
-              {/* Card 6: Órdenes Facturadas (Invoiced) */}
-              <div className="glass-card" style={{ padding: '0.9rem 1.05rem', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', minHeight: '118px' }}>
-                <div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.35rem', gap: '0.25rem' }}>
-                    <span style={{ fontSize: '0.72rem', color: 'var(--text-dim)', textTransform: 'uppercase', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.3rem', whiteSpace: 'nowrap' }}>
-                      <CheckCircle2 size={13} color="#34d399" /> Órdenes Facturadas
-                    </span>
-                    {renderTrendBadge(kpis?.invoicedOrders?.changePct || 0)}
-                  </div>
-                  <div style={{ fontSize: '1.32rem', fontWeight: 800, color: '#34d399', letterSpacing: '-0.02em', lineHeight: 1.15 }}>
-                    {(kpis?.invoicedOrders?.current || 0).toLocaleString()} facturadas
-                  </div>
-                </div>
-                <div style={{ fontSize: '0.71rem', color: 'var(--text-dim)', marginTop: '0.45rem', lineHeight: '1.3' }}>
-                  <div>vs. {(kpis?.invoicedOrders?.previous || 0).toLocaleString()} facturadas</div>
-                  <div style={{ color: '#34d399', opacity: 0.85, fontSize: '0.66rem' }}>
-                    ({kpis?.totalOrders?.current > 0 ? ((kpis?.invoicedOrders?.current / kpis?.totalOrders?.current) * 100).toFixed(1) : 0}% del total)
-                  </div>
-                </div>
-              </div>
+                    {/* Card 6: Órdenes Facturadas (Detalle - Col 2: debajo de Total Órdenes) */}
+                    <div className="glass-card" style={{ padding: '0.9rem 1.05rem', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', minHeight: '118px' }}>
+                      <div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.35rem', gap: '0.25rem' }}>
+                          <span style={{ fontSize: '0.72rem', color: 'var(--text-dim)', textTransform: 'uppercase', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.3rem', whiteSpace: 'nowrap' }}>
+                            <CheckCircle2 size={13} color="#34d399" /> Órdenes Facturadas
+                          </span>
+                          {renderTrendBadge(kpis?.invoicedOrders?.changePct || 0)}
+                        </div>
+                        <div style={{ fontSize: '1.32rem', fontWeight: 800, color: '#34d399', letterSpacing: '-0.02em', lineHeight: 1.15 }}>
+                          {(kpis?.invoicedOrders?.current || 0).toLocaleString()} facturadas
+                        </div>
+                      </div>
+                      <div style={{ fontSize: '0.71rem', color: 'var(--text-dim)', marginTop: '0.45rem', lineHeight: '1.3' }}>
+                        <div>vs. B: {(kpis?.invoicedOrders?.previous || 0).toLocaleString()} | C: {(kpis?.invoicedOrders?.previous2 || 0).toLocaleString()} fact.</div>
+                        <div style={{ color: '#34d399', opacity: 0.85, fontSize: '0.66rem' }}>
+                          ({kpis?.totalOrders?.current > 0 ? ((kpis?.invoicedOrders?.current / kpis?.totalOrders?.current) * 100).toFixed(1) : 0}% del total)
+                        </div>
+                      </div>
+                    </div>
 
-              {/* Card 7: Ticket Promedio Bruto */}
-              <div className="glass-card" style={{ padding: '0.9rem 1.05rem', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', minHeight: '118px' }}>
-                <div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.35rem', gap: '0.25rem' }}>
-                    <span style={{ fontSize: '0.72rem', color: 'var(--text-dim)', textTransform: 'uppercase', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.3rem', whiteSpace: 'nowrap' }}>
-                      <Receipt size={13} color="#a5b4fc" /> Ticket Prom. Bruto
-                    </span>
-                    {renderTrendBadge(kpis?.grossAvgTicket?.changePct || 0)}
-                  </div>
-                  <div style={{ fontSize: '1.32rem', fontWeight: 800, color: '#ffffff', letterSpacing: '-0.02em', lineHeight: 1.15 }}>
-                    {formatCurrency(kpis?.grossAvgTicket?.currentNio || 0, kpis?.grossAvgTicket?.currentUsd || 0)}
-                  </div>
-                </div>
-                <div style={{ fontSize: '0.71rem', color: 'var(--text-dim)', marginTop: '0.45rem', lineHeight: '1.3' }}>
-                  <div>vs. {formatCurrency(kpis?.grossAvgTicket?.previousNio || 0, kpis?.grossAvgTicket?.previousUsd || 0)}</div>
-                  <div style={{ opacity: 0.65, fontSize: '0.66rem' }}>(Basado en 100% órdenes)</div>
-                </div>
-              </div>
+                    {/* Card 7: Monto Cancelado (Detalle - Col 3: debajo de Tasa Cancelación) */}
+                    <div className="glass-card" style={{ padding: '0.9rem 1.05rem', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', minHeight: '118px' }}>
+                      <div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.35rem', gap: '0.25rem' }}>
+                          <span style={{ fontSize: '0.72rem', color: 'var(--text-dim)', textTransform: 'uppercase', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.3rem', whiteSpace: 'nowrap' }}>
+                            <AlertTriangle size={13} color="#fb7185" /> Monto Cancelado
+                          </span>
+                          {renderTrendBadge(kpis?.canceledRevenue?.changePct || 0, true)}
+                        </div>
+                        <div style={{ fontSize: '1.32rem', fontWeight: 800, color: '#fb7185', letterSpacing: '-0.02em', lineHeight: 1.15 }}>
+                          {formatCurrency(kpis?.canceledRevenue?.currentNio || 0, kpis?.canceledRevenue?.currentUsd || 0)}
+                        </div>
+                      </div>
+                      <div style={{ fontSize: '0.71rem', color: 'var(--text-dim)', marginTop: '0.45rem', lineHeight: '1.3' }}>
+                        <div>vs. B: {formatCurrency(kpis?.canceledRevenue?.previousNio || 0, kpis?.canceledRevenue?.previousUsd || 0)} | C: {formatCurrency(kpis?.canceledRevenue?.previous2Nio || 0, kpis?.canceledRevenue?.previous2Usd || 0)}</div>
+                        <div style={{ color: '#fb7185', opacity: 0.85, fontSize: '0.66rem' }}>({kpis?.totalOrders?.canceledCurrent || 0} órdenes canceladas)</div>
+                      </div>
+                    </div>
 
-              {/* Card 8: Ticket Promedio Neto */}
-              <div className="glass-card" style={{ padding: '0.9rem 1.05rem', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', minHeight: '118px' }}>
-                <div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.35rem', gap: '0.25rem' }}>
-                    <span style={{ fontSize: '0.72rem', color: 'var(--text-dim)', textTransform: 'uppercase', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.3rem', whiteSpace: 'nowrap' }}>
-                      <Receipt size={13} color="#34d399" /> Ticket Prom. Neto
-                    </span>
-                    {renderTrendBadge(kpis?.avgTicket?.changePct || 0)}
-                  </div>
-                  <div style={{ fontSize: '1.32rem', fontWeight: 800, color: '#34d399', letterSpacing: '-0.02em', lineHeight: 1.15 }}>
-                    {formatCurrency(kpis?.avgTicket?.currentNio || kpis?.avgTicket?.current || 0, kpis?.avgTicket?.currentUsd || 0)}
-                  </div>
-                </div>
-                <div style={{ fontSize: '0.71rem', color: 'var(--text-dim)', marginTop: '0.45rem', lineHeight: '1.3' }}>
-                  <div>vs. {formatCurrency(kpis?.avgTicket?.previousNio || kpis?.avgTicket?.previous || 0, kpis?.avgTicket?.previousUsd || 0)}</div>
-                  <div style={{ color: '#34d399', opacity: 0.85, fontSize: '0.66rem' }}>(Basado en aprobadas)</div>
-                </div>
+                    {/* Card 8: Ticket Promedio Bruto (Detalle - Col 4: debajo de Ticket Prom. Neto) */}
+                    <div className="glass-card" style={{ padding: '0.9rem 1.05rem', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', minHeight: '118px' }}>
+                      <div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.35rem', gap: '0.25rem' }}>
+                          <span style={{ fontSize: '0.72rem', color: 'var(--text-dim)', textTransform: 'uppercase', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.3rem', whiteSpace: 'nowrap' }}>
+                            <Receipt size={13} color="#a5b4fc" /> Ticket Prom. Bruto
+                          </span>
+                          {renderTrendBadge(kpis?.grossAvgTicket?.changePct || 0)}
+                        </div>
+                        <div style={{ fontSize: '1.32rem', fontWeight: 800, color: '#ffffff', letterSpacing: '-0.02em', lineHeight: 1.15 }}>
+                          {formatCurrency(kpis?.grossAvgTicket?.currentNio || 0, kpis?.grossAvgTicket?.currentUsd || 0)}
+                        </div>
+                      </div>
+                      <div style={{ fontSize: '0.71rem', color: 'var(--text-dim)', marginTop: '0.45rem', lineHeight: '1.3' }}>
+                        <div>vs. B: {formatCurrency(kpis?.grossAvgTicket?.previousNio || 0, kpis?.grossAvgTicket?.previousUsd || 0)} | C: {formatCurrency(kpis?.grossAvgTicket?.previous2Nio || 0, kpis?.grossAvgTicket?.previous2Usd || 0)}</div>
+                        <div style={{ opacity: 0.65, fontSize: '0.66rem' }}>(Basado en 100% órdenes)</div>
+                      </div>
+                    </div>
+                  </>
+                )}
               </div>
-
             </div>
 
             {/* SECCIÓN DE GRÁFICA MULTI-LÍNEA INTERACTIVA */}
@@ -1188,6 +1312,7 @@ export default function DashboardPage() {
                 formatCurrency={formatCurrency}
                 bcnRate={data?.bcnExchangeRate || 36.6243}
                 periodLabel={periods?.current?.label}
+                periods={periods}
               />
             )}
 
@@ -1199,7 +1324,7 @@ export default function DashboardPage() {
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', flexWrap: 'wrap', gap: '0.5rem' }}>
                   <h3 style={{ fontSize: '1rem', fontWeight: 700, color: '#ffffff', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                     <Share2 size={18} color="var(--accent-primary)" />
-                    Ventas por Canal: {periods?.current?.label} vs. {periods?.previous?.label}
+                    Ventas por Canal: {periods?.current?.label} vs. {periods?.previous?.label} vs. {periods?.previous2?.label}
                   </h3>
                 </div>
 
@@ -1225,31 +1350,37 @@ export default function DashboardPage() {
                     <div style={{ width: '100%', height: '8px', borderRadius: '4px', background: 'rgba(255, 255, 255, 0.08)', overflow: 'hidden' }}>
                       <div style={{ width: `${channels?.socialSelling?.current?.pct || 0}%`, height: '100%', background: 'linear-gradient(to right, #34d399, #059669)', borderRadius: '4px', transition: 'width 0.6s ease' }} />
                     </div>
-                    {Boolean(channels?.socialSelling?.current?.canceledRevenueNio > 0) && (
-                      <div style={{ fontSize: '0.7rem', color: '#fb7185', marginTop: '0.25rem' }}>
-                        ⚠️ Monto cancelado en Social Selling: {formatCurrency(channels?.socialSelling?.current?.canceledRevenueNio, channels?.socialSelling?.current?.canceledRevenueUsd)} (Bruto: {formatCurrency(channels?.socialSelling?.current?.grossRevenueNio, channels?.socialSelling?.current?.grossRevenueUsd)})
-                      </div>
-                    )}
+
                   </div>
 
                   {/* Período B */}
-                  <div>
+                  <div style={{ marginBottom: '0.6rem' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.78rem', marginBottom: '0.2rem' }}>
                       <span style={{ color: 'var(--text-dim)' }}>
-                        <strong>{periods?.previous?.label}:</strong> {channels?.socialSelling?.previous?.netCount || 0} órdenes aprobadas <span style={{ opacity: 0.75, fontSize: '0.74rem' }}>({channels?.socialSelling?.previous?.grossCount || 0} totales: {channels?.socialSelling?.previous?.canceledCount || 0} canc.)</span>
+                        <strong style={{ color: '#a5b4fc' }}>{periods?.previous?.label}:</strong> {channels?.socialSelling?.previous?.netCount || 0} órdenes aprobadas <span style={{ opacity: 0.75, fontSize: '0.74rem' }}>({channels?.socialSelling?.previous?.grossCount || 0} totales: {channels?.socialSelling?.previous?.canceledCount || 0} canc.)</span>
                       </span>
                       <span style={{ color: 'var(--text-dim)', fontWeight: 600 }}>
                         {channels?.socialSelling?.previous?.pct || 0}% ({formatCurrency(channels?.socialSelling?.previous?.netRevenueNio || channels?.socialSelling?.previous?.revenueNio || 0, channels?.socialSelling?.previous?.netRevenueUsd || channels?.socialSelling?.previous?.revenueUsd || 0)})
                       </span>
                     </div>
                     <div style={{ width: '100%', height: '6px', borderRadius: '3px', background: 'rgba(255, 255, 255, 0.05)', overflow: 'hidden' }}>
-                      <div style={{ width: `${channels?.socialSelling?.previous?.pct || 0}%`, height: '100%', background: 'rgba(148, 163, 184, 0.45)', borderRadius: '3px', transition: 'width 0.6s ease' }} />
+                      <div style={{ width: `${channels?.socialSelling?.previous?.pct || 0}%`, height: '100%', background: 'rgba(129, 140, 248, 0.45)', borderRadius: '3px', transition: 'width 0.6s ease' }} />
                     </div>
-                    {Boolean(channels?.socialSelling?.previous?.canceledRevenueNio > 0) && (
-                      <div style={{ fontSize: '0.7rem', color: '#fb7185', marginTop: '0.25rem' }}>
-                        ⚠️ Monto cancelado en Social Selling ({periods?.previous?.label}): {formatCurrency(channels?.socialSelling?.previous?.canceledRevenueNio, channels?.socialSelling?.previous?.canceledRevenueUsd)} (Bruto: {formatCurrency(channels?.socialSelling?.previous?.grossRevenueNio, channels?.socialSelling?.previous?.grossRevenueUsd)})
-                      </div>
-                    )}
+                  </div>
+
+                  {/* Período C */}
+                  <div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.78rem', marginBottom: '0.2rem' }}>
+                      <span style={{ color: 'var(--text-dim)' }}>
+                        <strong style={{ color: '#34d399' }}>{periods?.previous2?.label}:</strong> {channels?.socialSelling?.previous2?.netCount || 0} órdenes aprobadas <span style={{ opacity: 0.75, fontSize: '0.74rem' }}>({channels?.socialSelling?.previous2?.grossCount || 0} totales: {channels?.socialSelling?.previous2?.canceledCount || 0} canc.)</span>
+                      </span>
+                      <span style={{ color: 'var(--text-dim)', fontWeight: 600 }}>
+                        {channels?.socialSelling?.previous2?.pct || 0}% ({formatCurrency(channels?.socialSelling?.previous2?.netRevenueNio || channels?.socialSelling?.previous2?.revenueNio || 0, channels?.socialSelling?.previous2?.netRevenueUsd || channels?.socialSelling?.previous2?.revenueUsd || 0)})
+                      </span>
+                    </div>
+                    <div style={{ width: '100%', height: '6px', borderRadius: '3px', background: 'rgba(255, 255, 255, 0.05)', overflow: 'hidden' }}>
+                      <div style={{ width: `${channels?.socialSelling?.previous2?.pct || 0}%`, height: '100%', background: 'rgba(52, 211, 153, 0.45)', borderRadius: '3px', transition: 'width 0.6s ease' }} />
+                    </div>
                   </div>
                 </div>
 
@@ -1275,31 +1406,37 @@ export default function DashboardPage() {
                     <div style={{ width: '100%', height: '8px', borderRadius: '4px', background: 'rgba(255, 255, 255, 0.08)', overflow: 'hidden' }}>
                       <div style={{ width: `${channels?.webDirect?.current?.pct || 0}%`, height: '100%', background: 'linear-gradient(to right, #38bdf8, #0284c7)', borderRadius: '4px', transition: 'width 0.6s ease' }} />
                     </div>
-                    {Boolean(channels?.webDirect?.current?.canceledRevenueNio > 0) && (
-                      <div style={{ fontSize: '0.7rem', color: '#fb7185', marginTop: '0.25rem' }}>
-                        ⚠️ Monto cancelado en Web Directa: {formatCurrency(channels?.webDirect?.current?.canceledRevenueNio, channels?.webDirect?.current?.canceledRevenueUsd)} (Bruto: {formatCurrency(channels?.webDirect?.current?.grossRevenueNio, channels?.webDirect?.current?.grossRevenueUsd)})
-                      </div>
-                    )}
+
                   </div>
 
                   {/* Período B */}
-                  <div>
+                  <div style={{ marginBottom: '0.6rem' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.78rem', marginBottom: '0.2rem' }}>
                       <span style={{ color: 'var(--text-dim)' }}>
-                        <strong>{periods?.previous?.label}:</strong> {channels?.webDirect?.previous?.netCount || 0} órdenes aprobadas <span style={{ opacity: 0.75, fontSize: '0.74rem' }}>({channels?.webDirect?.previous?.grossCount || 0} totales: {channels?.webDirect?.previous?.canceledCount || 0} canc.)</span>
+                        <strong style={{ color: '#a5b4fc' }}>{periods?.previous?.label}:</strong> {channels?.webDirect?.previous?.netCount || 0} órdenes aprobadas <span style={{ opacity: 0.75, fontSize: '0.74rem' }}>({channels?.webDirect?.previous?.grossCount || 0} totales: {channels?.webDirect?.previous?.canceledCount || 0} canc.)</span>
                       </span>
                       <span style={{ color: 'var(--text-dim)', fontWeight: 600 }}>
                         {channels?.webDirect?.previous?.pct || 0}% ({formatCurrency(channels?.webDirect?.previous?.netRevenueNio || channels?.webDirect?.previous?.revenueNio || 0, channels?.webDirect?.previous?.netRevenueUsd || channels?.webDirect?.previous?.revenueUsd || 0)})
                       </span>
                     </div>
                     <div style={{ width: '100%', height: '6px', borderRadius: '3px', background: 'rgba(255, 255, 255, 0.05)', overflow: 'hidden' }}>
-                      <div style={{ width: `${channels?.webDirect?.previous?.pct || 0}%`, height: '100%', background: 'rgba(148, 163, 184, 0.45)', borderRadius: '3px', transition: 'width 0.6s ease' }} />
+                      <div style={{ width: `${channels?.webDirect?.previous?.pct || 0}%`, height: '100%', background: 'rgba(129, 140, 248, 0.45)', borderRadius: '3px', transition: 'width 0.6s ease' }} />
                     </div>
-                    {Boolean(channels?.webDirect?.previous?.canceledRevenueNio > 0) && (
-                      <div style={{ fontSize: '0.7rem', color: '#fb7185', marginTop: '0.25rem' }}>
-                        ⚠️ Monto cancelado en Web Directa ({periods?.previous?.label}): {formatCurrency(channels?.webDirect?.previous?.canceledRevenueNio, channels?.webDirect?.previous?.canceledRevenueUsd)} (Bruto: {formatCurrency(channels?.webDirect?.previous?.grossRevenueNio, channels?.webDirect?.previous?.grossRevenueUsd)})
-                      </div>
-                    )}
+                  </div>
+
+                  {/* Período C */}
+                  <div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.78rem', marginBottom: '0.2rem' }}>
+                      <span style={{ color: 'var(--text-dim)' }}>
+                        <strong style={{ color: '#34d399' }}>{periods?.previous2?.label}:</strong> {channels?.webDirect?.previous2?.netCount || 0} órdenes aprobadas <span style={{ opacity: 0.75, fontSize: '0.74rem' }}>({channels?.webDirect?.previous2?.grossCount || 0} totales: {channels?.webDirect?.previous2?.canceledCount || 0} canc.)</span>
+                      </span>
+                      <span style={{ color: 'var(--text-dim)', fontWeight: 600 }}>
+                        {channels?.webDirect?.previous2?.pct || 0}% ({formatCurrency(channels?.webDirect?.previous2?.netRevenueNio || channels?.webDirect?.previous2?.revenueNio || 0, channels?.webDirect?.previous2?.netRevenueUsd || channels?.webDirect?.previous2?.revenueUsd || 0)})
+                      </span>
+                    </div>
+                    <div style={{ width: '100%', height: '6px', borderRadius: '3px', background: 'rgba(255, 255, 255, 0.05)', overflow: 'hidden' }}>
+                      <div style={{ width: `${channels?.webDirect?.previous2?.pct || 0}%`, height: '100%', background: 'rgba(52, 211, 153, 0.45)', borderRadius: '3px', transition: 'width 0.6s ease' }} />
+                    </div>
                   </div>
                 </div>
 
