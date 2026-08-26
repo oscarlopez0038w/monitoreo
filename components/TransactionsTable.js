@@ -12,6 +12,7 @@ import {
   MapPin,
   ExternalLink,
 } from 'lucide-react';
+import { formatNicaraguaTime } from '@/lib/dateUtils';
 
 export default function TransactionsTable({ transactions, onSelectTransaction, isLoading }) {
   if (isLoading) {
@@ -71,14 +72,7 @@ export default function TransactionsTable({ transactions, onSelectTransaction, i
             const isCanceled = tx.status === 'Canceled' || tx.errorDiagnostics?.isError;
             const isApproved = tx.status === 'Approved' || tx.status === 'Completed';
 
-            const formattedTime = tx.startDate
-              ? new Date(tx.startDate).toLocaleTimeString('es-NI', {
-                  timeZone: 'America/Managua',
-                  hour: '2-digit',
-                  minute: '2-digit',
-                  hour12: true,
-                })
-              : 'N/A';
+            const formattedTime = formatNicaraguaTime(tx.startDate);
 
             return (
               <tr
@@ -172,29 +166,31 @@ export default function TransactionsTable({ transactions, onSelectTransaction, i
                   </code>
                 </td>
 
-                {/* MÉTODO DE PAGO */}
+                {/* MÉTODO DE PAGO Y TARJETA (TERMINACIÓN) */}
                 <td style={{ padding: '1rem 1.2rem' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                    <span
-                      style={{
-                        padding: '0.2rem 0.5rem',
-                        borderRadius: '6px',
-                        background: 'rgba(255,255,255,0.08)',
-                        border: '1px solid rgba(255,255,255,0.12)',
-                        fontSize: '0.78rem',
-                        fontWeight: 700,
-                        color: '#f8fafc',
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: '0.35rem',
-                      }}
-                    >
-                      <CreditCard size={13} color="#a5b4fc" />
-                      {tx.payment?.systemName || 'Visa'}
-                    </span>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                      <span
+                        style={{
+                          padding: '0.2rem 0.55rem',
+                          borderRadius: '6px',
+                          background: 'rgba(255,255,255,0.08)',
+                          border: '1px solid rgba(255,255,255,0.12)',
+                          fontSize: '0.78rem',
+                          fontWeight: 700,
+                          color: '#f8fafc',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '0.35rem',
+                        }}
+                      >
+                        <CreditCard size={13} color="#a5b4fc" />
+                        {tx.payment?.systemName || 'Tarjeta'}
+                      </span>
+                    </div>
                     {tx.payment?.cardNumber && tx.payment.cardNumber !== 'N/A' && (
-                      <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                        {tx.payment.cardNumber}
+                      <span style={{ fontSize: '0.76rem', color: '#38bdf8', fontWeight: 700, fontFamily: 'monospace', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+                        💳 {tx.payment.cardNumber.startsWith('****') ? tx.payment.cardNumber : `**** ${tx.payment.cardNumber.slice(-4)}`}
                       </span>
                     )}
                   </div>

@@ -18,7 +18,7 @@ import {
   TrendingUp,
   Zap,
 } from 'lucide-react';
-import { getNicaraguaNow } from '@/lib/dateUtils';
+import { getNicaraguaNow, formatNicaraguaDateTime } from '@/lib/dateUtils';
 
 export default function TransaccionesPage() {
   const nicNow = getNicaraguaNow();
@@ -28,7 +28,6 @@ export default function TransaccionesPage() {
   const [endDate, setEndDate] = useState(nicNow.todayStr);
   const [statusFilter, setStatusFilter] = useState('all');
   const [searchTerm, setSearchTerm] = useState('');
-  const [autoRefreshInterval, setAutoRefreshInterval] = useState(60); // 60s por defecto (polling activo)
   const [isLoading, setIsLoading] = useState(true);
 
   const [transactions, setTransactions] = useState([]);
@@ -58,7 +57,6 @@ export default function TransaccionesPage() {
         search: searchTerm.trim(),
       });
 
-
       const res = await fetch(`/api/transactions?${query.toString()}`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
@@ -80,20 +78,18 @@ export default function TransaccionesPage() {
     fetchTransactionsData(false);
   }, [fetchTransactionsData]);
 
-  // Auto-refresh Timer Setup
+  // Auto-refresh Timer Setup (30s fijo en segundo plano)
   useEffect(() => {
     if (timerRef.current) clearInterval(timerRef.current);
 
-    if (autoRefreshInterval > 0) {
-      timerRef.current = setInterval(() => {
-        fetchTransactionsData(true);
-      }, autoRefreshInterval * 1000);
-    }
+    timerRef.current = setInterval(() => {
+      fetchTransactionsData(true);
+    }, 30000);
 
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
     };
-  }, [autoRefreshInterval, fetchTransactionsData]);
+  }, [fetchTransactionsData]);
 
   // Quick Date Setters
   const setQuickDate = (range) => {
@@ -154,7 +150,7 @@ export default function TransaccionesPage() {
       escapeCSV(t.orderId),
       escapeCSV(t.transactionId),
       escapeCSV(t.status),
-      escapeCSV(t.startDate ? new Date(t.startDate).toLocaleString('es-NI') : ''),
+      escapeCSV(t.startDate ? formatNicaraguaDateTime(t.startDate) : ''),
       escapeCSV(t.client?.name),
       escapeCSV(t.client?.email),
       escapeCSV(t.client?.phone),
@@ -218,41 +214,6 @@ export default function TransaccionesPage() {
 
           {/* CONTROLS & AUTO REFRESH */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '0.5rem',
-                backgroundColor: 'rgba(30, 41, 59, 0.6)',
-                border: '1px solid var(--border-subtle)',
-                borderRadius: '10px',
-                padding: '0.35rem 0.75rem',
-                fontSize: '0.82rem',
-                color: 'var(--text-muted)',
-              }}
-            >
-              <RefreshCw size={14} className={isLoading ? 'spin-icon' : ''} color="#38bdf8" />
-              <span>Auto-refresh:</span>
-              <select
-                value={autoRefreshInterval}
-                onChange={(e) => setAutoRefreshInterval(Number(e.target.value))}
-                style={{
-                  background: 'none',
-                  border: 'none',
-                  color: '#ffffff',
-                  fontWeight: 600,
-                  fontSize: '0.82rem',
-                  outline: 'none',
-                  cursor: 'pointer',
-                }}
-              >
-                <option value={0} style={{ background: '#0f172a' }}>Desactivado (Cron Vercel 60s)</option>
-                <option value={15} style={{ background: '#0f172a' }}>Cada 15s</option>
-                <option value={30} style={{ background: '#0f172a' }}>Cada 30s</option>
-                <option value={60} style={{ background: '#0f172a' }}>Cada 60s</option>
-              </select>
-            </div>
-
             <button
               onClick={() => fetchTransactionsData(false)}
               style={{

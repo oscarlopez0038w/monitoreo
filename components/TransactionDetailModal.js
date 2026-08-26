@@ -21,6 +21,7 @@ import {
   Mail,
   Receipt,
 } from 'lucide-react';
+import { formatNicaraguaDateTime } from '@/lib/dateUtils';
 
 export default function TransactionDetailModal({ transaction, onClose }) {
   const [activeTab, setActiveTab] = useState('summary');
@@ -37,17 +38,7 @@ export default function TransactionDetailModal({ transaction, onClose }) {
   const isCanceled = transaction.status === 'Canceled' || transaction.errorDiagnostics?.isError;
   const isApproved = transaction.status === 'Approved' || transaction.status === 'Completed';
 
-  const formattedDate = transaction.startDate
-    ? new Date(transaction.startDate).toLocaleString('es-NI', {
-        timeZone: 'America/Managua',
-        year: 'numeric',
-        month: 'short',
-        day: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit',
-      })
-    : 'N/A';
+  const formattedDate = formatNicaraguaDateTime(transaction.startDate);
 
   return (
     <div
@@ -70,7 +61,8 @@ export default function TransactionDetailModal({ transaction, onClose }) {
         style={{
           width: '100%',
           maxWidth: '860px',
-          maxHeight: '90vh',
+          height: '680px',
+          maxHeight: '85vh',
           backgroundColor: 'rgba(15, 23, 42, 0.95)',
           borderRadius: '20px',
           border: '1px solid rgba(56, 189, 248, 0.25)',
@@ -357,8 +349,8 @@ export default function TransactionDetailModal({ transaction, onClose }) {
                   <strong style={{ fontSize: '1.1rem', color: '#ffffff' }}>
                     {transaction.payment?.systemName || 'Tarjeta'}
                   </strong>
-                  <span style={{ fontSize: '0.78rem', color: '#64748b', display: 'block', marginTop: '0.1rem' }}>
-                    {transaction.payment?.cardNumber}
+                  <span style={{ fontSize: '0.8rem', color: '#38bdf8', display: 'block', marginTop: '0.2rem', fontFamily: 'monospace', fontWeight: 700 }}>
+                    💳 {transaction.payment?.cardNumber && transaction.payment.cardNumber !== 'N/A' ? (transaction.payment.cardNumber.startsWith('****') ? transaction.payment.cardNumber : `**** ${transaction.payment.cardNumber.slice(-4)}`) : 'Dígitos No Disponibles'}
                   </span>
                 </div>
 

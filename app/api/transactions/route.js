@@ -533,6 +533,88 @@ export async function GET(request) {
   }
 }
 
+function extractCardLastDigits(txDetail, paymentObj, orderDetail, interactions = []) {
+  const sanitize = (val) => {
+    if (val === null || val === undefined) return null;
+    let str = String(val).trim();
+    if (str.startsWith('"') && str.endsWith('"')) {
+      str = str.slice(1, -1).trim();
+    }
+    const digits = str.replace(/\D/g, '');
+    if (digits.length >= 4) return digits.slice(-4);
+    if (str.length > 0 && str !== 'null' && str !== 'undefined' && str !== 'N/A') return str;
+    return null;
+  };
+
+  // 1. Propiedades directas en paymentObj, txDetail, OMS
+  let res =
+    sanitize(paymentObj?.lastDigits) ||
+    sanitize(paymentObj?.last4) ||
+    sanitize(txDetail?.lastDigits) ||
+    sanitize(txDetail?.last4);
+
+  const omsPayment = orderDetail?.paymentData?.transactions?.[0]?.payments?.[0];
+  if (!res && omsPayment) {
+    res = sanitize(omsPayment.lastDigits) || sanitize(omsPayment.last4);
+  }
+
+  if (res) return res;
+
+  // 2. Búsqueda profunda en arreglo fields (VTEX Payments & OMS)
+  const checkFieldsArr = (fieldsArr) => {
+    if (!Array.isArray(fieldsArr)) return null;
+    for (const f of fieldsArr) {
+      if (!f || !f.name) continue;
+      const fn = String(f.name).toLowerCase();
+      if (fn === 'lastdigits' || fn === 'last4' || fn === 'last_digits' || fn === 'last_4' || fn === 'cardnumber' || fn === 'card_number') {
+        const val = sanitize(f.value);
+        if (val) return val;
+      }
+    }
+    return null;
+  };
+
+  res =
+    checkFieldsArr(paymentObj?.fields) ||
+    checkFieldsArr(txDetail?.fields) ||
+    checkFieldsArr(txDetail?.payments?.[0]?.fields) ||
+    checkFieldsArr(omsPayment?.fields) ||
+    checkFieldsArr(orderDetail?.paymentData?.transactions?.[0]?.fields);
+
+  if (res) return res;
+
+  // 3. Búsqueda en logs de interacción pasarela
+  if (Array.isArray(interactions) && interactions.length > 0) {
+    const fullLog = interactions.map((i) => (typeof i.Message === 'string' ? i.Message : JSON.stringify(i))).join(' ');
+    const lMatch =
+      fullLog.match(/"lastDigits"\s*:\s*"([^"]+)"/i) ||
+      fullLog.match(/"last4"\s*:\s*"([^"]+)"/i) ||
+      fullLog.match(/"last_digits"\s*:\s*"([^"]+)"/i) ||
+      fullLog.match(/lastDigits=([0-9]+)/i) ||
+      fullLog.match(/last4=([0-9]+)/i);
+
+    if (lMatch && lMatch[1]) {
+      const val = sanitize(lMatch[1]);
+      if (val) return val;
+    }
+  }
+
+  // 4. Fallback en string de objeto crudo
+  try {
+    const rawStr = JSON.stringify({ txDetail, paymentObj, orderDetail });
+    const match =
+      rawStr.match(/"lastDigits"\s*:\s*"([^"]+)"/i) ||
+      rawStr.match(/"last4"\s*:\s*"([^"]+)"/i) ||
+      rawStr.match(/"last_digits"\s*:\s*"([^"]+)"/i);
+    if (match && match[1]) {
+      const val = sanitize(match[1]);
+      if (val) return val;
+    }
+  } catch (e) {}
+
+  return null;
+}
+
 /**
  * Función normalizadora que combina VTEX Payment Transaction + Payments Array + OMS Order Detail
  */
@@ -619,9 +701,8 @@ async function buildEnrichedTransaction(txDetail, orderDetail, interactions = []
     paymentSystemName = 'Tarjeta de Crédito/Débito';
   }
 
-  const firstDigits = paymentObj.firstDigits || getField('firstDigits') || '';
-  const lastDigits = paymentObj.lastDigits || getField('lastDigits') || '';
-  const cardNumberFormatted = firstDigits && lastDigits ? `${firstDigits}******${lastDigits}` : (lastDigits ? `**** ${lastDigits}` : 'N/A');
+  const lastDigits = extractCardLastDigits(txDetail, paymentObj, orderDetail, interactions);
+  const cardNumberFormatted = lastDigits ? `**** ${lastDigits}` : 'N/A';
   const cardHolder = paymentObj.cardHolder || getField('cardHolder') || clientName;
 
   const acquirer = connectorResp.acquirer || connectorResp.Acquirer || 'Tilopay';
@@ -746,7 +827,14 @@ async function buildEnrichedTransaction(txDetail, orderDetail, interactions = []
   // 9. Metadatos Técnicos
   const ipAddress = txDetail?.ipAddress || txDetail?.fields?.find((f) => f.name === 'ip')?.value || 'N/A';
   const userAgent = txDetail?.userAgent || txDetail?.fields?.find((f) => f.name === 'userAgent')?.value || 'N/A';
-  const startDate = txDetail?.startDate || orderDetail?.creationDate || new Date().toISOString();
+  let startDate = txDetail?.startDate || orderDetail?.creationDate || new Date().toISOString();
+  if (startDate && typeof startDate === 'string' && !startDate.endsWith('Z') && !startDate.includes('+') && !startDate.includes('-06:00')) {
+    if (startDate.includes('T')) {
+      startDate = `${startDate}Z`;
+    } else if (startDate.includes(' ')) {
+      startDate = `${startDate.replace(' ', 'T')}Z`;
+    }
+  }
 
   return {
     key,
