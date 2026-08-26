@@ -66,7 +66,7 @@ export default function Sidebar({ vtexStatus, supabaseStatus, mobileOpen, onClos
       permission: 'embudo:view',
     },
     {
-      label: 'Marketing & UTMs',
+      label: 'Publicidad & Extractor PDP',
       href: '/marketing',
       icon: Megaphone,
       color: '#a5b4fc',

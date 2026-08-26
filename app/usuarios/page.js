@@ -510,7 +510,7 @@ export default function UsersManagementPage() {
                 }}
               >
                 <Plus size={18} />
-                + Crear Nuevo Rol
+                Crear Nuevo Rol
               </button>
             ) : (
               <button
@@ -531,7 +531,7 @@ export default function UsersManagementPage() {
                 }}
               >
                 <UserPlus size={18} />
-                + Nuevo Usuario
+                Nuevo Usuario
               </button>
             )}
           </div>

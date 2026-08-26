@@ -30,84 +30,101 @@ export async function GET() {
       console.error('Error al cargar permisos:', permError);
     }
 
-    // Auto-registrar permiso de Kits si aún no existe en app_permissions
-    if (Array.isArray(permissions) && !permissions.some((p) => p.code === 'kits:manage')) {
-      try {
-        await supabaseAdmin.from('app_permissions').insert({
-          code: 'kits:manage',
-          name: 'Kits VTEX & Combos',
-          description: 'Monitorear inventario, modificar precios e importar Kits desde Excel',
-          category: 'Catálogo & Inventario',
-        });
-        const reload = await supabaseAdmin.from('app_permissions').select('*').order('category, code');
-        if (reload.data) permissions = reload.data;
-      } catch (e) {
-        console.warn('No se pudo auto-registrar el permiso kits:manage:', e.message);
-      }
-    }
+    // Auto-registro y sincronización dinámica 100% de todos los módulos de la app en app_permissions
+    const MASTER_MODULE_PERMISSIONS = [
+      {
+        code: 'dashboard:view',
+        name: 'Dashboard Ventas E-Commerce',
+        description: 'Ver métricas ejecutivas de ventas, comparativas de períodos y gráficos de tendencia',
+        category: 'Analítica & Reportes',
+      },
+      {
+        code: 'tendencias:view',
+        name: 'Tendencias E-Commerce',
+        description: 'Analizar ranking de ventas diarias, productos estrella y tendencias de conversión',
+        category: 'Analítica & Reportes',
+      },
+      {
+        code: 'patrones:view',
+        name: 'Patrones de Compra & Horarios Pico',
+        description: 'Analizar patrones de compra por día de la semana, horarios pico e ingresos',
+        category: 'Analítica & Reportes',
+      },
+      {
+        code: 'embudo:view',
+        name: 'Embudo de Checkout & Conversión OMS',
+        description: 'Analizar conversión progresiva de checkout, tasas de aprobación bancaria y fugas',
+        category: 'Analítica & Reportes',
+      },
+      {
+        code: 'marketing:view',
+        name: 'Publicidad & Extractor PDP (Publitas)',
+        description: 'Extraer PDPs, imágenes HD, feed para Publitas y métricas de atribución publicitaria',
+        category: 'Catálogo & Publicidad',
+      },
+      {
+        code: 'skus:view',
+        name: 'Inventario & SKUs VTEX',
+        description: 'Consultar inventario total, reservado, disponible por almacén y estado de activación',
+        category: 'Catálogo & Inventario',
+      },
+      {
+        code: 'kits:manage',
+        name: 'Kits VTEX & Combos',
+        description: 'Monitorear inventario, modificar precios e importar Kits desde Excel',
+        category: 'Catálogo & Inventario',
+      },
+      {
+        code: 'safety_stock:manage',
+        name: 'Stock de Seguridad',
+        description: 'Configurar umbrales de stock mínimo de seguridad para desactivación automática',
+        category: 'Catálogo & Inventario',
+      },
+      {
+        code: 'prices:manage',
+        name: 'Precios VTEX & Auditoría',
+        description: 'Gestionar precios base, auditoría de cambios de precio y sincronización masiva',
+        category: 'Catálogo & Inventario',
+      },
+      {
+        code: 'showcases:manage',
+        name: 'Vitrinas Destacadas Home',
+        description: 'Curar, analizar y guardar vitrinas de productos destacados para el Home',
+        category: 'Catálogo & Inventario',
+      },
+      {
+        code: 'simulador:use',
+        name: 'Simulador de Carrito VTEX',
+        description: 'Simular carritos de compra, validar precios finales, descuentos y promociones',
+        category: 'Ventas & Pedidos',
+      },
+      {
+        code: 'orders:view',
+        name: 'Órdenes VTEX OMS',
+        description: 'Monitorear flujo de órdenes en tiempo real, estados de pago y clientes',
+        category: 'Ventas & Pedidos',
+      },
+      {
+        code: 'transactions:view',
+        name: 'Transacciones de Pago Pasarela',
+        description: 'Revisar transacciones con bancos pasarela, códigos de autorización e identificadores',
+        category: 'Ventas & Pedidos',
+      },
+      {
+        code: 'users:manage',
+        name: 'Administrar Usuarios, Roles & Permisos',
+        description: 'Crear roles personalizados, asignar usuarios y gestionar la matriz interactiva RBAC',
+        category: 'Administración',
+      },
+    ];
 
-    // Auto-registrar permiso de Vitrinas Home si aún no existe
-    if (Array.isArray(permissions) && !permissions.some((p) => p.code === 'showcases:manage')) {
-      try {
-        await supabaseAdmin.from('app_permissions').insert({
-          code: 'showcases:manage',
-          name: 'Vitrinas Destacadas Home',
-          description: 'Curar, analizar y guardar vitrinas de productos destacados para el Home',
-          category: 'Catálogo & Inventario',
-        });
-        const reload = await supabaseAdmin.from('app_permissions').select('*').order('category, code');
-        if (reload.data) permissions = reload.data;
-      } catch (e) {
-        console.warn('No se pudo auto-registrar el permiso showcases:manage:', e.message);
-      }
-    }
-
-    // Auto-registrar permiso de Marketing & UTMs si aún no existe
-    if (Array.isArray(permissions) && !permissions.some((p) => p.code === 'marketing:view')) {
-      try {
-        await supabaseAdmin.from('app_permissions').insert({
-          code: 'marketing:view',
-          name: 'Marketing & UTMs',
-          description: 'Ver métricas de atribución de campañas UTMs, fuentes de tráfico y promociones VTEX',
-          category: 'Analítica & Reportes',
-        });
-        const reload = await supabaseAdmin.from('app_permissions').select('*').order('category, code');
-        if (reload.data) permissions = reload.data;
-      } catch (e) {
-        console.warn('No se pudo auto-registrar el permiso marketing:view:', e.message);
-      }
-    }
-
-    // Auto-registrar permiso de Patrones de Compra si aún no existe
-    if (Array.isArray(permissions) && !permissions.some((p) => p.code === 'patrones:view')) {
-      try {
-        await supabaseAdmin.from('app_permissions').insert({
-          code: 'patrones:view',
-          name: 'Patrones de Compra & Horarios Pico',
-          description: 'Analizar patrones de compra por día de la semana, horarios pico e ingresos',
-          category: 'Analítica & Reportes',
-        });
-        const reload = await supabaseAdmin.from('app_permissions').select('*').order('category, code');
-        if (reload.data) permissions = reload.data;
-      } catch (e) {
-        console.warn('No se pudo auto-registrar el permiso patrones:view:', e.message);
-      }
-    }
-
-    // Auto-registrar permiso de Embudo de Checkout si aún no existe
-    if (Array.isArray(permissions) && !permissions.some((p) => p.code === 'embudo:view')) {
-      try {
-        await supabaseAdmin.from('app_permissions').insert({
-          code: 'embudo:view',
-          name: 'Embudo de Checkout & Conversión OMS',
-          description: 'Analizar conversión progresiva de checkout, tasas de aprobación bancaria y fugas',
-          category: 'Analítica & Reportes',
-        });
-        const reload = await supabaseAdmin.from('app_permissions').select('*').order('category, code');
-        if (reload.data) permissions = reload.data;
-      } catch (e) {
-        console.warn('No se pudo auto-registrar el permiso embudo:view:', e.message);
-      }
+    try {
+      // Upsert masivo para garantizar que todo módulo existente o nuevo aparezca en la matriz
+      await supabaseAdmin.from('app_permissions').upsert(MASTER_MODULE_PERMISSIONS, { onConflict: 'code' });
+      const reload = await supabaseAdmin.from('app_permissions').select('*').order('category, code');
+      if (reload.data) permissions = reload.data;
+    } catch (e) {
+      console.warn('Error al auto-sincronizar permisos en app_permissions:', e.message);
     }
 
     // 3. Cargar matriz de asignaciones role_permissions

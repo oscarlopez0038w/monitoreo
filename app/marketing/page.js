@@ -2,619 +2,847 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import AppLayout from '@/components/AppLayout';
-import * as XLSX from 'xlsx';
 import {
-  Megaphone,
-  Tag,
-  Globe,
-  Gift,
+  Download,
+  Search,
+  Copy,
+  Check,
+  ExternalLink,
+  Image as ImageIcon,
   FileSpreadsheet,
   RefreshCw,
-  Search,
-  Calendar,
-  DollarSign,
-  TrendingUp,
-  Award,
-  Filter,
-  BarChart3,
+  Sparkles,
+  Layers,
+  ShoppingBag,
+  Tag,
+  Grid,
+  List,
+  Percent,
+  CheckCircle2,
+  FileText,
+  Bookmark,
 } from 'lucide-react';
 
-import { getNicaraguaNow } from '@/lib/dateUtils';
+export default function MarketingPublitasPage() {
+  const [items, setItems] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [search, setSearch] = useState('');
+  const [batchSkus, setBatchSkus] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [imageFilter, setImageFilter] = useState('all');
+  const [onlyDiscounts, setOnlyDiscounts] = useState(false);
+  const [activeTab, setActiveTab] = useState('publitas'); // 'publitas' | 'catalog' | 'batch'
+  const [viewMode, setViewMode] = useState('cards'); // 'cards' | 'table'
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalCount, setTotalCount] = useState(0);
+  const [copiedKey, setCopiedKey] = useState(null);
+  const [downloading, setDownloading] = useState(false);
+  const [expandedDescId, setExpandedDescId] = useState(null);
 
-export default function MarketingPage() {
-  const [data, setData] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [period, setPeriod] = useState('current_month');
-  const [startDate, setStartDate] = useState('');
-  const [endDate, setEndDate] = useState('');
-  const [currency, setCurrency] = useState('USD'); // 'USD' o 'NIO'
-  const [exporting, setExporting] = useState(false);
-
-  // Filtros de búsqueda individual por columna
-  const [campaignSearch, setCampaignSearch] = useState('');
-  const [sourceSearch, setSourceSearch] = useState('');
-  const [promoSearch, setPromoSearch] = useState('');
-
-  // Calcular fechas según período seleccionado
-  const getPeriodDates = useCallback((pKey) => {
-    const nicNow = getNicaraguaNow();
-    let sA = nicNow.firstDayStr;
-    let eA = nicNow.todayStr;
-
-    if (pKey === 'today') {
-      sA = nicNow.todayStr;
-      eA = nicNow.todayStr;
-    } else if (pKey === 'yesterday') {
-      const y = new Date(nicNow.year, nicNow.month, nicNow.day - 1);
-      const yStr = `${y.getFullYear()}-${String(y.getMonth() + 1).padStart(2, '0')}-${String(y.getDate()).padStart(2, '0')}`;
-      sA = yStr;
-      eA = yStr;
-    } else if (pKey === 'last_7_days') {
-      const d7 = new Date(nicNow.year, nicNow.month, nicNow.day - 6);
-      sA = `${d7.getFullYear()}-${String(d7.getMonth() + 1).padStart(2, '0')}-${String(d7.getDate()).padStart(2, '0')}`;
-      eA = nicNow.todayStr;
-    } else if (pKey === 'last_30_days') {
-      const d30 = new Date(nicNow.year, nicNow.month, nicNow.day - 29);
-      sA = `${d30.getFullYear()}-${String(d30.getMonth() + 1).padStart(2, '0')}-${String(d30.getDate()).padStart(2, '0')}`;
-      eA = nicNow.todayStr;
-    } else if (pKey === 'last_month') {
-      let pY = nicNow.year;
-      let pM = nicNow.month - 1;
-      if (pM < 0) {
-        pM = 11;
-        pY -= 1;
-      }
-      const lastDayPM = new Date(pY, pM + 1, 0).getDate();
-      const pMStr = String(pM + 1).padStart(2, '0');
-      sA = `${pY}-${pMStr}-01`;
-      eA = `${pY}-${pMStr}-${String(lastDayPM).padStart(2, '0')}`;
-    }
-
-    return { sA, eA };
-  }, []);
-
-  // Cargar datos desde API /api/analytics
-  const fetchAnalytics = useCallback(async () => {
+  const fetchCatalogData = useCallback(async () => {
     setLoading(true);
     try {
-      let sA = startDate;
-      let eA = endDate;
-      if (period !== 'custom' || !sA || !eA) {
-        const dates = getPeriodDates(period);
-        sA = dates.sA;
-        eA = dates.eA;
+      const endpoint = activeTab === 'publitas' ? '/api/catalog/publitas' : '/api/catalog/export';
+      const params = new URLSearchParams({
+        page: String(page),
+        limit: '24',
+        search,
+        status: statusFilter,
+        hasImage: imageFilter,
+        onlyDiscounts: String(onlyDiscounts),
+      });
+
+      if (activeTab === 'batch' && batchSkus.trim()) {
+        params.set('batchSkus', batchSkus.trim());
       }
 
-      const params = new URLSearchParams();
-      params.set('startDateA', sA);
-      params.set('endDateA', eA);
+      const res = await fetch(`${endpoint}?${params.toString()}`);
+      const data = await res.json();
 
-      const res = await fetch(`/api/analytics?${params.toString()}`);
-      const json = await res.json();
-      if (json.success) {
-        setData(json);
+      if (data.success) {
+        setItems(data.items || data.products || []);
+        setTotalPages(data.totalPages || 1);
+        setTotalCount(data.total || 0);
+      } else {
+        alert(`Error al cargar datos de catálogo: ${data.error}`);
       }
     } catch (err) {
-      console.error('Error cargando analíticas de marketing:', err);
+      console.error('Error fetching catalog data:', err);
     } finally {
       setLoading(false);
     }
-  }, [period, startDate, endDate, getPeriodDates]);
+  }, [page, search, batchSkus, statusFilter, imageFilter, onlyDiscounts, activeTab]);
 
   useEffect(() => {
-    fetchAnalytics();
-  }, [fetchAnalytics]);
+    fetchCatalogData();
+  }, [fetchCatalogData]);
 
-  // Formateador de Moneda
-  const formatCurrency = (nioVal, usdVal) => {
-    const rate = data?.bcnExchangeRate || 36.6243;
-    if (currency === 'USD') {
-      const val = usdVal !== undefined && usdVal !== null ? usdVal : (nioVal || 0) / rate;
-      return `$ ${val.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD`;
-    }
-    return `C$ ${(nioVal || 0).toLocaleString('es-NI', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} NIO`;
+  const handleCopy = (text, key) => {
+    if (!text) return;
+    navigator.clipboard.writeText(text);
+    setCopiedKey(key);
+    setTimeout(() => setCopiedKey(null), 2000);
   };
 
-  // Exportar reporte de marketing a Excel (.xlsx)
-  const handleExportExcel = () => {
-    if (!data?.marketingAnalytics) return;
-    setExporting(true);
+  const handleDownloadPublitasExcel = async () => {
+    setDownloading(true);
     try {
-      const rate = data?.bcnExchangeRate || 36.6243;
-      const totalNio = data?.kpis?.totalRevenue?.currentNio || 1;
+      const params = new URLSearchParams({
+        format: 'xlsx',
+        search,
+        status: statusFilter,
+        hasImage: imageFilter,
+        onlyDiscounts: String(onlyDiscounts),
+      });
 
-      // 1. Sheet Campañas UTM
-      const campaignsData = (data.marketingAnalytics.utmCampaigns || []).map((c) => ({
-        'Campaña (utm_campaign)': c.name,
-        'Órdenes Completadas': c.orders,
-        '% del Total de Ventas': `${Math.round((c.revenueNio / totalNio) * 100)}%`,
-        'Ingresos (C$ NIO)': Math.round(c.revenueNio * 100) / 100,
-        'Ingresos ($ USD)': Math.round((c.revenueUsd || c.revenueNio / rate) * 100) / 100,
-      }));
+      if (activeTab === 'batch' && batchSkus.trim()) {
+        params.set('batchSkus', batchSkus.trim());
+      }
 
-      // 2. Sheet Fuentes / Canales
-      const sourcesData = (data.marketingAnalytics.utmSources || []).map((s) => ({
-        'Fuente / Canal (utm_source)': s.name,
-        'Órdenes Completadas': s.orders,
-        '% del Total de Ventas': `${Math.round((s.revenueNio / totalNio) * 100)}%`,
-        'Ingresos (C$ NIO)': Math.round(s.revenueNio * 100) / 100,
-        'Ingresos ($ USD)': Math.round((s.revenueUsd || s.revenueNio / rate) * 100) / 100,
-      }));
+      const response = await fetch(`/api/catalog/publitas?${params.toString()}`);
+      if (!response.ok) throw new Error('Error al generar el archivo Excel de Publitas');
 
-      // 3. Sheet Promociones VTEX
-      const promotionsData = (data.marketingAnalytics.promotions || []).map((p) => ({
-        'Promoción / Beneficio VTEX': p.name,
-        'Órdenes Beneficiadas': p.orders,
-        '% del Total de Ventas': `${Math.round((p.revenueNio / totalNio) * 100)}%`,
-        'Ingresos (C$ NIO)': Math.round(p.revenueNio * 100) / 100,
-        'Ingresos ($ USD)': Math.round((p.revenueUsd || p.revenueNio / rate) * 100) / 100,
-      }));
-
-      const wb = XLSX.utils.book_new();
-
-      const wsCampaigns = XLSX.utils.json_to_sheet(campaignsData);
-      const wsSources = XLSX.utils.json_to_sheet(sourcesData);
-      const wsPromotions = XLSX.utils.json_to_sheet(promotionsData);
-
-      const colWidths = [{ wch: 45 }, { wch: 22 }, { wch: 22 }, { wch: 22 }, { wch: 22 }];
-      wsCampaigns['!cols'] = colWidths;
-      wsSources['!cols'] = colWidths;
-      wsPromotions['!cols'] = colWidths;
-
-      XLSX.utils.book_append_sheet(wb, wsCampaigns, 'Campañas UTM');
-      XLSX.utils.book_append_sheet(wb, wsSources, 'Canales de Origen');
-      XLSX.utils.book_append_sheet(wb, wsPromotions, 'Promociones VTEX');
-
-      const fileName = `Reporte_Marketing_SINSA_${data?.periods?.current?.startDateStr || 'Ventas'}.xlsx`;
-      XLSX.writeFile(wb, fileName);
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `publitas_product_feed_sinsa_${new Date().toISOString().slice(0, 10)}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
     } catch (err) {
-      console.error('Error exportando Excel de marketing:', err);
+      alert(`Error descargando Excel Publitas: ${err.message}`);
     } finally {
-      setExporting(false);
+      setDownloading(false);
     }
   };
 
-  const marketing = data?.marketingAnalytics;
-  const kpis = data?.kpis;
-  const periods = data?.periods;
-  const totalNio = kpis?.totalRevenue?.currentNio || 1;
+  const handleDownloadPublitasCsv = async () => {
+    setDownloading(true);
+    try {
+      const params = new URLSearchParams({
+        format: 'csv',
+        search,
+        status: statusFilter,
+        hasImage: imageFilter,
+        onlyDiscounts: String(onlyDiscounts),
+      });
 
-  // Filtrado dinámico por búsqueda
-  const filteredCampaigns = (marketing?.utmCampaigns || []).filter((c) =>
-    c.name.toLowerCase().includes(campaignSearch.toLowerCase())
-  );
-  const filteredSources = (marketing?.utmSources || []).filter((s) =>
-    s.name.toLowerCase().includes(sourceSearch.toLowerCase())
-  );
-  const filteredPromos = (marketing?.promotions || []).filter((p) =>
-    p.name.toLowerCase().includes(promoSearch.toLowerCase())
-  );
+      if (activeTab === 'batch' && batchSkus.trim()) {
+        params.set('batchSkus', batchSkus.trim());
+      }
 
-  // Cálculos resumidos
-  const totalAttributedRevenueNio = (marketing?.utmCampaigns || [])
-    .filter((c) => c.name !== 'Sin Campaña Específica (Orgánico / Directo)')
-    .reduce((sum, c) => sum + c.revenueNio, 0);
+      const response = await fetch(`/api/catalog/publitas?${params.toString()}`);
+      if (!response.ok) throw new Error('Error al generar el archivo CSV de Publitas');
 
-  const totalAttributedRevenueUsd = (marketing?.utmCampaigns || [])
-    .filter((c) => c.name !== 'Sin Campaña Específica (Orgánico / Directo)')
-    .reduce((sum, c) => sum + (c.revenueUsd || c.revenueNio / (data?.bcnExchangeRate || 36.6243)), 0);
-
-  const totalAttributedOrders = (marketing?.utmCampaigns || [])
-    .filter((c) => c.name !== 'Sin Campaña Específica (Orgánico / Directo)')
-    .reduce((sum, c) => sum + c.orders, 0);
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `publitas_product_feed_sinsa_${new Date().toISOString().slice(0, 10)}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+    } catch (err) {
+      alert(`Error descargando CSV Publitas: ${err.message}`);
+    } finally {
+      setDownloading(false);
+    }
+  };
 
   return (
     <AppLayout>
-      <main style={{ maxWidth: '1600px', margin: '0 auto', width: '100%' }}>
-        
-        {/* HEADER PRINCIPAL DE MÓDULO MARKETING */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem', marginBottom: '1.25rem' }}>
-          <div>
-            <h1 style={{ fontSize: '1.4rem', fontWeight: 800, color: '#ffffff', display: 'flex', alignItems: 'center', gap: '0.6rem', margin: 0 }}>
-              <Megaphone size={26} color="#a5b4fc" />
-              Módulo de Campañas & Marketing UTMs
-            </h1>
-            <p style={{ fontSize: '0.86rem', color: 'var(--text-muted)', margin: '0.2rem 0 0 0' }}>
-              Atribución de ventas por campañas (`utm_campaign`), fuentes de origen (`utm_source`) y promociones VTEX en tiempo real.
-            </p>
-          </div>
-
-          {/* CONTROLES DE FILTRO Y EXPORTACIÓN */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
-            
-            {/* Selector de Período */}
-            <div style={{ display: 'flex', alignItems: 'center', background: 'rgba(15, 23, 42, 0.8)', border: '1px solid var(--border-subtle)', borderRadius: '10px', padding: '0.25rem 0.5rem' }}>
-              <Calendar size={15} color="var(--text-dim)" style={{ marginRight: '0.4rem' }} />
-              <select
-                value={period}
-                onChange={(e) => setPeriod(e.target.value)}
-                style={{ background: 'transparent', border: 'none', color: '#ffffff', fontSize: '0.82rem', fontWeight: 600, outline: 'none', cursor: 'pointer' }}
-              >
-                <option value="current_month" style={{ background: '#0f172a' }}>Mes Actual (MTD)</option>
-                <option value="today" style={{ background: '#0f172a' }}>Hoy</option>
-                <option value="yesterday" style={{ background: '#0f172a' }}>Ayer</option>
-                <option value="last_7_days" style={{ background: '#0f172a' }}>Últimos 7 Días</option>
-                <option value="last_30_days" style={{ background: '#0f172a' }}>Últimos 30 Días</option>
-                <option value="last_month" style={{ background: '#0f172a' }}>Mes Anterior</option>
-              </select>
+      <div className="container" style={{ paddingBottom: '3rem' }}>
+        {/* ENCABEZADO EJECUTIVO PUBLITAS & CALIDAD DE DATOS */}
+        <div
+          style={{
+            background: 'linear-gradient(135deg, rgba(15, 23, 42, 0.98), rgba(30, 41, 59, 0.99))',
+            borderRadius: '18px',
+            border: '1px solid rgba(16, 185, 129, 0.35)',
+            padding: '1.6rem 1.85rem',
+            marginBottom: '1.5rem',
+            boxShadow: '0 12px 35px -5px rgba(0, 0, 0, 0.6), 0 0 25px rgba(16, 185, 129, 0.15)',
+            position: 'relative',
+          }}
+        >
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1.25rem' }}>
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', marginBottom: '0.35rem' }}>
+                <span style={{ background: 'rgba(16, 185, 129, 0.15)', padding: '0.45rem', borderRadius: '10px', display: 'flex', border: '1px solid rgba(16, 185, 129, 0.3)' }}>
+                  <Sparkles size={22} color="#34d399" />
+                </span>
+                <h1 style={{ fontSize: '1.45rem', fontWeight: 800, color: '#ffffff', margin: 0, letterSpacing: '-0.02em' }}>
+                  Generador & Feed de Catálogos Publitas
+                </h1>
+              </div>
+              <p style={{ margin: 0, fontSize: '0.85rem', color: '#94a3b8', maxWidth: '820px', lineHeight: 1.5 }}>
+                Módulo corporativo para <strong>Calidad de Datos y Marketing Digital</strong>. Estructura la información del catálogo según el estándar oficial de <strong>Publitas</strong> (<code style={{ color: '#34d399' }}>sku, title, link, image_link, price, old_price, brand</code>) para vinculación automática de hotspots en el catálogo digital.
+              </p>
             </div>
 
-            {/* Switcher Moneda USD / NIO */}
-            <div style={{ display: 'flex', background: 'rgba(15, 23, 42, 0.8)', border: '1px solid var(--border-subtle)', borderRadius: '10px', padding: '0.2rem' }}>
+            {/* BOTONES DE EXPORTACIÓN DIRECTA PUBLITAS */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
               <button
-                onClick={() => setCurrency('USD')}
+                onClick={handleDownloadPublitasExcel}
+                disabled={downloading || loading || items.length === 0}
                 style={{
-                  padding: '0.3rem 0.65rem',
-                  borderRadius: '7px',
+                  background: 'linear-gradient(135deg, #10b981, #059669)',
+                  color: '#ffffff',
                   border: 'none',
-                  fontSize: '0.78rem',
-                  fontWeight: 700,
-                  cursor: 'pointer',
-                  background: currency === 'USD' ? 'linear-gradient(135deg, #38bdf8, #2563eb)' : 'transparent',
-                  color: currency === 'USD' ? '#ffffff' : 'var(--text-muted)',
+                  borderRadius: '12px',
+                  padding: '0.7rem 1.25rem',
+                  fontSize: '0.88rem',
+                  fontWeight: 800,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.55rem',
+                  cursor: downloading ? 'wait' : 'pointer',
+                  boxShadow: '0 4px 16px rgba(16, 185, 129, 0.4)',
+                  transition: 'all 0.2s ease',
+                  opacity: downloading || loading || items.length === 0 ? 0.6 : 1,
                 }}
               >
-                $ USD
+                <FileSpreadsheet size={19} />
+                {downloading ? 'Generando Feed...' : 'Descargar Feed Publitas (.xlsx)'}
               </button>
+
               <button
-                onClick={() => setCurrency('NIO')}
+                onClick={handleDownloadPublitasCsv}
+                disabled={downloading || loading || items.length === 0}
                 style={{
-                  padding: '0.3rem 0.65rem',
-                  borderRadius: '7px',
-                  border: 'none',
-                  fontSize: '0.78rem',
+                  background: 'rgba(30, 41, 59, 0.9)',
+                  color: '#34d399',
+                  border: '1px solid rgba(52, 211, 153, 0.4)',
+                  borderRadius: '12px',
+                  padding: '0.7rem 1.1rem',
+                  fontSize: '0.85rem',
                   fontWeight: 700,
-                  cursor: 'pointer',
-                  background: currency === 'NIO' ? 'linear-gradient(135deg, #10b981, #059669)' : 'transparent',
-                  color: currency === 'NIO' ? '#ffffff' : 'var(--text-muted)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.5rem',
+                  cursor: downloading ? 'wait' : 'pointer',
+                  transition: 'all 0.2s ease',
+                  opacity: downloading || loading || items.length === 0 ? 0.6 : 1,
                 }}
               >
-                C$ NIO
+                <Download size={16} />
+                CSV Publitas
               </button>
             </div>
-
-            {/* Botón Refrescar */}
-            <button
-              onClick={fetchAnalytics}
-              disabled={loading}
-              className="btn-secondary"
-              style={{ padding: '0.45rem 0.75rem', fontSize: '0.82rem', minHeight: '36px' }}
-              title="Refrescar datos de atribución"
-            >
-              <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
-            </button>
-
-            {/* Exportar Excel */}
-            <button
-              onClick={handleExportExcel}
-              disabled={exporting || loading}
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '0.4rem',
-                padding: '0.45rem 0.95rem',
-                borderRadius: '10px',
-                fontSize: '0.82rem',
-                fontWeight: 700,
-                backgroundColor: '#059669',
-                color: '#ffffff',
-                border: '1px solid #10b981',
-                cursor: exporting ? 'wait' : 'pointer',
-                boxShadow: '0 4px 15px rgba(5, 150, 105, 0.25)',
-              }}
-            >
-              <FileSpreadsheet size={16} />
-              {exporting ? 'Generando...' : 'Exportar Excel (.xlsx)'}
-            </button>
-
           </div>
         </div>
 
-        {/* CONTENIDO PRINCIPAL */}
-        {loading ? (
-          <div style={{ textAlign: 'center', padding: '4rem 1rem', color: 'var(--text-muted)' }}>
-            <RefreshCw size={32} className="animate-spin" color="#a5b4fc" style={{ margin: '0 auto 1rem auto' }} />
-            <h3 style={{ fontSize: '1.1rem', color: '#ffffff', fontWeight: 600 }}>Cargando reporte de atribución de campañas y marketing...</h3>
-            <p style={{ fontSize: '0.85rem' }}>Procesando órdenes y parámetros UTMs en tiempo real desde VTEX OMS.</p>
+        {/* CONTROLES Y PESTAÑAS DE NAVEGACIÓN */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', flexWrap: 'wrap', gap: '0.75rem' }}>
+          <div style={{ display: 'flex', gap: '0.65rem', flexWrap: 'wrap' }}>
+            <button
+              onClick={() => {
+                setActiveTab('publitas');
+                setPage(1);
+              }}
+              style={{
+                padding: '0.65rem 1.15rem',
+                borderRadius: '10px',
+                border: activeTab === 'publitas' ? '1px solid #34d399' : '1px solid rgba(255, 255, 255, 0.1)',
+                background: activeTab === 'publitas' ? 'rgba(16, 185, 129, 0.18)' : 'rgba(15, 23, 42, 0.6)',
+                color: activeTab === 'publitas' ? '#34d399' : '#94a3b8',
+                fontWeight: 800,
+                fontSize: '0.85rem',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.5rem',
+                cursor: 'pointer',
+              }}
+            >
+              <Bookmark size={16} />
+              Estándar Publitas ({totalCount} SKUs)
+            </button>
+
+            <button
+              onClick={() => {
+                setActiveTab('catalog');
+                setPage(1);
+              }}
+              style={{
+                padding: '0.65rem 1.15rem',
+                borderRadius: '10px',
+                border: activeTab === 'catalog' ? '1px solid #38bdf8' : '1px solid rgba(255, 255, 255, 0.1)',
+                background: activeTab === 'catalog' ? 'rgba(56, 189, 248, 0.15)' : 'rgba(15, 23, 42, 0.6)',
+                color: activeTab === 'catalog' ? '#38bdf8' : '#94a3b8',
+                fontWeight: 700,
+                fontSize: '0.85rem',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.5rem',
+                cursor: 'pointer',
+              }}
+            >
+              <Layers size={16} />
+              Extracción General PDPs
+            </button>
+
+            <button
+              onClick={() => {
+                setActiveTab('batch');
+                setPage(1);
+              }}
+              style={{
+                padding: '0.65rem 1.15rem',
+                borderRadius: '10px',
+                border: activeTab === 'batch' ? '1px solid #fbbf24' : '1px solid rgba(255, 255, 255, 0.1)',
+                background: activeTab === 'batch' ? 'rgba(251, 191, 36, 0.15)' : 'rgba(15, 23, 42, 0.6)',
+                color: activeTab === 'batch' ? '#fbbf24' : '#94a3b8',
+                fontWeight: 700,
+                fontSize: '0.85rem',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.5rem',
+                cursor: 'pointer',
+              }}
+            >
+              <ShoppingBag size={16} />
+              Pegar Lista de SKUs
+            </button>
           </div>
-        ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-            
-            {/* CARDS RESUMEN DE ATRIBUCIÓN DE MARKETING */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '1rem' }}>
-              
-              {/* Card 1: Ingresos Atribuidos */}
-              <div className="glass-card" style={{ padding: '1.1rem' }}>
-                <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 700, marginBottom: '0.35rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                  <TrendingUp size={14} color="#a5b4fc" /> Ventas Atribuidas a Campañas
-                </div>
-                <div style={{ fontSize: '1.4rem', fontWeight: 800, color: '#34d399', fontFamily: 'var(--font-mono)' }}>
-                  {formatCurrency(totalAttributedRevenueNio, totalAttributedRevenueUsd)}
-                </div>
-                <span style={{ fontSize: '0.75rem', color: '#a5b4fc', fontWeight: 600 }}>
-                  Con etiqueta de campaña `utm_campaign`
-                </span>
-              </div>
 
-              {/* Card 2: Órdenes Atribuidas */}
-              <div className="glass-card" style={{ padding: '1.1rem' }}>
-                <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 700, marginBottom: '0.35rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                  <BarChart3 size={14} color="#38bdf8" /> Órdenes Atribuidas a UTMs
-                </div>
-                <div style={{ fontSize: '1.4rem', fontWeight: 800, color: '#38bdf8', fontFamily: 'var(--font-mono)' }}>
-                  {totalAttributedOrders.toLocaleString()} <span style={{ fontSize: '0.85rem', fontWeight: 500, color: 'var(--text-muted)' }}>órdenes</span>
-                </div>
-                <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                  Generadas por tráfico pagado o campañas
-                </span>
-              </div>
-
-              {/* Card 3: Campañas Activas */}
-              <div className="glass-card" style={{ padding: '1.1rem' }}>
-                <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 700, marginBottom: '0.35rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                  <Tag size={14} color="#fbbf24" /> Campañas UTM Rastreadas
-                </div>
-                <div style={{ fontSize: '1.4rem', fontWeight: 800, color: '#fbbf24', fontFamily: 'var(--font-mono)' }}>
-                  {(marketing?.utmCampaigns?.length || 0).toLocaleString()} <span style={{ fontSize: '0.85rem', fontWeight: 500, color: 'var(--text-muted)' }}>campañas</span>
-                </div>
-                <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                  Registradas en órdenes del período
-                </span>
-              </div>
-
-              {/* Card 4: Canales de Origen */}
-              <div className="glass-card" style={{ padding: '1.1rem' }}>
-                <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 700, marginBottom: '0.35rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                  <Globe size={14} color="#c084fc" /> Canales y Fuentes Distintas
-                </div>
-                <div style={{ fontSize: '1.4rem', fontWeight: 800, color: '#c084fc', fontFamily: 'var(--font-mono)' }}>
-                  {(marketing?.utmSources?.length || 0).toLocaleString()} <span style={{ fontSize: '0.85rem', fontWeight: 500, color: 'var(--text-muted)' }}>fuentes</span>
-                </div>
-                <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                  Google, Directo, Social, Email, etc.
-                </span>
-              </div>
-
+          {/* MODO VISTA TARJETAS VS TABLA */}
+          {activeTab === 'publitas' && (
+            <div style={{ display: 'flex', gap: '0.35rem', background: 'rgba(15, 23, 42, 0.8)', padding: '0.25rem', borderRadius: '8px', border: '1px solid rgba(255, 255, 255, 0.1)' }}>
+              <button
+                onClick={() => setViewMode('cards')}
+                style={{
+                  padding: '0.35rem 0.65rem',
+                  borderRadius: '6px',
+                  border: 'none',
+                  background: viewMode === 'cards' ? '#10b981' : 'transparent',
+                  color: '#ffffff',
+                  fontSize: '0.78rem',
+                  fontWeight: 700,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.3rem',
+                  cursor: 'pointer',
+                }}
+              >
+                <Grid size={14} /> Simulador Catálogo
+              </button>
+              <button
+                onClick={() => setViewMode('table')}
+                style={{
+                  padding: '0.35rem 0.65rem',
+                  borderRadius: '6px',
+                  border: 'none',
+                  background: viewMode === 'table' ? '#10b981' : 'transparent',
+                  color: '#ffffff',
+                  fontSize: '0.78rem',
+                  fontWeight: 700,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.3rem',
+                  cursor: 'pointer',
+                }}
+              >
+                <List size={14} /> Tabla Estructurada
+              </button>
             </div>
+          )}
+        </div>
 
-            {/* TABLAS DETALLADAS DE MARKETING (3 COLUMNAS PRINCIPALES) */}
-            <div className="glass-card" style={{ padding: '1.5rem', background: 'linear-gradient(135deg, rgba(15, 23, 42, 0.95), rgba(30, 41, 59, 0.98))', border: '1px solid rgba(165, 180, 252, 0.3)' }}>
-              
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', flexWrap: 'wrap', gap: '0.5rem' }}>
-                <h2 style={{ fontSize: '1.1rem', fontWeight: 700, color: '#ffffff', display: 'flex', alignItems: 'center', gap: '0.5rem', margin: 0 }}>
-                  <Award size={20} color="#a5b4fc" />
-                  Desglose Detallado de Rendimiento de Marketing - {periods?.current?.label}
-                </h2>
-                <span style={{ fontSize: '0.76rem', color: '#a5b4fc', background: 'rgba(165, 180, 252, 0.1)', padding: '0.25rem 0.65rem', borderRadius: '6px', border: '1px solid rgba(165, 180, 252, 0.25)', fontWeight: 600 }}>
-                  🎯 Atribución Directa VTEX OMS
-                </span>
+        {/* FILTROS Y BARRA DE BÚSQUEDA */}
+        <div
+          style={{
+            background: 'rgba(15, 23, 42, 0.75)',
+            borderRadius: '14px',
+            border: '1px solid rgba(255, 255, 255, 0.08)',
+            padding: '1.1rem 1.25rem',
+            marginBottom: '1.5rem',
+          }}
+        >
+          {activeTab !== 'batch' ? (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: '1rem', alignItems: 'end' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#94a3b8', marginBottom: '0.35rem' }}>
+                  🔍 BUSCAR POR SKU O NOMBRE
+                </label>
+                <div style={{ position: 'relative' }}>
+                  <Search size={16} style={{ position: 'absolute', left: '0.75rem', top: '50%', transform: 'translateY(-50%)', color: '#64748b' }} />
+                  <input
+                    type="text"
+                    value={search}
+                    onChange={(e) => {
+                      setSearch(e.target.value);
+                      setPage(1);
+                    }}
+                    placeholder="Ej. 102450 o Azulejo..."
+                    style={{
+                      width: '100%',
+                      padding: '0.55rem 0.75rem 0.55rem 2.3rem',
+                      background: 'rgba(30, 41, 59, 0.8)',
+                      border: '1px solid rgba(255, 255, 255, 0.12)',
+                      borderRadius: '8px',
+                      color: '#ffffff',
+                      fontSize: '0.85rem',
+                    }}
+                  />
+                </div>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', gap: '1.25rem' }}>
-                
-                {/* SUB-CARD A: Top Campañas de Marketing (`utm_campaign`) */}
-                <div style={{ background: 'rgba(15, 23, 42, 0.7)', padding: '1.15rem', borderRadius: '14px', border: '1px solid rgba(255, 255, 255, 0.08)', display: 'flex', flexDirection: 'column', height: '520px' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem', flexShrink: 0 }}>
-                    <h3 style={{ fontSize: '0.9rem', fontWeight: 700, color: '#a5b4fc', margin: 0, display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                      <Tag size={15} color="#a5b4fc" />
-                      Top Campañas (`utm_campaign`)
-                    </h3>
-                    <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
-                      {filteredCampaigns.length} de {marketing?.utmCampaigns?.length || 0}
-                    </span>
-                  </div>
+              <div>
+                <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#94a3b8', marginBottom: '0.35rem' }}>
+                  🏷️ FILTRO DE OFERTAS / DESCUENTOS
+                </label>
+                <select
+                  value={onlyDiscounts ? 'true' : 'false'}
+                  onChange={(e) => {
+                    setOnlyDiscounts(e.target.value === 'true');
+                    setPage(1);
+                  }}
+                  style={{
+                    width: '100%',
+                    padding: '0.55rem 0.75rem',
+                    background: 'rgba(30, 41, 59, 0.8)',
+                    border: '1px solid rgba(255, 255, 255, 0.12)',
+                    borderRadius: '8px',
+                    color: '#ffffff',
+                    fontSize: '0.85rem',
+                  }}
+                >
+                  <option value="false">Todos los Productos del Catálogo</option>
+                  <option value="true">Solo SKUs en Oferta (Antes C$ / Ahora C$)</option>
+                </select>
+              </div>
 
-                  {/* Input Filtro de Campaña */}
-                  <div style={{ position: 'relative', marginBottom: '0.85rem', flexShrink: 0 }}>
-                    <Search size={14} color="var(--text-dim)" style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)' }} />
-                    <input
-                      type="text"
-                      placeholder="Filtrar campañas..."
-                      value={campaignSearch}
-                      onChange={(e) => setCampaignSearch(e.target.value)}
-                      style={{
-                        width: '100%',
-                        padding: '0.4rem 0.6rem 0.4rem 2rem',
-                        fontSize: '0.78rem',
-                        background: 'rgba(30, 41, 59, 0.6)',
-                        border: '1px solid rgba(255, 255, 255, 0.1)',
-                        borderRadius: '8px',
-                        color: '#ffffff',
-                        outline: 'none',
-                        boxSizing: 'border-box',
-                      }}
-                    />
-                  </div>
+              <div>
+                <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#94a3b8', marginBottom: '0.35rem' }}>
+                  🖼️ FILTRO DE IMAGEN HD
+                </label>
+                <select
+                  value={imageFilter}
+                  onChange={(e) => {
+                    setImageFilter(e.target.value);
+                    setPage(1);
+                  }}
+                  style={{
+                    width: '100%',
+                    padding: '0.55rem 0.75rem',
+                    background: 'rgba(30, 41, 59, 0.8)',
+                    border: '1px solid rgba(255, 255, 255, 0.12)',
+                    borderRadius: '8px',
+                    color: '#ffffff',
+                    fontSize: '0.85rem',
+                  }}
+                >
+                  <option value="all">Todas las Fichas (Con y Sin Foto)</option>
+                  <option value="yes">Solo Con Imagen HD Cargada</option>
+                  <option value="no">Solo Sin Imagen HD</option>
+                </select>
+              </div>
 
-                  {filteredCampaigns.length > 0 ? (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem', overflowY: 'auto', flex: 1, paddingRight: '0.3rem' }}>
-                      {filteredCampaigns.map((camp, idx) => {
-                        const pctOfTotal = Math.round((camp.revenueNio / totalNio) * 100);
-
-                        return (
-                          <div key={idx} style={{ background: 'rgba(255, 255, 255, 0.03)', padding: '0.7rem 0.85rem', borderRadius: '10px', border: '1px solid rgba(255, 255, 255, 0.06)' }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.35rem' }}>
-                              <div>
-                                <span style={{ fontSize: '0.84rem', fontWeight: 700, color: '#ffffff', display: 'block' }}>
-                                  🎯 {camp.name}
-                                </span>
-                                <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
-                                  {camp.orders} órdenes completadas ({pctOfTotal}% del total)
-                                </span>
-                              </div>
-                              <div style={{ textAlign: 'right' }}>
-                                <div style={{ fontSize: '0.92rem', fontWeight: 800, color: '#34d399', fontFamily: 'var(--font-mono)' }}>
-                                  {formatCurrency(camp.revenueNio, camp.revenueUsd)}
-                                </div>
-                              </div>
-                            </div>
-
-                            {/* Progress bar de cuota de ventas */}
-                            <div style={{ width: '100%', height: '4px', background: 'rgba(255, 255, 255, 0.08)', borderRadius: '2px', overflow: 'hidden', marginTop: '0.4rem' }}>
-                              <div style={{ width: `${Math.min(100, Math.max(2, pctOfTotal))}%`, height: '100%', background: '#34d399', borderRadius: '2px' }} />
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  ) : (
-                    <div style={{ fontSize: '0.8rem', color: 'var(--text-dim)', fontStyle: 'italic', padding: '1.5rem 0', textAlign: 'center' }}>
-                      No se encontraron campañas coincidentes.
-                    </div>
-                  )}
-                </div>
-
-                {/* SUB-CARD B: Fuentes y Canales (`utm_source`) */}
-                <div style={{ background: 'rgba(15, 23, 42, 0.7)', padding: '1.15rem', borderRadius: '14px', border: '1px solid rgba(255, 255, 255, 0.08)', display: 'flex', flexDirection: 'column', height: '520px' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem', flexShrink: 0 }}>
-                    <h3 style={{ fontSize: '0.9rem', fontWeight: 700, color: '#38bdf8', margin: 0, display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                      <Globe size={15} color="#38bdf8" />
-                      Fuentes de Origen (`utm_source`)
-                    </h3>
-                    <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
-                      {filteredSources.length} de {marketing?.utmSources?.length || 0}
-                    </span>
-                  </div>
-
-                  {/* Input Filtro de Fuente */}
-                  <div style={{ position: 'relative', marginBottom: '0.85rem', flexShrink: 0 }}>
-                    <Search size={14} color="var(--text-dim)" style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)' }} />
-                    <input
-                      type="text"
-                      placeholder="Filtrar fuentes..."
-                      value={sourceSearch}
-                      onChange={(e) => setSourceSearch(e.target.value)}
-                      style={{
-                        width: '100%',
-                        padding: '0.4rem 0.6rem 0.4rem 2rem',
-                        fontSize: '0.78rem',
-                        background: 'rgba(30, 41, 59, 0.6)',
-                        border: '1px solid rgba(255, 255, 255, 0.1)',
-                        borderRadius: '8px',
-                        color: '#ffffff',
-                        outline: 'none',
-                        boxSizing: 'border-box',
-                      }}
-                    />
-                  </div>
-
-                  {filteredSources.length > 0 ? (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem', overflowY: 'auto', flex: 1, paddingRight: '0.3rem' }}>
-                      {filteredSources.map((src, idx) => {
-                        const pctOfTotal = Math.round((src.revenueNio / totalNio) * 100);
-
-                        return (
-                          <div key={idx} style={{ background: 'rgba(255, 255, 255, 0.03)', padding: '0.7rem 0.85rem', borderRadius: '10px', border: '1px solid rgba(255, 255, 255, 0.06)' }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.35rem' }}>
-                              <div>
-                                <span style={{ fontSize: '0.84rem', fontWeight: 700, color: '#ffffff', display: 'block' }}>
-                                  📡 {src.name}
-                                </span>
-                                <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
-                                  {src.orders} órdenes ({pctOfTotal}% de ventas)
-                                </span>
-                              </div>
-                              <div style={{ textAlign: 'right' }}>
-                                <div style={{ fontSize: '0.92rem', fontWeight: 800, color: '#38bdf8', fontFamily: 'var(--font-mono)' }}>
-                                  {formatCurrency(src.revenueNio, src.revenueUsd)}
-                                </div>
-                              </div>
-                            </div>
-
-                            {/* Progress bar de cuota de ventas */}
-                            <div style={{ width: '100%', height: '4px', background: 'rgba(255, 255, 255, 0.08)', borderRadius: '2px', overflow: 'hidden', marginTop: '0.4rem' }}>
-                              <div style={{ width: `${Math.min(100, Math.max(2, pctOfTotal))}%`, height: '100%', background: '#38bdf8', borderRadius: '2px' }} />
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  ) : (
-                    <div style={{ fontSize: '0.8rem', color: 'var(--text-dim)', fontStyle: 'italic', padding: '1.5rem 0', textAlign: 'center' }}>
-                      No se encontraron fuentes coincidentes.
-                    </div>
-                  )}
-                </div>
-
-                {/* SUB-CARD C: Promociones & Alianzas VTEX */}
-                <div style={{ background: 'rgba(15, 23, 42, 0.7)', padding: '1.15rem', borderRadius: '14px', border: '1px solid rgba(255, 255, 255, 0.08)', display: 'flex', flexDirection: 'column', height: '520px' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem', flexShrink: 0 }}>
-                    <h3 style={{ fontSize: '0.9rem', fontWeight: 700, color: '#fbbf24', margin: 0, display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                      <Gift size={15} color="#fbbf24" />
-                      Promociones y Alianzas VTEX
-                    </h3>
-                    <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
-                      {filteredPromos.length} de {marketing?.promotions?.length || 0}
-                    </span>
-                  </div>
-
-                  {/* Input Filtro de Promociones */}
-                  <div style={{ position: 'relative', marginBottom: '0.85rem', flexShrink: 0 }}>
-                    <Search size={14} color="var(--text-dim)" style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)' }} />
-                    <input
-                      type="text"
-                      placeholder="Filtrar promociones..."
-                      value={promoSearch}
-                      onChange={(e) => setPromoSearch(e.target.value)}
-                      style={{
-                        width: '100%',
-                        padding: '0.4rem 0.6rem 0.4rem 2rem',
-                        fontSize: '0.78rem',
-                        background: 'rgba(30, 41, 59, 0.6)',
-                        border: '1px solid rgba(255, 255, 255, 0.1)',
-                        borderRadius: '8px',
-                        color: '#ffffff',
-                        outline: 'none',
-                        boxSizing: 'border-box',
-                      }}
-                    />
-                  </div>
-
-                  {filteredPromos.length > 0 ? (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem', overflowY: 'auto', flex: 1, paddingRight: '0.3rem' }}>
-                      {filteredPromos.map((promo, idx) => {
-                        const pctOfTotal = Math.round((promo.revenueNio / totalNio) * 100);
-
-                        return (
-                          <div key={idx} style={{ background: 'rgba(255, 255, 255, 0.03)', padding: '0.7rem 0.85rem', borderRadius: '10px', border: '1px solid rgba(255, 255, 255, 0.06)' }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.35rem' }}>
-                              <div>
-                                <span style={{ fontSize: '0.84rem', fontWeight: 700, color: '#ffffff', display: 'block' }}>
-                                  🎁 {promo.name}
-                                </span>
-                                <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
-                                  {promo.orders} órdenes beneficiadas ({pctOfTotal}% de ventas)
-                                </span>
-                              </div>
-                              <div style={{ textAlign: 'right' }}>
-                                <div style={{ fontSize: '0.92rem', fontWeight: 800, color: '#fbbf24', fontFamily: 'var(--font-mono)' }}>
-                                  {formatCurrency(promo.revenueNio, promo.revenueUsd)}
-                                </div>
-                              </div>
-                            </div>
-
-                            {/* Progress bar de cuota de ventas */}
-                            <div style={{ width: '100%', height: '4px', background: 'rgba(255, 255, 255, 0.08)', borderRadius: '2px', overflow: 'hidden', marginTop: '0.4rem' }}>
-                              <div style={{ width: `${Math.min(100, Math.max(2, pctOfTotal))}%`, height: '100%', background: '#fbbf24', borderRadius: '2px' }} />
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  ) : (
-                    <div style={{ fontSize: '0.8rem', color: 'var(--text-dim)', fontStyle: 'italic', padding: '1.5rem 0', textAlign: 'center' }}>
-                      No se encontraron promociones coincidentes.
-                    </div>
-                  )}
-                </div>
-
+              <div>
+                <button
+                  onClick={fetchCatalogData}
+                  style={{
+                    width: '100%',
+                    padding: '0.55rem 1rem',
+                    background: 'rgba(16, 185, 129, 0.15)',
+                    border: '1px solid rgba(16, 185, 129, 0.4)',
+                    borderRadius: '8px',
+                    color: '#34d399',
+                    fontWeight: 700,
+                    fontSize: '0.85rem',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '0.4rem',
+                    cursor: 'pointer',
+                  }}
+                >
+                  <RefreshCw size={14} className={loading ? 'spin' : ''} />
+                  Actualizar Lista
+                </button>
               </div>
             </div>
+          ) : (
+            <div>
+              <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, color: '#fbbf24', marginBottom: '0.4rem' }}>
+                📋 PEGAR LISTA DE SKUS SOLICITADOS POR CALIDAD DE DATOS PARA PUBLITAS:
+              </label>
+              <textarea
+                value={batchSkus}
+                onChange={(e) => setBatchSkus(e.target.value)}
+                placeholder="Ejemplo:&#10;102450&#10;102451&#10;102452, 102453"
+                rows={4}
+                style={{
+                  width: '100%',
+                  padding: '0.75rem',
+                  background: 'rgba(30, 41, 59, 0.8)',
+                  border: '1px solid rgba(251, 191, 36, 0.4)',
+                  borderRadius: '10px',
+                  color: '#ffffff',
+                  fontSize: '0.85rem',
+                  fontFamily: 'monospace',
+                  marginBottom: '0.75rem',
+                }}
+              />
+              <button
+                onClick={() => {
+                  setPage(1);
+                  fetchCatalogData();
+                }}
+                disabled={!batchSkus.trim() || loading}
+                style={{
+                  padding: '0.6rem 1.25rem',
+                  background: 'linear-gradient(135deg, #f59e0b, #d97706)',
+                  border: 'none',
+                  borderRadius: '8px',
+                  color: '#ffffff',
+                  fontWeight: 700,
+                  fontSize: '0.85rem',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.5rem',
+                  cursor: 'pointer',
+                  opacity: !batchSkus.trim() || loading ? 0.6 : 1,
+                }}
+              >
+                <Search size={16} />
+                Generar Estructura Publitas de la Lista
+              </button>
+            </div>
+          )}
+        </div>
 
+        {/* VISTA SIMULADOR DE TARJETAS TIPO CATÁLOGO PUBLITAS */}
+        {activeTab === 'publitas' && viewMode === 'cards' && (
+          <div>
+            <div style={{ marginBottom: '0.75rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontSize: '0.85rem', fontWeight: 700, color: '#e2e8f0' }}>
+                Simulación del Catálogo Digital ({items.length} tarjetas de {totalCount} productos)
+              </span>
+              {loading && <span style={{ fontSize: '0.8rem', color: '#34d399', fontWeight: 600 }}>Cargando catálogo...</span>}
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '1.2rem' }}>
+              {items.map((it) => {
+                const skuId = it.sku || it.id;
+                const pdpUrl = it.link || it.pdpUrl;
+                const imgUrl = it.image_link || it.imageUrl;
+                const title = it.title;
+                const brand = it.brand || 'SINSA';
+                const priceFormatted = it.price_formatted || `C$ ${(it.price || it.basePriceNio || 0).toLocaleString('es-NI')}`;
+                const oldPriceFormatted = it.old_price_formatted || (it.old_price > it.price ? `Antes C$ ${(it.old_price).toLocaleString('es-NI')}` : '');
+                const discountPct = it.discount_percentage || (it.discount_pct_num > 0 ? `${it.discount_pct_num}%` : '');
+                const isCopiedPdp = copiedKey === `pdp-${skuId}`;
+                const isCopiedImg = copiedKey === `img-${skuId}`;
+
+                return (
+                  <div
+                    key={skuId}
+                    style={{
+                      background: 'linear-gradient(135deg, rgba(15, 23, 42, 0.95), rgba(30, 41, 59, 0.98))',
+                      borderRadius: '16px',
+                      border: '1px solid rgba(255, 255, 255, 0.1)',
+                      padding: '1rem',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      justifyContent: 'space-between',
+                      position: 'relative',
+                      boxShadow: '0 8px 25px rgba(0,0,0,0.45)',
+                    }}
+                  >
+                    {/* ENCABEZADO DE TARJETA TIPO REVISTA PUBLITAS */}
+                    <div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                        <span style={{ fontSize: '0.72rem', fontWeight: 800, color: '#f59e0b', background: 'rgba(245, 158, 11, 0.15)', padding: '0.2rem 0.55rem', borderRadius: '6px', border: '1px solid rgba(245, 158, 11, 0.3)' }}>
+                          {brand}
+                        </span>
+                        <span style={{ fontSize: '0.72rem', fontWeight: 800, color: '#94a3b8' }}>
+                          SKU #{skuId}
+                        </span>
+                      </div>
+
+                      {/* CONTENEDOR DE IMAGEN HD DE PRODUCTO (AMPLIADO Y DESTACADO) */}
+                      <div style={{ background: '#ffffff', borderRadius: '12px', padding: '0.75rem', display: 'flex', justifyContent: 'center', alignItems: 'center', height: '210px', position: 'relative', marginBottom: '0.75rem', border: '1px solid rgba(255, 255, 255, 0.2)' }}>
+                        {imgUrl ? (
+                          <img
+                            src={imgUrl}
+                            alt={title}
+                            style={{ maxHeight: '195px', maxWidth: '100%', objectFit: 'contain' }}
+                          />
+                        ) : (
+                          <div style={{ color: '#94a3b8', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.3rem', fontSize: '0.75rem' }}>
+                            <ImageIcon size={28} />
+                            Sin Imagen HD
+                          </div>
+                        )}
+
+                        {/* BADGE VERDE PRECIO ACTUAL ESTILO PUBLITAS */}
+                        <div
+                          style={{
+                            position: 'absolute',
+                            bottom: '8px',
+                            left: '8px',
+                            background: 'linear-gradient(135deg, #10b981, #059669)',
+                            color: '#ffffff',
+                            padding: '0.25rem 0.55rem',
+                            borderRadius: '6px',
+                            fontSize: '0.9rem',
+                            fontWeight: 900,
+                            boxShadow: '0 4px 10px rgba(16, 185, 129, 0.4)',
+                          }}
+                        >
+                          {priceFormatted}
+                        </div>
+                      </div>
+
+                      {/* TÍTULO DEL PRODUCTO */}
+                      <div style={{ fontSize: '0.82rem', fontWeight: 700, color: '#ffffff', lineHeight: 1.35, minHeight: '2.4em', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', marginBottom: '0.35rem' }}>
+                        {title}
+                      </div>
+
+                      {/* PRECIO ANTES Y % DESCUENTO */}
+                      {oldPriceFormatted ? (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.6rem' }}>
+                          <span style={{ fontSize: '0.75rem', color: '#94a3b8', textDecoration: 'line-through', fontWeight: 600 }}>
+                            {oldPriceFormatted}
+                          </span>
+                          {discountPct && (
+                            <span style={{ fontSize: '0.68rem', fontWeight: 800, color: '#34d399', background: 'rgba(16, 185, 129, 0.15)', padding: '0.1rem 0.35rem', borderRadius: '4px' }}>
+                              -{discountPct}
+                            </span>
+                          )}
+                        </div>
+                      ) : (
+                        <div style={{ fontSize: '0.72rem', color: '#64748b', marginBottom: '0.6rem', fontStyle: 'italic' }}>
+                          Precio Regular SINSA
+                        </div>
+                      )}
+                    </div>
+
+                    {/* BOTONES ACCIONADORES DE PUBLITAS */}
+                    <div style={{ borderTop: '1px solid rgba(255, 255, 255, 0.08)', paddingTop: '0.55rem', display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+                      <div style={{ display: 'flex', gap: '0.35rem' }}>
+                        <a
+                          href={pdpUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          style={{
+                            flex: 1,
+                            background: 'rgba(16, 185, 129, 0.15)',
+                            color: '#34d399',
+                            border: '1px solid rgba(16, 185, 129, 0.35)',
+                            borderRadius: '6px',
+                            padding: '0.35rem 0.4rem',
+                            fontSize: '0.72rem',
+                            fontWeight: 700,
+                            textDecoration: 'none',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: '0.25rem',
+                          }}
+                        >
+                          Abrir PDP <ExternalLink size={11} />
+                        </a>
+
+                        <button
+                          onClick={() => handleCopy(pdpUrl, `pdp-${skuId}`)}
+                          style={{
+                            background: isCopiedPdp ? 'rgba(16, 185, 129, 0.3)' : 'rgba(30, 41, 59, 0.9)',
+                            color: isCopiedPdp ? '#34d399' : '#94a3b8',
+                            border: '1px solid rgba(255, 255, 255, 0.15)',
+                            borderRadius: '6px',
+                            padding: '0.35rem 0.5rem',
+                            fontSize: '0.7rem',
+                            fontWeight: 700,
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '0.2rem',
+                          }}
+                        >
+                          {isCopiedPdp ? <Check size={11} /> : <Copy size={11} />}
+                          {isCopiedPdp ? '¡Link!' : 'PDP'}
+                        </button>
+                      </div>
+
+                      {imgUrl && (
+                        <button
+                          onClick={() => handleCopy(imgUrl, `img-${skuId}`)}
+                          style={{
+                            width: '100%',
+                            background: isCopiedImg ? 'rgba(56, 189, 248, 0.25)' : 'rgba(30, 41, 59, 0.7)',
+                            color: isCopiedImg ? '#38bdf8' : '#64748b',
+                            border: '1px solid rgba(255, 255, 255, 0.1)',
+                            borderRadius: '6px',
+                            padding: '0.25rem 0.4rem',
+                            fontSize: '0.68rem',
+                            fontWeight: 600,
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: '0.25rem',
+                          }}
+                        >
+                          {isCopiedImg ? <Check size={10} /> : <ImageIcon size={10} />}
+                          {isCopiedImg ? '¡URL de Imagen Copiada!' : 'Copiar URL Imagen HD'}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           </div>
         )}
 
-      </main>
+        {/* VISTA TABLA ESTRUCTURADA ESTÁNDAR PUBLITAS O EXPORTACIÓN */}
+        {(activeTab !== 'publitas' || viewMode === 'table') && (
+          <div
+            style={{
+              background: 'rgba(15, 23, 42, 0.85)',
+              borderRadius: '14px',
+              border: '1px solid rgba(255, 255, 255, 0.1)',
+              overflow: 'hidden',
+              boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.4)',
+            }}
+          >
+            <div style={{ padding: '0.85rem 1.25rem', borderBottom: '1px solid rgba(255, 255, 255, 0.08)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontSize: '0.85rem', fontWeight: 700, color: '#e2e8f0' }}>
+                Registros Mapeados para Publitas ({items.length} de {totalCount})
+              </span>
+              {loading && <span style={{ fontSize: '0.8rem', color: '#34d399', fontWeight: 600 }}>Cargando catálogo...</span>}
+            </div>
+
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.82rem' }}>
+                <thead>
+                  <tr style={{ background: 'rgba(30, 41, 59, 0.9)', color: '#94a3b8', textTransform: 'uppercase', fontSize: '0.7rem', letterSpacing: '0.04em' }}>
+                    <th style={{ padding: '0.75rem 1rem' }}>SKU</th>
+                    <th style={{ padding: '0.75rem 1rem' }}>Título / Producto</th>
+                    <th style={{ padding: '0.75rem 1rem' }}>Precio Oferta (C$)</th>
+                    <th style={{ padding: '0.75rem 1rem' }}>Precio Regular (C$)</th>
+                    <th style={{ padding: '0.75rem 1rem' }}>Ficha PDP (sinsa.com.ni)</th>
+                    <th style={{ padding: '0.75rem 1rem' }}>Imagen HD</th>
+                    <th style={{ padding: '0.75rem 1rem' }}>Marca</th>
+                    <th style={{ padding: '0.75rem 1rem' }}>Disponibilidad</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {items.length === 0 ? (
+                    <tr>
+                      <td colSpan={8} style={{ padding: '3rem', textAlign: 'center', color: '#64748b' }}>
+                        {loading ? 'Consultando catálogo...' : 'No se encontraron registros.'}
+                      </td>
+                    </tr>
+                  ) : (
+                    items.map((it) => {
+                      const skuId = it.sku || it.id;
+                      const pdpUrl = it.link || it.pdpUrl;
+                      const imgUrl = it.image_link || it.imageUrl;
+                      const isAvail = it.availability === 'Disponible' || it.availability === 'in stock' || (it.stock_quantity || 0) > 0;
+
+                      const priceVal = it.price !== undefined && it.price !== null ? Number(it.price) : (it.basePriceNio ? Number(it.basePriceNio) : 0);
+                      const oldPriceVal = it.old_price !== undefined && it.old_price !== null ? Number(it.old_price) : (it.listPriceNio ? Number(it.listPriceNio) : 0);
+
+                      const priceDisplay = priceVal > 0 ? `C$ ${priceVal.toLocaleString('es-NI')}` : 'Consultar';
+                      const oldPriceDisplay = oldPriceVal > priceVal && priceVal > 0 ? `C$ ${oldPriceVal.toLocaleString('es-NI')}` : '-';
+
+                      return (
+                        <tr key={skuId} style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.05)' }}>
+                          <td style={{ padding: '0.75rem 1rem', fontWeight: 800, color: '#38bdf8' }}>
+                            {skuId}
+                          </td>
+                          <td style={{ padding: '0.75rem 1rem', color: '#ffffff', fontWeight: 600, maxWidth: '220px' }}>
+                            {it.title}
+                          </td>
+                          <td style={{ padding: '0.75rem 1rem', fontWeight: 800, color: priceVal > 0 ? '#34d399' : '#94a3b8' }}>
+                            {priceDisplay}
+                          </td>
+                          <td style={{ padding: '0.75rem 1rem', color: '#94a3b8', textDecoration: 'line-through' }}>
+                            {oldPriceDisplay}
+                          </td>
+                          <td style={{ padding: '0.75rem 1rem', maxWidth: '200px' }}>
+                            <a href={pdpUrl} target="_blank" rel="noopener noreferrer" style={{ color: '#34d399', textDecoration: 'none', fontWeight: 700, fontSize: '0.75rem' }}>
+                              {pdpUrl}
+                            </a>
+                          </td>
+                          <td style={{ padding: '0.75rem 1rem', maxWidth: '200px' }}>
+                            {imgUrl ? (
+                              <a href={imgUrl} target="_blank" rel="noopener noreferrer" style={{ color: '#38bdf8', textDecoration: 'none', fontWeight: 700, fontSize: '0.75rem' }}>
+                                {imgUrl.slice(0, 35)}...
+                              </a>
+                            ) : (
+                              <span style={{ color: '#f87171', fontSize: '0.72rem' }}>Sin foto</span>
+                            )}
+                          </td>
+                          <td style={{ padding: '0.75rem 1rem', color: '#f59e0b', fontWeight: 700 }}>
+                            {it.brand || 'SINSA'}
+                          </td>
+                          <td style={{ padding: '0.75rem 1rem' }}>
+                            <span style={{ fontSize: '0.75rem', fontWeight: 700, color: isAvail ? '#34d399' : '#f87171' }}>
+                              {isAvail ? 'Disponible' : 'Agotado'}
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {/* PAGINACIÓN */}
+        {totalPages > 1 && (
+          <div style={{ marginTop: '1.25rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontSize: '0.78rem', color: '#94a3b8' }}>
+              Página {page} de {totalPages}
+            </span>
+            <div style={{ display: 'flex', gap: '0.5rem' }}>
+              <button
+                disabled={page <= 1 || loading}
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                style={{
+                  padding: '0.45rem 0.9rem',
+                  borderRadius: '8px',
+                  border: '1px solid rgba(255, 255, 255, 0.15)',
+                  background: 'rgba(30, 41, 59, 0.8)',
+                  color: '#ffffff',
+                  fontSize: '0.78rem',
+                  fontWeight: 700,
+                  cursor: page <= 1 || loading ? 'not-allowed' : 'pointer',
+                  opacity: page <= 1 || loading ? 0.5 : 1,
+                }}
+              >
+                Anterior
+              </button>
+              <button
+                disabled={page >= totalPages || loading}
+                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                style={{
+                  padding: '0.45rem 0.9rem',
+                  borderRadius: '8px',
+                  border: '1px solid rgba(255, 255, 255, 0.15)',
+                  background: 'rgba(30, 41, 59, 0.8)',
+                  color: '#ffffff',
+                  fontSize: '0.78rem',
+                  fontWeight: 700,
+                  cursor: page >= totalPages || loading ? 'not-allowed' : 'pointer',
+                  opacity: page >= totalPages || loading ? 0.5 : 1,
+                }}
+              >
+                Siguiente
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
     </AppLayout>
   );
 }
