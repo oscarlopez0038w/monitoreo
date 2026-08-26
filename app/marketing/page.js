@@ -77,6 +77,19 @@ export default function MarketingPublitasPage() {
   useEffect(() => {
     fetchCatalogData();
   }, [fetchCatalogData]);
+  const [downloadProgress, setDownloadProgress] = useState(0);
+  const [downloadedSize, setDownloadedSize] = useState(0);
+  const [downloadStatusText, setDownloadStatusText] = useState('');
+  const [lastDownloadedInfo, setLastDownloadedInfo] = useState(null);
+
+  const formatBytes = (bytes, decimals = 2) => {
+    if (!bytes || bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const dm = decimals < 0 ? 0 : decimals;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
+  };
 
   const handleCopy = (text, key) => {
     if (!text) return;
@@ -85,9 +98,9 @@ export default function MarketingPublitasPage() {
     setTimeout(() => setCopiedKey(null), 2000);
   };
 
-  const handleDownloadPublitasExcel = async () => {
-    setDownloading(true);
+  const handleDownloadPublitasExcel = () => {
     try {
+      setDownloading(true);
       const params = new URLSearchParams({
         format: 'xlsx',
         search,
@@ -100,56 +113,12 @@ export default function MarketingPublitasPage() {
         params.set('batchSkus', batchSkus.trim());
       }
 
-      const response = await fetch(`/api/catalog/publitas?${params.toString()}`);
-      if (!response.ok) throw new Error('Error al generar el archivo Excel de Publitas');
-
-      const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `publitas_product_feed_sinsa_${new Date().toISOString().slice(0, 10)}.xlsx`;
-      document.body.appendChild(a);
-      a.click();
-      window.URL.revokeObjectURL(url);
-      document.body.removeChild(a);
+      const downloadUrl = `/api/catalog/publitas?${params.toString()}`;
+      window.location.href = downloadUrl;
     } catch (err) {
       alert(`Error descargando Excel Publitas: ${err.message}`);
     } finally {
-      setDownloading(false);
-    }
-  };
-
-  const handleDownloadPublitasCsv = async () => {
-    setDownloading(true);
-    try {
-      const params = new URLSearchParams({
-        format: 'csv',
-        search,
-        status: statusFilter,
-        hasImage: imageFilter,
-        onlyDiscounts: String(onlyDiscounts),
-      });
-
-      if (activeTab === 'batch' && batchSkus.trim()) {
-        params.set('batchSkus', batchSkus.trim());
-      }
-
-      const response = await fetch(`/api/catalog/publitas?${params.toString()}`);
-      if (!response.ok) throw new Error('Error al generar el archivo CSV de Publitas');
-
-      const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `publitas_product_feed_sinsa_${new Date().toISOString().slice(0, 10)}.csv`;
-      document.body.appendChild(a);
-      a.click();
-      window.URL.revokeObjectURL(url);
-      document.body.removeChild(a);
-    } catch (err) {
-      alert(`Error descargando CSV Publitas: ${err.message}`);
-    } finally {
-      setDownloading(false);
+      setTimeout(() => setDownloading(false), 2500);
     }
   };
 
@@ -183,8 +152,8 @@ export default function MarketingPublitasPage() {
               </p>
             </div>
 
-            {/* BOTONES DE EXPORTACIÓN DIRECTA PUBLITAS */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+            {/* BOTÓN ÚNICO DE DESCARGA DIRECTA */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
               <button
                 onClick={handleDownloadPublitasExcel}
                 disabled={downloading || loading || items.length === 0}
@@ -193,8 +162,8 @@ export default function MarketingPublitasPage() {
                   color: '#ffffff',
                   border: 'none',
                   borderRadius: '12px',
-                  padding: '0.7rem 1.25rem',
-                  fontSize: '0.88rem',
+                  padding: '0.7rem 1.5rem',
+                  fontSize: '0.9rem',
                   fontWeight: 800,
                   display: 'flex',
                   alignItems: 'center',
@@ -206,30 +175,7 @@ export default function MarketingPublitasPage() {
                 }}
               >
                 <FileSpreadsheet size={19} />
-                {downloading ? 'Generando Feed...' : 'Descargar Feed Publitas (.xlsx)'}
-              </button>
-
-              <button
-                onClick={handleDownloadPublitasCsv}
-                disabled={downloading || loading || items.length === 0}
-                style={{
-                  background: 'rgba(30, 41, 59, 0.9)',
-                  color: '#34d399',
-                  border: '1px solid rgba(52, 211, 153, 0.4)',
-                  borderRadius: '12px',
-                  padding: '0.7rem 1.1rem',
-                  fontSize: '0.85rem',
-                  fontWeight: 700,
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '0.5rem',
-                  cursor: downloading ? 'wait' : 'pointer',
-                  transition: 'all 0.2s ease',
-                  opacity: downloading || loading || items.length === 0 ? 0.6 : 1,
-                }}
-              >
-                <Download size={16} />
-                CSV Publitas
+                {downloading ? 'Descargando Excel...' : 'Descargar'}
               </button>
             </div>
           </div>
@@ -261,28 +207,7 @@ export default function MarketingPublitasPage() {
               Estándar Publitas ({totalCount} SKUs)
             </button>
 
-            <button
-              onClick={() => {
-                setActiveTab('catalog');
-                setPage(1);
-              }}
-              style={{
-                padding: '0.65rem 1.15rem',
-                borderRadius: '10px',
-                border: activeTab === 'catalog' ? '1px solid #38bdf8' : '1px solid rgba(255, 255, 255, 0.1)',
-                background: activeTab === 'catalog' ? 'rgba(56, 189, 248, 0.15)' : 'rgba(15, 23, 42, 0.6)',
-                color: activeTab === 'catalog' ? '#38bdf8' : '#94a3b8',
-                fontWeight: 700,
-                fontSize: '0.85rem',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '0.5rem',
-                cursor: 'pointer',
-              }}
-            >
-              <Layers size={16} />
-              Extracción General PDPs
-            </button>
+
 
             <button
               onClick={() => {

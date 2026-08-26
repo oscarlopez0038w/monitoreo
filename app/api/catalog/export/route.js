@@ -16,6 +16,7 @@ export async function GET(request) {
     const format = searchParams.get('format') || 'json';
     const statusFilter = searchParams.get('status') || 'all'; // all, active, inactive
     const imageFilter = searchParams.get('hasImage') || 'all'; // all, yes, no
+    const onlyDiscounts = searchParams.get('onlyDiscounts') === 'true';
 
     if (!isSupabaseConfigured()) {
       return NextResponse.json(
@@ -39,13 +40,19 @@ export async function GET(request) {
     let skuRows = [];
     let totalCount = 0;
 
-    if (!isExport && targetSkuIds.length === 0) {
-      // Paginación estándar de pantalla UI (ej: 25/50 por página)
+    if (!isExport) {
+      // Paginación directa ultra rápida en SQL para vista previa UI en pantalla (<200ms)
       let query = supabaseAdmin.from('vtex_skus').select('*', { count: 'exact' });
 
-      if (search) {
+      if (targetSkuIds.length > 0) {
+        query = query.in('id', targetSkuIds);
+      } else if (search) {
         const searchNum = parseInt(search, 10);
         if (!isNaN(searchNum)) query = query.eq('id', searchNum);
+      }
+
+      if (onlyDiscounts) {
+        query = query.gt('list_price', 0);
       }
 
       if (statusFilter === 'active') query = query.eq('is_active', true);
@@ -62,7 +69,7 @@ export async function GET(request) {
       skuRows = data || [];
       totalCount = count || skuRows.length;
     } else {
-      // Exportación completa a Excel / CSV o Búsqueda por Lotes: Paginación en bucle por bloques de 1000 filas
+      // Exportación completa a Excel: Bucle de paginación por bloques de 1000 filas (100% de SKUs)
       const PAGE_SIZE = 1000;
       let p = 0;
       let hasMore = true;
@@ -78,6 +85,10 @@ export async function GET(request) {
         } else if (search) {
           const searchNum = parseInt(search, 10);
           if (!isNaN(searchNum)) query = query.eq('id', searchNum);
+        }
+
+        if (onlyDiscounts) {
+          query = query.gt('list_price', 0);
         }
 
         if (statusFilter === 'active') query = query.eq('is_active', true);
@@ -127,18 +138,15 @@ export async function GET(request) {
 
     // Enriquecer productos llamando a VTEX Catalog API (en paralelo con concurrencia optimizada)
     const isLargeCatalogExport = isExport && skuRows.length > 300;
-    const CONCURRENCY = isLargeCatalogExport ? 15 : 8;
+    const CONCURRENCY = isLargeCatalogExport ? 35 : 15;
     const enrichedProducts = [];
 
     for (let i = 0; i < (skuRows || []).length; i += CONCURRENCY) {
       const chunk = skuRows.slice(i, i + CONCURRENCY);
       const chunkResults = await Promise.all(
         chunk.map(async (row) => {
-          let detail = null;
-          // Para volúmenes pequeños o vista previa, consultar metadatos enriquecidos de VTEX
-          if (!isLargeCatalogExport || skuRows.length <= 1000) {
-            detail = await fetchFullProductCatalogDetail(row.id);
-          }
+          const shouldFetchVtexDetail = !isExport || skuRows.length <= 250 || i < 250;
+          const detail = shouldFetchVtexDetail ? await fetchFullProductCatalogDetail(row.id) : null;
 
           const fallbackDesc = safetyMap[row.id] || null;
           const title = detail?.name || detail?.productName || fallbackDesc || `SKU ${row.id}`;
@@ -152,12 +160,31 @@ export async function GET(request) {
             return imgUrl.replace(/\/ids\/(\d+)(?:-\d+-\d+)?\//g, '/ids/$1/');
           };
 
-          const pdpUrl = detail?.pdpUrl || `https://www.sinsa.com.ni/${row.id}/p`;
+          let pdpUrl = detail?.pdpUrl;
+          if (!pdpUrl || pdpUrl.endsWith(`/${row.id}/p`)) {
+            const cleanTitle = (title || '')
+              .replace(/^&/, '')
+              .replace(/^\*/, '')
+              .trim();
+            const slug = cleanTitle
+              .toLowerCase()
+              .normalize('NFD')
+              .replace(/[\u0300-\u036f]/g, '')
+              .replace(/[^a-z0-9]+/g, '-')
+              .replace(/^-+|-+$/g, '');
+            if (slug) {
+              pdpUrl = `https://www.sinsa.com.ni/${slug}-${row.id}/p`;
+            } else {
+              pdpUrl = `https://www.sinsa.com.ni/${row.id}/p`;
+            }
+          }
+
           const imageUrl = toHdImage(detail?.imageUrl || null);
           const allImages = (detail?.allImages || (imageUrl ? [imageUrl] : [])).map(toHdImage);
 
           const listPriceNio = row.list_price ? Number(row.list_price) : (row.base_price ? Number(row.base_price) : 0);
           const listPriceUsd = listPriceNio ? Number((listPriceNio / bcnRate).toFixed(2)) : 0;
+          const description = detail?.rawDescription || detail?.description || fallbackDesc || title;
 
           return {
             id: row.id,
@@ -170,7 +197,7 @@ export async function GET(request) {
             imageUrl,
             allImages,
             imageCount: allImages.length,
-            description: detail?.description || fallbackDesc || '',
+            description,
             refId: detail?.refId || '',
             isActive: row.is_active !== false && detail?.isActive !== false,
             basePriceNio,
@@ -292,7 +319,7 @@ export async function GET(request) {
       total: totalCount || filteredProducts.length,
       page,
       limit,
-      totalPages: Math.ceil((totalCount || filteredProducts.length) / limit),
+      totalPages: Math.ceil((totalCount || filteredProducts.length) / limit) || 1,
     });
   } catch (err) {
     return NextResponse.json({ success: false, error: err.message }, { status: 500 });

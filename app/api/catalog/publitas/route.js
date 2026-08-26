@@ -38,13 +38,19 @@ export async function GET(request) {
     let skuRows = [];
     let totalCount = 0;
 
-    if (!isExport && targetSkuIds.length === 0) {
-      // Paginación estándar para vista previa en pantalla UI
+    if (!isExport) {
+      // Paginación directa ultra rápida en SQL para vista previa UI en pantalla (<200ms)
       let query = supabaseAdmin.from('vtex_skus').select('*', { count: 'exact' });
 
-      if (search) {
+      if (targetSkuIds.length > 0) {
+        query = query.in('id', targetSkuIds);
+      } else if (search) {
         const searchNum = parseInt(search, 10);
         if (!isNaN(searchNum)) query = query.eq('id', searchNum);
+      }
+
+      if (onlyDiscounts) {
+        query = query.gt('list_price', 0);
       }
 
       if (statusFilter === 'active') query = query.eq('is_active', true);
@@ -61,7 +67,7 @@ export async function GET(request) {
       skuRows = data || [];
       totalCount = count || skuRows.length;
     } else {
-      // Exportación completa o Lote: Bucle de paginación por bloques de 1000 filas (100% de SKUs)
+      // Exportación completa a Excel: Bucle de paginación por bloques de 1000 filas (100% de SKUs)
       const PAGE_SIZE = 1000;
       let p = 0;
       let hasMore = true;
@@ -77,6 +83,10 @@ export async function GET(request) {
         } else if (search) {
           const searchNum = parseInt(search, 10);
           if (!isNaN(searchNum)) query = query.eq('id', searchNum);
+        }
+
+        if (onlyDiscounts) {
+          query = query.gt('list_price', 0);
         }
 
         if (statusFilter === 'active') query = query.eq('is_active', true);
@@ -126,17 +136,15 @@ export async function GET(request) {
 
     // Procesar y mapear campos exactos para la especificación de Publitas
     const isLargeExport = isExport && skuRows.length > 300;
-    const CONCURRENCY = isLargeExport ? 15 : 8;
+    const CONCURRENCY = isLargeExport ? 35 : 15;
     const publitasItems = [];
 
     for (let i = 0; i < (skuRows || []).length; i += CONCURRENCY) {
       const chunk = skuRows.slice(i, i + CONCURRENCY);
       const chunkResults = await Promise.all(
         chunk.map(async (row) => {
-          let detail = null;
-          if (!isLargeExport || skuRows.length <= 1000) {
-            detail = await fetchFullProductCatalogDetail(row.id);
-          }
+          const shouldFetchVtexDetail = !isExport || skuRows.length <= 250 || i < 250;
+          const detail = shouldFetchVtexDetail ? await fetchFullProductCatalogDetail(row.id) : null;
 
           const fallbackDesc = safetyMap[row.id] || null;
           const title = detail?.name || detail?.productName || fallbackDesc || `SKU ${row.id}`;
@@ -162,7 +170,26 @@ export async function GET(request) {
 
           const totalStock = row.total_stock ?? row.total_quantity ?? 0;
           const availability = totalStock > 0 ? 'Disponible' : 'Agotado';
-          const pdpUrl = detail?.pdpUrl || `https://www.sinsa.com.ni/${row.id}/p`;
+
+          let pdpUrl = detail?.pdpUrl;
+          if (!pdpUrl || pdpUrl.endsWith(`/${row.id}/p`)) {
+            const cleanTitle = (title || '')
+              .replace(/^&/, '')
+              .replace(/^\*/, '')
+              .trim();
+            const slug = cleanTitle
+              .toLowerCase()
+              .normalize('NFD')
+              .replace(/[\u0300-\u036f]/g, '')
+              .replace(/[^a-z0-9]+/g, '-')
+              .replace(/^-+|-+$/g, '');
+            if (slug) {
+              pdpUrl = `https://www.sinsa.com.ni/${slug}-${row.id}/p`;
+            } else {
+              pdpUrl = `https://www.sinsa.com.ni/${row.id}/p`;
+            }
+          }
+
           const imageUrl = toHdImage(detail?.imageUrl || null);
           const allImages = (detail?.allImages || (imageUrl ? [imageUrl] : [])).map(toHdImage);
 
@@ -173,11 +200,13 @@ export async function GET(request) {
             customBadge = 'DISPONIBLE';
           }
 
+          const description = detail?.rawDescription || detail?.description || fallbackDesc || title;
+
           return {
             sku: String(row.id),
             id: row.id,
             title,
-            description: detail?.description || fallbackDesc || '',
+            description,
             link: pdpUrl,
             image_link: imageUrl || '',
             additional_image_link: (allImages.slice(1) || []).join(' | '),
@@ -220,44 +249,30 @@ export async function GET(request) {
     // EXPORTACIÓN A EXCEL NATIVO PUBLITAS (.xlsx)
     if (format === 'xlsx') {
       const excelRows = filteredItems.map((item) => ({
+        'id': String(item.id || item.sku),
         'title': item.title,
-        'url': item.link,
         'link': item.link,
-        'image_link': item.image_link,
-        'additional_image_link': item.additional_image_link,
-        'description': item.description,
-        'price': item.price,
-        'old_price': item.old_price,
-        'sku': item.sku,
-        'brand': item.brand,
-        'category': item.category,
-        'availability': item.availability,
-        'stock_quantity': item.stock_quantity,
-        'discount_percentage': item.discount_percentage,
-        'currency': item.currency,
-        'status': item.is_active ? 'Activo' : 'Inactivo',
+        'image link': item.image_link,
+        'Additional image link': item.additional_image_link,
+        'Description': item.description,
+        'availability': (item.stock_quantity > 0 || item.availability === 'Disponible' || item.availability === 'in stock') ? 'In Stock' : 'Out of Stock',
+        'Price': item.old_price || item.price,
+        'Sale Price': item.price,
       }));
 
       const worksheet = XLSX.utils.json_to_sheet(excelRows);
       
-      // Anchos optimizados para la plantilla de Publitas
+      // Anchos optimizados para la plantilla exacta de Publitas
       worksheet['!cols'] = [
-        { wch: 42 }, // title
-        { wch: 55 }, // url
-        { wch: 55 }, // link
-        { wch: 65 }, // image_link
-        { wch: 65 }, // additional_image_link
-        { wch: 60 }, // description
-        { wch: 14 }, // price
-        { wch: 14 }, // old_price
-        { wch: 12 }, // sku
-        { wch: 22 }, // brand
-        { wch: 30 }, // category
+        { wch: 14 }, // id
+        { wch: 45 }, // title
+        { wch: 65 }, // link
+        { wch: 65 }, // image link
+        { wch: 65 }, // Additional image link
+        { wch: 80 }, // Description
         { wch: 14 }, // availability
-        { wch: 16 }, // stock_quantity
-        { wch: 15 }, // discount_percentage
-        { wch: 10 }, // currency
-        { wch: 12 }, // status
+        { wch: 14 }, // Price
+        { wch: 14 }, // Sale Price
       ];
 
       const workbook = XLSX.utils.book_new();
@@ -277,28 +292,22 @@ export async function GET(request) {
 
     // EXPORTACIÓN A CSV PUBLITAS (.csv)
     if (format === 'csv') {
-      const csvHeader = 'title,url,link,image_link,additional_image_link,description,price,old_price,sku,brand,category,availability,stock_quantity,discount_percentage,currency,status';
+      const csvHeader = 'id\ttitle\tlink\timage link\tAdditional image link\tDescription\tavailability\tPrice\tSale Price';
       
       const csvRows = filteredItems.map((item) => {
         const esc = (str) => `"${String(str || '').replace(/"/g, '""')}"`;
+        const avail = (item.stock_quantity > 0 || item.availability === 'Disponible' || item.availability === 'in stock') ? 'In Stock' : 'Out of Stock';
         return [
+          item.id || item.sku,
           esc(item.title),
-          esc(item.link),
           esc(item.link),
           esc(item.image_link),
           esc(item.additional_image_link),
           esc(item.description),
+          avail,
+          item.old_price || item.price,
           item.price,
-          item.old_price,
-          item.sku,
-          esc(item.brand),
-          esc(item.category),
-          item.availability,
-          item.stock_quantity,
-          esc(item.discount_percentage),
-          item.currency,
-          item.is_active ? 'Activo' : 'Inactivo',
-        ].join(',');
+        ].join('\t');
       });
 
       const csvContent = [csvHeader, ...csvRows].join('\n');
@@ -318,7 +327,7 @@ export async function GET(request) {
       total: totalCount || filteredItems.length,
       page,
       limit,
-      totalPages: Math.ceil((totalCount || filteredItems.length) / limit),
+      totalPages: Math.ceil((totalCount || filteredItems.length) / limit) || 1,
       feedUrl: `${new URL(request.url).origin}/api/catalog/publitas?format=json`,
     });
   } catch (err) {
