@@ -220,21 +220,21 @@ export async function GET(request) {
     // EXPORTACIÓN A EXCEL NATIVO PUBLITAS (.xlsx)
     if (format === 'xlsx') {
       const excelRows = filteredItems.map((item) => ({
-        'sku': item.sku,
         'title': item.title,
-        'description': item.description,
+        'url': item.link,
         'link': item.link,
         'image_link': item.image_link,
         'additional_image_link': item.additional_image_link,
+        'description': item.description,
         'price': item.price,
         'old_price': item.old_price,
-        'discount_percentage': item.discount_percentage,
-        'currency': item.currency,
+        'sku': item.sku,
         'brand': item.brand,
         'category': item.category,
         'availability': item.availability,
         'stock_quantity': item.stock_quantity,
-        'custom_badge': item.custom_badge,
+        'discount_percentage': item.discount_percentage,
+        'currency': item.currency,
         'status': item.is_active ? 'Activo' : 'Inactivo',
       }));
 
@@ -242,21 +242,21 @@ export async function GET(request) {
       
       // Anchos optimizados para la plantilla de Publitas
       worksheet['!cols'] = [
-        { wch: 12 }, // sku
         { wch: 42 }, // title
-        { wch: 60 }, // description
+        { wch: 55 }, // url
         { wch: 55 }, // link
         { wch: 65 }, // image_link
         { wch: 65 }, // additional_image_link
+        { wch: 60 }, // description
         { wch: 14 }, // price
         { wch: 14 }, // old_price
-        { wch: 15 }, // discount_percentage
-        { wch: 10 }, // currency
+        { wch: 12 }, // sku
         { wch: 22 }, // brand
         { wch: 30 }, // category
         { wch: 14 }, // availability
         { wch: 16 }, // stock_quantity
-        { wch: 18 }, // custom_badge
+        { wch: 15 }, // discount_percentage
+        { wch: 10 }, // currency
         { wch: 12 }, // status
       ];
 
@@ -277,26 +277,27 @@ export async function GET(request) {
 
     // EXPORTACIÓN A CSV PUBLITAS (.csv)
     if (format === 'csv') {
-      const csvHeader = 'sku,title,description,link,image_link,additional_image_link,price,old_price,discount_percentage,currency,brand,category,availability,stock_quantity,custom_badge';
+      const csvHeader = 'title,url,link,image_link,additional_image_link,description,price,old_price,sku,brand,category,availability,stock_quantity,discount_percentage,currency,status';
       
       const csvRows = filteredItems.map((item) => {
         const esc = (str) => `"${String(str || '').replace(/"/g, '""')}"`;
         return [
-          item.sku,
           esc(item.title),
-          esc(item.description),
+          esc(item.link),
           esc(item.link),
           esc(item.image_link),
           esc(item.additional_image_link),
+          esc(item.description),
           item.price,
           item.old_price,
-          esc(item.discount_percentage),
-          item.currency,
+          item.sku,
           esc(item.brand),
           esc(item.category),
           item.availability,
           item.stock_quantity,
-          esc(item.custom_badge),
+          esc(item.discount_percentage),
+          item.currency,
+          item.is_active ? 'Activo' : 'Inactivo',
         ].join(',');
       });
 
