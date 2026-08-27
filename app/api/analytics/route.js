@@ -410,6 +410,20 @@ export async function GET(request) {
       return d >= new Date(currentStartIso).getTime() && d <= new Date(currentEndIso).getTime();
     });
 
+    // Filtrar órdenes exactas del Período B para métricas KPI y análisis
+    const prevOrdersExact = prevOrders.filter((o) => {
+      if (!o.creationDate) return false;
+      const d = new Date(o.creationDate).getTime();
+      return d >= new Date(prevStartIso).getTime() && d <= new Date(prevEndIso).getTime();
+    });
+
+    // Filtrar órdenes exactas del Período C para métricas KPI y análisis
+    const prev2OrdersExact = prev2Orders.filter((o) => {
+      if (!o.creationDate) return false;
+      const d = new Date(o.creationDate).getTime();
+      return d >= new Date(prev2StartIso).getTime() && d <= new Date(prev2EndIso).getTime();
+    });
+
     const currGrossRevenue = currOrders.reduce((sum, o) => sum + (o.totalValue ? o.totalValue / 100 : 0), 0);
     const currCanceledRevenue = currOrders.filter((o) => o.status === 'canceled').reduce((sum, o) => sum + (o.totalValue ? o.totalValue / 100 : 0), 0);
     const currNetRevenue = currGrossRevenue - currCanceledRevenue;
@@ -421,23 +435,23 @@ export async function GET(request) {
     const currGrossAvgTicket = currTotalOrders > 0 ? currGrossRevenue / currTotalOrders : 0;
     const currNetAvgTicket = currValidCount > 0 ? currNetRevenue / currValidCount : 0;
 
-    const prevGrossRevenue = prevOrders.reduce((sum, o) => sum + (o.totalValue ? o.totalValue / 100 : 0), 0);
-    const prevCanceledRevenue = prevOrders.filter((o) => o.status === 'canceled').reduce((sum, o) => sum + (o.totalValue ? o.totalValue / 100 : 0), 0);
+    const prevGrossRevenue = prevOrdersExact.reduce((sum, o) => sum + (o.totalValue ? o.totalValue / 100 : 0), 0);
+    const prevCanceledRevenue = prevOrdersExact.filter((o) => o.status === 'canceled').reduce((sum, o) => sum + (o.totalValue ? o.totalValue / 100 : 0), 0);
     const prevNetRevenue = prevGrossRevenue - prevCanceledRevenue;
 
-    const prevTotalOrders = prevOrders.length;
-    const prevCanceledCount = prevOrders.filter((o) => o.status === 'canceled').length;
+    const prevTotalOrders = prevOrdersExact.length;
+    const prevCanceledCount = prevOrdersExact.filter((o) => o.status === 'canceled').length;
     const prevValidCount = prevTotalOrders - prevCanceledCount;
 
     const prevGrossAvgTicket = prevTotalOrders > 0 ? prevGrossRevenue / prevTotalOrders : 0;
     const prevNetAvgTicket = prevValidCount > 0 ? prevNetRevenue / prevValidCount : 0;
 
-    const prev2GrossRevenue = prev2Orders.reduce((sum, o) => sum + (o.totalValue ? o.totalValue / 100 : 0), 0);
-    const prev2CanceledRevenue = prev2Orders.filter((o) => o.status === 'canceled').reduce((sum, o) => sum + (o.totalValue ? o.totalValue / 100 : 0), 0);
+    const prev2GrossRevenue = prev2OrdersExact.reduce((sum, o) => sum + (o.totalValue ? o.totalValue / 100 : 0), 0);
+    const prev2CanceledRevenue = prev2OrdersExact.filter((o) => o.status === 'canceled').reduce((sum, o) => sum + (o.totalValue ? o.totalValue / 100 : 0), 0);
     const prev2NetRevenue = prev2GrossRevenue - prev2CanceledRevenue;
 
-    const prev2TotalOrders = prev2Orders.length;
-    const prev2CanceledCount = prev2Orders.filter((o) => o.status === 'canceled').length;
+    const prev2TotalOrders = prev2OrdersExact.length;
+    const prev2CanceledCount = prev2OrdersExact.filter((o) => o.status === 'canceled').length;
     const prev2ValidCount = prev2TotalOrders - prev2CanceledCount;
 
     const prev2GrossAvgTicket = prev2TotalOrders > 0 ? prev2GrossRevenue / prev2TotalOrders : 0;
@@ -462,14 +476,14 @@ export async function GET(request) {
     let prevInvoicedCount = 0;
     let prevCanceledCountMap = 0;
 
-    prevOrders.forEach((o) => {
+    prevOrdersExact.forEach((o) => {
       const st = o.status;
       if (st === 'invoiced') prevInvoicedCount++;
       else if (st === 'canceled') prevCanceledCountMap++;
     });
 
     let prev2InvoicedCount = 0;
-    prev2Orders.forEach((o) => {
+    prev2OrdersExact.forEach((o) => {
       if (o.status === 'invoiced') prev2InvoicedCount++;
     });
 
@@ -479,8 +493,8 @@ export async function GET(request) {
 
     const [currAnalysis, prevAnalysis, prev2Analysis] = await Promise.all([
       analyzePeriodMarketingDetails(currOrders),
-      analyzePeriodMarketingDetails(prevOrders),
-      analyzePeriodMarketingDetails(prev2Orders),
+      analyzePeriodMarketingDetails(prevOrdersExact),
+      analyzePeriodMarketingDetails(prev2OrdersExact),
     ]);
 
     const BCN_EXCHANGE_RATE = 36.6243;
