@@ -933,8 +933,10 @@ export default function DashboardPage() {
                   style={{
                     display: 'flex',
                     alignItems: 'center',
-                    gap: '0.5rem',
-                    padding: '0.4rem 0.85rem',
+                    justifyContent: 'space-between',
+                    gap: '0.4rem',
+                    width: '200px',
+                    padding: '0.4rem 0.75rem',
                     borderRadius: '8px',
                     fontSize: '0.8rem',
                     fontWeight: 600,
@@ -943,13 +945,18 @@ export default function DashboardPage() {
                     border: '1px solid rgba(56, 189, 248, 0.4)',
                     cursor: 'pointer',
                     transition: 'all 0.2s',
+                    boxSizing: 'border-box',
                   }}
                 >
-                  <Calendar size={14} color="#38bdf8" />
-                  <span>Creado: <strong style={{ color: '#38bdf8' }}>{
-                    presetOptions.find(p => p.id === selectedPreset)?.label || 'Personalizado'
-                  }</strong></span>
-                  <ChevronDown size={14} color="#94a3b8" />
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>
+                    <Calendar size={14} color="#38bdf8" style={{ flexShrink: 0 }} />
+                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      Creado: <strong style={{ color: '#38bdf8' }}>{
+                        presetOptions.find(p => p.id === selectedPreset)?.label || 'Personalizado'
+                      }</strong>
+                    </span>
+                  </div>
+                  <ChevronDown size={14} color="#94a3b8" style={{ flexShrink: 0 }} />
                 </button>
 
                 {showRangeDropdown && (

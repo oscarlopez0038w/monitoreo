@@ -278,26 +278,17 @@ export default function Sidebar({ vtexStatus, supabaseStatus, mobileOpen, onClos
               <div>
                 <h1
                   style={{
-                    fontSize: '1.1rem',
+                    fontSize: '1.15rem',
                     fontWeight: 800,
                     color: '#ffffff',
                     letterSpacing: '-0.02em',
                     margin: 0,
-                    lineHeight: '1.1',
+                    lineHeight: '1.2',
+                    whiteSpace: 'nowrap',
                   }}
                 >
-                  VTEX Extractor
+                  Sinsa <span style={{ color: '#38bdf8', fontWeight: 500 }}>|</span> VTEX
                 </h1>
-                <span
-                  style={{
-                    fontSize: '0.72rem',
-                    color: 'var(--accent-primary)',
-                    fontWeight: 600,
-                    letterSpacing: '0.05em',
-                  }}
-                >
-                  SINSA • Monitoring
-                </span>
               </div>
             </div>
 

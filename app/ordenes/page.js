@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import AppLayout from '@/components/AppLayout';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import { getNicaraguaNow } from '@/lib/dateUtils';
@@ -12,6 +12,83 @@ export default function OrdenesPage() {
 
   const [startDate, setStartDate] = useState(nicNow.todayStr);
   const [endDate, setEndDate] = useState(nicNow.todayStr);
+  const [selectedPreset, setSelectedPreset] = useState('today');
+  const [showRangeDropdown, setShowRangeDropdown] = useState(false);
+  const dropdownRef = useRef(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+        setShowRangeDropdown(false);
+      }
+    };
+    if (showRangeDropdown) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showRangeDropdown]);
+
+  const presetOptions = [
+    { id: 'today', label: 'Hoy' },
+    { id: 'yesterday', label: 'Ayer' },
+    { id: 'last_7_days', label: 'Últimos 7 Días' },
+    { id: 'current_month', label: 'Mes Actual' },
+    { id: 'last_30_days', label: 'Últimos 30 Días' },
+  ];
+
+  const handleSelectPreset = (presetId) => {
+    setSelectedPreset(presetId);
+    if (presetId === 'custom') return;
+
+    const todayObj = new Date();
+    const todayStr = nicNow.todayStr;
+
+    const formatDateStr = (d) => {
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      return `${y}-${m}-${day}`;
+    };
+
+    let s = todayStr;
+    let e = todayStr;
+
+    if (presetId === 'today') {
+      s = todayStr;
+      e = todayStr;
+    } else if (presetId === 'yesterday') {
+      const yest = new Date(todayObj.getTime() - 24 * 3600 * 1000);
+      s = formatDateStr(yest);
+      e = s;
+    } else if (presetId === 'last_7_days') {
+      const d7 = new Date(todayObj.getTime() - 6 * 24 * 3600 * 1000);
+      s = formatDateStr(d7);
+      e = todayStr;
+    } else if (presetId === 'current_month') {
+      s = nicNow.firstDayStr;
+      e = todayStr;
+    } else if (presetId === 'last_30_days') {
+      const d30 = new Date(todayObj.getTime() - 29 * 24 * 3600 * 1000);
+      s = formatDateStr(d30);
+      e = todayStr;
+    }
+
+    setStartDate(s);
+    setEndDate(e);
+  };
+
+  const handleStartDateChange = (val) => {
+    setStartDate(val);
+    setSelectedPreset('custom');
+  };
+
+  const handleEndDateChange = (val) => {
+    setEndDate(val);
+    setSelectedPreset('custom');
+  };
+
   const [statusFilter, setStatusFilter] = useState('');
   const [search, setSearch] = useState('');
   const [sortBy, setSortBy] = useState('date_desc'); // 'date_desc' | 'date_asc' | 'amount_desc' | 'amount_asc'
@@ -326,13 +403,10 @@ export default function OrdenesPage() {
         {/* Header Header & Title */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem', marginBottom: '1.5rem' }}>
           <div>
-            <h1 style={{ fontSize: '1.35rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.5rem', background: 'linear-gradient(to right, #ffffff, #94a3b8)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
+            <h1 style={{ fontSize: '1.35rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.5rem', background: 'linear-gradient(to right, #ffffff, #94a3b8)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', margin: 0 }}>
               <ShoppingCart size={24} color="#34d399" />
-              Monitor de Órdenes VTEX OMS & Análisis de Inventario
+              Órdenes
             </h1>
-            <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
-              Consulta las órdenes del mes en curso y analiza cómo impactan el disponible de inventario al pasar a <code style={{ color: '#34d399' }}>invoiced</code> o <code style={{ color: '#fbbf24' }}>handling</code>.
-            </p>
           </div>
 
           <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap' }}>
@@ -389,140 +463,216 @@ export default function OrdenesPage() {
           </div>
         )}
 
-        {/* Date & Filter Bar */}
-        <div className="glass-card" style={{ padding: '1.25rem', marginBottom: '1.5rem' }}>
-          <form onSubmit={handleSearchSubmit} style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '1rem', alignItems: 'flex-end' }}>
+        {/* Date & Filter Bar - All in 1 Single Line */}
+        <div className="glass-card" style={{ padding: '0.65rem 0.95rem', marginBottom: '1.25rem', position: 'relative', zIndex: 100, overflow: 'visible' }}>
+          <form onSubmit={handleSearchSubmit} style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flexWrap: 'wrap' }}>
             
-            {/* Fecha Inicio */}
-            <div>
-              <label style={{ fontSize: '0.75rem', color: 'var(--text-dim)', fontWeight: 600, textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: '0.3rem', marginBottom: '0.35rem' }}>
-                <Calendar size={13} color="var(--accent-primary)" /> Fecha Inicio
-              </label>
+            {/* 1. Dropdown Selector de Preset */}
+            <div ref={dropdownRef} style={{ position: 'relative', zIndex: 101, flexShrink: 0 }}>
+              <button
+                type="button"
+                onClick={() => setShowRangeDropdown(!showRangeDropdown)}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: '0.4rem',
+                  width: '200px',
+                  padding: '0.4rem 0.75rem',
+                  borderRadius: '8px',
+                  fontSize: '0.8rem',
+                  fontWeight: 600,
+                  color: '#ffffff',
+                  background: 'rgba(56, 189, 248, 0.12)',
+                  border: '1px solid rgba(56, 189, 248, 0.4)',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s',
+                  height: '36px',
+                  boxSizing: 'border-box',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>
+                  <Calendar size={14} color="#38bdf8" style={{ flexShrink: 0 }} />
+                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    Creado: <strong style={{ color: '#38bdf8' }}>{
+                      presetOptions.find(p => p.id === selectedPreset)?.label || 'Personalizado'
+                    }</strong>
+                  </span>
+                </div>
+                <ChevronDown size={14} color="#94a3b8" style={{ flexShrink: 0 }} />
+              </button>
+
+              {showRangeDropdown && (
+                <div
+                  style={{
+                    position: 'absolute',
+                    top: '115%',
+                    left: 0,
+                    zIndex: 9999,
+                    background: '#0f172a',
+                    border: '1px solid rgba(255, 255, 255, 0.2)',
+                    borderRadius: '12px',
+                    boxShadow: '0 25px 50px -12px rgba(0,0,0,0.9), 0 0 25px rgba(56, 189, 248, 0.2)',
+                    padding: '0.85rem 1rem',
+                    width: '260px',
+                  }}
+                >
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.45rem' }}>
+                    {presetOptions.map((opt) => (
+                      <label
+                        key={opt.id}
+                        onClick={() => handleSelectPreset(opt.id)}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '0.65rem',
+                          fontSize: '0.82rem',
+                          color: selectedPreset === opt.id ? '#ffffff' : '#94a3b8',
+                          cursor: 'pointer',
+                          padding: '0.35rem 0.5rem',
+                          borderRadius: '6px',
+                          background: selectedPreset === opt.id ? 'rgba(56, 189, 248, 0.15)' : 'transparent',
+                          fontWeight: selectedPreset === opt.id ? 700 : 500,
+                        }}
+                      >
+                        <input
+                          type="radio"
+                          name="presetRadioOrders"
+                          checked={selectedPreset === opt.id}
+                          onChange={() => handleSelectPreset(opt.id)}
+                          style={{ accentColor: '#38bdf8', cursor: 'pointer' }}
+                        />
+                        {opt.label}
+                      </label>
+                    ))}
+
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '0.6rem' }}>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowRangeDropdown(false);
+                          fetchOrders(1);
+                        }}
+                        className="btn-primary"
+                        style={{ padding: '0.35rem 1.1rem', fontSize: '0.78rem', backgroundColor: '#2563eb', borderRadius: '6px' }}
+                      >
+                        Aplicar
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* 2. Rango de Fechas (A: [startDate] a [endDate]) */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', background: 'rgba(56, 189, 248, 0.08)', padding: '0.2rem 0.5rem', borderRadius: '8px', border: '1px solid rgba(56, 189, 248, 0.25)', height: '36px', flexShrink: 0 }}>
+              <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#38bdf8', whiteSpace: 'nowrap' }}>🔵 A:</span>
               <input
                 type="date"
                 className="glass-input"
-                style={{ width: '100%', fontSize: '0.85rem' }}
+                style={{ width: '130px', fontSize: '0.78rem', padding: '0.2rem 0.3rem', border: 'none', background: 'transparent', color: '#ffffff', height: '100%' }}
                 value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
+                onChange={(e) => handleStartDateChange(e.target.value)}
               />
-            </div>
-
-            {/* Fecha Fin */}
-            <div>
-              <label style={{ fontSize: '0.75rem', color: 'var(--text-dim)', fontWeight: 600, textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: '0.3rem', marginBottom: '0.35rem' }}>
-                <Calendar size={13} color="var(--accent-primary)" /> Fecha Fin
-              </label>
+              <span style={{ fontSize: '0.75rem', color: '#64748b' }}>a</span>
               <input
                 type="date"
                 className="glass-input"
-                style={{ width: '100%', fontSize: '0.85rem' }}
+                style={{ width: '130px', fontSize: '0.78rem', padding: '0.2rem 0.3rem', border: 'none', background: 'transparent', color: '#ffffff', height: '100%' }}
                 value={endDate}
-                onChange={(e) => setEndDate(e.target.value)}
+                onChange={(e) => handleEndDateChange(e.target.value)}
               />
             </div>
 
-            {/* Filtro por Estado */}
-            <div>
-              <label style={{ fontSize: '0.75rem', color: 'var(--text-dim)', fontWeight: 600, textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: '0.3rem', marginBottom: '0.35rem' }}>
-                <Filter size={13} color="var(--accent-primary)" /> Estado de Orden
-              </label>
+            {/* 3. Filtro por Estado */}
+            <div style={{ flex: '1 1 140px', minWidth: '130px' }}>
               <select
                 className="glass-input"
-                style={{ width: '100%', fontSize: '0.85rem' }}
+                style={{ width: '100%', fontSize: '0.82rem', height: '36px' }}
                 value={statusFilter}
                 onChange={(e) => setStatusFilter(e.target.value)}
               >
                 <option value="">Todos los Estados</option>
-                <option value="ready-for-handling">Lista para preparar (ready-for-handling)</option>
-                <option value="handling">En preparación (handling)</option>
-                <option value="invoiced">Facturada (invoiced)</option>
-                <option value="canceled">Cancelada (canceled)</option>
-                <option value="approve-payment">Pago Aprobado (approve-payment)</option>
-                <option value="payment-pending">Pago Pendiente (payment-pending)</option>
+                <option value="ready-for-handling">Lista para preparar</option>
+                <option value="handling">En preparación</option>
+                <option value="invoiced">Facturada</option>
+                <option value="canceled">Cancelada</option>
               </select>
             </div>
 
-            {/* Buscador Multi-campo: Orden, Cliente, SKU */}
-            <div>
-              <label style={{ fontSize: '0.75rem', color: 'var(--text-dim)', fontWeight: 600, textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: '0.3rem', marginBottom: '0.35rem' }}>
-                <Search size={13} color="var(--accent-primary)" /> Buscar por ID, Cliente o SKU
-              </label>
-              <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-                <input
-                  type="text"
-                  className="glass-input"
-                  style={{ width: '100%', fontSize: '0.85rem', paddingRight: search ? '2.2rem' : '0.75rem' }}
-                  placeholder="Ej: 140911851, Axell, v511502..."
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                />
-                {search && (
-                  <button
-                    type="button"
-                    onClick={() => setSearch('')}
-                    style={{
-                      position: 'absolute',
-                      right: '0.5rem',
-                      background: 'none',
-                      border: 'none',
-                      color: '#94a3b8',
-                      cursor: 'pointer',
-                      display: 'flex',
-                      alignItems: 'center',
-                      padding: '0.2rem',
-                    }}
-                    title="Limpiar búsqueda"
-                  >
-                    <X size={14} />
-                  </button>
-                )}
-              </div>
-            </div>
-
-            {/* Ordenar Por */}
-            <div>
-              <label style={{ fontSize: '0.75rem', color: 'var(--text-dim)', fontWeight: 600, textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: '0.3rem', marginBottom: '0.35rem' }}>
-                <DollarSign size={13} color="var(--accent-primary)" /> Ordenar Por
-              </label>
+            {/* 4. Ordenar Por */}
+            <div style={{ flex: '1 1 120px', minWidth: '120px' }}>
               <select
                 className="glass-input"
-                style={{ width: '100%', fontSize: '0.85rem' }}
+                style={{ width: '100%', fontSize: '0.82rem', height: '36px' }}
                 value={sortBy}
                 onChange={(e) => setSortBy(e.target.value)}
               >
-                <option value="date_desc">Fecha (Más recientes primero)</option>
-                <option value="date_asc">Fecha (Más antiguas primero)</option>
-                <option value="amount_desc">Monto C$ (Mayor a Menor)</option>
-                <option value="amount_asc">Monto C$ (Menor a Mayor)</option>
+                <option value="date_desc">Más recientes</option>
+                <option value="date_asc">Más antiguas</option>
+                <option value="amount_desc">Mayor a menor</option>
+                <option value="amount_asc">Menor a mayor</option>
               </select>
             </div>
 
-            {/* Botón Buscar */}
-            <div>
-              <button
-                type="submit"
-                disabled={loading}
-                className="btn-primary"
-                style={{
-                  width: '100%',
-                  minHeight: '38px',
-                  fontSize: '0.85rem',
-                  fontWeight: 600,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: '0.4rem',
-                  backgroundColor: '#2563eb',
-                  borderRadius: '8px',
-                  cursor: loading ? 'not-allowed' : 'pointer',
-                  opacity: loading ? 0.7 : 1,
-                  transition: 'all 0.2s',
-                }}
-              >
-                <Search size={15} />
-                {loading ? 'Buscando...' : 'Buscar'}
-              </button>
+            {/* 5. Buscador Multi-campo (a la par del botón Buscar) */}
+            <div style={{ flex: '2 1 180px', minWidth: '160px', position: 'relative', display: 'flex', alignItems: 'center' }}>
+              <input
+                type="text"
+                className="glass-input"
+                style={{ width: '100%', fontSize: '0.82rem', height: '36px', paddingRight: search ? '2.2rem' : '0.75rem' }}
+                placeholder="Buscar por ID, Cliente o SKU..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
+              {search && (
+                <button
+                  type="button"
+                  onClick={() => setSearch('')}
+                  style={{
+                    position: 'absolute',
+                    right: '0.5rem',
+                    background: 'none',
+                    border: 'none',
+                    color: '#94a3b8',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    padding: '0.2rem',
+                  }}
+                  title="Limpiar búsqueda"
+                >
+                  <X size={14} />
+                </button>
+              )}
             </div>
+
+            {/* 6. Botón Buscar */}
+            <button
+              type="submit"
+              disabled={loading}
+              className="btn-primary"
+              style={{
+                height: '36px',
+                padding: '0 1.1rem',
+                fontSize: '0.82rem',
+                fontWeight: 600,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '0.4rem',
+                backgroundColor: '#2563eb',
+                borderRadius: '8px',
+                cursor: loading ? 'not-allowed' : 'pointer',
+                opacity: loading ? 0.7 : 1,
+                transition: 'all 0.2s',
+                whiteSpace: 'nowrap',
+                flexShrink: 0,
+              }}
+            >
+              <Search size={14} />
+              {loading ? 'Buscando...' : 'Buscar'}
+            </button>
 
           </form>
         </div>
