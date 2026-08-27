@@ -1,8 +1,8 @@
 import './globals.css';
 
 export const metadata = {
-  title: 'VTEX SKU Extractor & Visualizer | SINSA',
-  description: 'Aplicación minimalista y elegante para extraer y gestionar los SKUs de VTEX SINSA en Supabase.',
+  title: 'Sinsa | VTEX Monitoring',
+  description: 'Plataforma ejecutiva para análisis de ventas, monitoreo OMS, control de stock de seguridad e integración VTEX para SINSA Nicaragua.',
 };
 
 export default function RootLayout({ children }) {

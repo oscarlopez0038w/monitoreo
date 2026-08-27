@@ -21,10 +21,16 @@ function getCachedAnalytics(key) {
 }
 
 function setCachedAnalytics(key, data) {
+  const now = Date.now();
+  for (const [k, item] of ANALYTICS_CACHE.entries()) {
+    if (now - item.timestamp > CACHE_TTL_MS) {
+      ANALYTICS_CACHE.delete(k);
+    }
+  }
   if (ANALYTICS_CACHE.size > 100) {
     ANALYTICS_CACHE.clear();
   }
-  ANALYTICS_CACHE.set(key, { timestamp: Date.now(), data });
+  ANALYTICS_CACHE.set(key, { timestamp: now, data });
 }
 
 // Función optimizada para obtener TODAS las órdenes de un período paginando en paralelo (Promise.all)
