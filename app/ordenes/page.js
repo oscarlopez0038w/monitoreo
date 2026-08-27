@@ -487,7 +487,7 @@ export default function OrdenesPage() {
                   border: '1px solid rgba(56, 189, 248, 0.4)',
                   cursor: 'pointer',
                   transition: 'all 0.2s',
-                  height: '36px',
+                  height: '38px',
                   boxSizing: 'border-box',
                 }}
               >
@@ -565,7 +565,7 @@ export default function OrdenesPage() {
             </div>
 
             {/* 2. Rango de Fechas (A: [startDate] a [endDate]) */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', background: 'rgba(56, 189, 248, 0.08)', padding: '0.2rem 0.5rem', borderRadius: '8px', border: '1px solid rgba(56, 189, 248, 0.25)', height: '36px', flexShrink: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', background: 'rgba(56, 189, 248, 0.08)', padding: '0.2rem 0.5rem', borderRadius: '8px', border: '1px solid rgba(56, 189, 248, 0.25)', height: '38px', flexShrink: 0, boxSizing: 'border-box' }}>
               <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#38bdf8', whiteSpace: 'nowrap' }}>🔵 A:</span>
               <input
                 type="date"
@@ -588,7 +588,7 @@ export default function OrdenesPage() {
             <div style={{ flex: '1 1 140px', minWidth: '130px' }}>
               <select
                 className="glass-input"
-                style={{ width: '100%', fontSize: '0.82rem', height: '36px' }}
+                style={{ width: '100%', fontSize: '0.82rem', height: '38px', padding: '0.35rem 0.75rem', lineHeight: '1.3', boxSizing: 'border-box' }}
                 value={statusFilter}
                 onChange={(e) => setStatusFilter(e.target.value)}
               >
@@ -604,7 +604,7 @@ export default function OrdenesPage() {
             <div style={{ flex: '1 1 120px', minWidth: '120px' }}>
               <select
                 className="glass-input"
-                style={{ width: '100%', fontSize: '0.82rem', height: '36px' }}
+                style={{ width: '100%', fontSize: '0.82rem', height: '38px', padding: '0.35rem 0.75rem', lineHeight: '1.3', boxSizing: 'border-box' }}
                 value={sortBy}
                 onChange={(e) => setSortBy(e.target.value)}
               >
@@ -620,7 +620,7 @@ export default function OrdenesPage() {
               <input
                 type="text"
                 className="glass-input"
-                style={{ width: '100%', fontSize: '0.82rem', height: '36px', paddingRight: search ? '2.2rem' : '0.75rem' }}
+                style={{ width: '100%', fontSize: '0.82rem', height: '38px', padding: '0.35rem 0.75rem', paddingRight: search ? '2.2rem' : '0.75rem', lineHeight: '1.3', boxSizing: 'border-box' }}
                 placeholder="Buscar por ID, Cliente o SKU..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
@@ -653,8 +653,8 @@ export default function OrdenesPage() {
               disabled={loading}
               className="btn-primary"
               style={{
-                height: '36px',
-                padding: '0 1.1rem',
+                height: '38px',
+                padding: '0 1.2rem',
                 fontSize: '0.82rem',
                 fontWeight: 600,
                 display: 'flex',
