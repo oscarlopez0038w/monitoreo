@@ -101,11 +101,11 @@ async function analyzePeriodMarketingDetails(orders) {
     try {
       const { data: dbRows } = await supabaseAdmin
         .from('vtex_orders')
-        .select('order_id, detail_json, marketing_json, fulfillment_type, pickup_store, shipping_cost, total_value')
+        .select('order_id, status, detail_json, marketing_json, fulfillment_type, pickup_store, shipping_cost, total_value')
         .in('order_id', orderIds);
 
       (dbRows || []).forEach((r) => {
-        if (r.order_id && r.detail_json) {
+        if (r.order_id && (r.detail_json || r.status)) {
           cachedMap[r.order_id] = r;
         }
       });
@@ -165,8 +165,18 @@ async function analyzePeriodMarketingDetails(orders) {
       const ordObj = detail || origOrder;
       if (!ordObj) return;
 
-      const st = detail?.status || origOrder?.status;
-      const isCanceled = st === 'canceled';
+      const cached = cachedMap[origOrder.orderId];
+      const dbStatus = String(cached?.status || '').toLowerCase();
+      const origStatus = String(origOrder?.status || '').toLowerCase();
+      const detailStatus = String(detail?.status || '').toLowerCase();
+
+      const isCanceled =
+        dbStatus === 'canceled' ||
+        dbStatus === 'cancel' ||
+        origStatus === 'canceled' ||
+        origStatus === 'cancel' ||
+        detailStatus === 'canceled' ||
+        detailStatus === 'cancel';
 
       const valNio = detail?.totalValue ? detail.totalValue / 100 : (detail?.value ? detail.value / 100 : (origOrder?.totalValue ? origOrder.totalValue / 100 : 0));
       const mkt = detail?.marketingData || {};
@@ -368,10 +378,13 @@ export async function GET(request) {
     const endDateC = searchParams.get('endDateC') || searchParams.get('endC') || searchParams.get('endDate2') || searchParams.get('end2') || defaultEndC;
 
     // Verificar memoria caché (60s TTL)
+    const refresh = searchParams.get('refresh') === 'true' || searchParams.get('nocache') === 'true';
     const cacheKey = `${startDateA}_${endDateA}_${startDateB}_${endDateB}_${startDateC}_${endDateC}`;
-    const cachedData = getCachedAnalytics(cacheKey);
-    if (cachedData) {
-      return NextResponse.json(cachedData);
+    if (!refresh) {
+      const cachedData = getCachedAnalytics(cacheKey);
+      if (cachedData) {
+        return NextResponse.json(cachedData);
+      }
     }
 
     const currentStartIso = new Date(`${startDateA}T00:00:00-06:00`).toISOString();
@@ -408,6 +421,42 @@ export async function GET(request) {
       fetchAllPeriodOrders(chartStartIsoB, prevEndIso),
       fetchAllPeriodOrders(chartStartIsoC, prev2EndIso),
     ]);
+
+    // Sincronizar estado real con Supabase por si fue actualizado a 'canceled' manualmente o via Webhook
+    if (isSupabaseConfigured()) {
+      try {
+        const allIds = Array.from(new Set([
+          ...chartOrders.map((o) => o.orderId),
+          ...prevOrders.map((o) => o.orderId),
+          ...prev2Orders.map((o) => o.orderId),
+        ])).filter(Boolean);
+
+        if (allIds.length > 0) {
+          const { data: dbRows } = await supabaseAdmin
+            .from('vtex_orders')
+            .select('order_id, status')
+            .in('order_id', allIds);
+
+          const dbStatusMap = {};
+          (dbRows || []).forEach((r) => {
+            if (r.order_id && r.status) {
+              dbStatusMap[r.order_id] = String(r.status).toLowerCase();
+            }
+          });
+
+          [chartOrders, prevOrders, prev2Orders].forEach((arr) => {
+            arr.forEach((o) => {
+              const dbSt = dbStatusMap[o.orderId];
+              if (dbSt === 'canceled' || dbSt === 'cancel') {
+                o.status = 'canceled';
+              }
+            });
+          });
+        }
+      } catch (e) {
+        console.error('Error sincronizando dbStatusMap en analytics:', e);
+      }
+    }
 
     // Filtrar órdenes exactas del Período A para métricas KPI y análisis
     const currOrders = chartOrders.filter((o) => {

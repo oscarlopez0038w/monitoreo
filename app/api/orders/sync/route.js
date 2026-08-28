@@ -152,7 +152,7 @@ export async function POST(request) {
           return {
             order_id: o.orderId,
             sequence: String(o.sequence || detail?.sequence || ''),
-            status: o.status || detail?.status || 'unknown',
+            status: (detail?.status === 'canceled' || o.status === 'canceled') ? 'canceled' : (detail?.status || o.status || 'unknown'),
             status_description: detail?.statusDescription || o.statusDescription || o.status || '',
             creation_date: o.creationDate || detail?.creationDate || new Date().toISOString(),
             client_name: clientName,

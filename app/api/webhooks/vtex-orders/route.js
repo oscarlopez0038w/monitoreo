@@ -91,14 +91,31 @@ export async function POST(request) {
       orderDetail.paymentData?.transactions?.[0]?.payments?.[0]?.connectorResponses?.authId
     );
 
-    // OPCIÓN B: Si la orden está cancelada y NUNCA pasó por aprobación de pago (fallo de tarjeta en Checkout), omitir y NO guardar en la base de datos
+    // OPCIÓN B: Si la orden está cancelada y NUNCA pasó por aprobación de pago (fallo de tarjeta en Checkout)
     if (isCanceled && !hasBeenApproved) {
-      return NextResponse.json({
-        success: true,
-        ignored: true,
-        orderId: orderDetail.orderId || orderId,
-        message: `Orden ${orderDetail.orderId || orderId} omitida por ser un intento fallido de pago en Checkout.`,
-      });
+      let existsInDb = false;
+      if (isSupabaseConfigured()) {
+        try {
+          const { data: existingRow } = await supabaseAdmin
+            .from('vtex_orders')
+            .select('order_id')
+            .eq('order_id', orderDetail.orderId || orderId)
+            .maybeSingle();
+          if (existingRow) {
+            existsInDb = true;
+          }
+        } catch (e) {}
+      }
+
+      // Omitir solo si NO existe en Supabase. Si ya existía (ej. en estado pendiente), continuar para actualizar su estado a 'canceled'
+      if (!existsInDb) {
+        return NextResponse.json({
+          success: true,
+          ignored: true,
+          orderId: orderDetail.orderId || orderId,
+          message: `Orden ${orderDetail.orderId || orderId} omitida por ser un intento fallido de pago en Checkout.`,
+        });
+      }
     }
 
     let ga4RefundSent = false;
