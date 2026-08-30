@@ -47,6 +47,32 @@ function normalizeStoreName(rawName) {
     .join(' ');
 }
 
+function extractTasaCeroInfo(orderDetail) {
+  const payments = orderDetail?.paymentData?.transactions?.flatMap((tx) => tx.payments || []) || [];
+  const searchableText = JSON.stringify(orderDetail?.paymentData || {}).toLowerCase();
+  const installments = payments
+    .map((payment) => Number(payment?.installments || payment?.installment || 0))
+    .find((value) => Number.isFinite(value) && value > 1);
+  const hasTasaCero =
+    /\btasa\s*0\b/.test(searchableText) ||
+    /\btasa\s*cero\b/.test(searchableText) ||
+    /\bcero\s*inter[eé]s\b/.test(searchableText) ||
+    /\b0\s*%\b/.test(searchableText) ||
+    searchableText.includes('sin intereses') ||
+    searchableText.includes('tasa0') ||
+    searchableText.includes('0 interes') ||
+    searchableText.includes('0 interés');
+
+  if (!hasTasaCero && !installments) {
+    return { isTasaCero: false, plazo: null };
+  }
+
+  return {
+    isTasaCero: true,
+    plazo: installments || null,
+  };
+}
+
 function parseIsoStartEnd(startDateParam, endDateParam) {
   const nicNow = getNicaraguaNow();
   let startStr = (startDateParam || nicNow.firstDayStr).trim();
@@ -332,6 +358,7 @@ export async function GET(request) {
               itemsCount: itemsList.length || 1,
               cancelReason: cancelReason,
               comments: comments,
+              tasaCero: extractTasaCeroInfo(r.detail_json),
               isFromDb: true,
             };
           });
@@ -455,6 +482,7 @@ export async function GET(request) {
           itemsCount: d?.items?.length || 1,
           cancelReason,
           comments,
+          tasaCero: extractTasaCeroInfo(d),
         };
       });
 

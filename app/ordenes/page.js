@@ -396,6 +396,52 @@ export default function OrdenesPage() {
     );
   };
 
+  const renderTasaCeroBadge = (tasaCero) => {
+    if (!tasaCero?.isTasaCero) return null;
+
+    return (
+      <span
+        style={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: '0.25rem',
+          height: '22px',
+          padding: '0 0.5rem',
+          borderRadius: '6px',
+          background: 'rgba(251, 191, 36, 0.14)',
+          color: '#fbbf24',
+          border: '1px solid rgba(251, 191, 36, 0.38)',
+          fontSize: '0.68rem',
+          fontWeight: 800,
+          fontFamily: 'inherit',
+          whiteSpace: 'nowrap',
+          textTransform: 'uppercase',
+        }}
+        title={tasaCero.plazo ? `Tasa 0 a ${tasaCero.plazo} meses` : 'Tasa 0'}
+      >
+        <Tag size={12} style={{ flexShrink: 0 }} />
+        Tasa 0{tasaCero.plazo ? ` - ${tasaCero.plazo} meses` : ''}
+      </span>
+    );
+  };
+
+  const getTasaCeroInfoFromDetail = (detail) => {
+    const payments = detail?.paymentData?.transactions?.flatMap((tx) => tx.payments || []) || [];
+    const installments = payments
+      .map((payment) => Number(payment?.installments || payment?.installment || 0))
+      .find((value) => Number.isFinite(value) && value > 1);
+
+    if (!installments) {
+      return { isTasaCero: false, plazo: null };
+    }
+
+    return {
+      isTasaCero: true,
+      plazo: installments,
+    };
+  };
+
   return (
     <AppLayout>
       <main style={{ maxWidth: '1600px', margin: '0 auto', width: '100%' }}>
@@ -935,6 +981,7 @@ export default function OrdenesPage() {
                       : '-';
 
                     const totalFormatted = (order.totalValue ? order.totalValue / 100 : 0).toLocaleString('es-NI', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                    const tasaCeroInfo = order.tasaCero?.isTasaCero ? order.tasaCero : getTasaCeroInfoFromDetail(detail);
 
                     return (
                       <>
@@ -947,8 +994,13 @@ export default function OrdenesPage() {
                               {isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
                             </button>
                           </td>
-                          <td style={{ padding: '0.55rem 0.6rem', fontFamily: 'var(--font-mono)', fontWeight: 700, color: '#ffffff' }}>
-                            {order.orderId}
+                          <td style={{ padding: '0.55rem 0.6rem', color: '#ffffff' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                              <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 700 }}>
+                                {order.orderId}
+                              </span>
+                              {renderTasaCeroBadge(tasaCeroInfo)}
+                            </div>
                           </td>
                           <td style={{ padding: '0.55rem 0.6rem', color: 'var(--text-muted)' }}>
                             {formattedDate}
