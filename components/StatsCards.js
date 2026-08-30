@@ -47,7 +47,7 @@ export default function StatsCards({ stats, loading }) {
   ];
 
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '1.25rem', marginBottom: '2rem' }}>
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '1.25rem', marginBottom: '2rem' }} className="mobile-card-grid">
       {cards.map((card, idx) => {
         const IconComponent = card.icon;
         return (

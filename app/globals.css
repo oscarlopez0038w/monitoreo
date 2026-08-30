@@ -200,14 +200,37 @@ body {
 }
 
 /* Responsive Grid, Touch Targets & Mobile Drawer */
+.desktop-only {
+  display: block;
+}
+.mobile-only {
+  display: none !important;
+}
+
 @media (max-width: 768px) {
   body {
     font-size: 14px;
   }
 
+  .desktop-only {
+    display: none !important;
+  }
+
+  .mobile-only {
+    display: block !important;
+  }
+
+  .mobile-only-flex {
+    display: flex !important;
+  }
+
+  .mobile-hide {
+    display: none !important;
+  }
+
   .glass-card {
-    padding: 1rem !important;
-    border-radius: 14px !important;
+    padding: 0.95rem !important;
+    border-radius: 16px !important;
   }
 
   .glass-input, .btn-primary, .btn-secondary, select.glass-input {
@@ -215,8 +238,56 @@ body {
     font-size: 14px !important;
   }
 
-  .mobile-hide {
-    display: none !important;
+  .mobile-stack {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    width: 100% !important;
+  }
+
+  .mobile-stack > * {
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+
+  .mobile-card-grid {
+    display: grid !important;
+    grid-template-columns: 1fr !important;
+    gap: 0.85rem !important;
+  }
+
+  .mobile-full-span {
+    grid-column: 1 / -1 !important;
+    width: 100% !important;
+  }
+
+  .touch-scroll-x {
+    display: flex !important;
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+    scroll-snap-type: x mandatory;
+    gap: 0.65rem !important;
+    padding-bottom: 0.5rem !important;
+  }
+
+  .touch-scroll-x > * {
+    scroll-snap-align: start;
+    flex-shrink: 0;
+  }
+
+  .bottom-sheet-container {
+    border-bottom-left-radius: 0 !important;
+    border-bottom-right-radius: 0 !important;
+    border-top-left-radius: 24px !important;
+    border-top-right-radius: 24px !important;
+    max-height: 94vh !important;
+    height: 94vh !important;
+    position: fixed !important;
+    bottom: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    margin: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
   }
 }
 
@@ -235,3 +306,4 @@ body {
 .animate-drawer-in {
   animation: slideInLeft 0.28s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
+

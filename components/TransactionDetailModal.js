@@ -48,7 +48,7 @@ export default function TransactionDetailModal({ transaction, onClose }) {
         backgroundColor: 'rgba(5, 8, 15, 0.82)',
         backdropFilter: 'blur(10px)',
         WebkitBackdropFilter: 'blur(10px)',
-        zIndex: 9999,
+        zIndex: 99999,
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
@@ -73,6 +73,7 @@ export default function TransactionDetailModal({ transaction, onClose }) {
           color: '#f8fafc',
         }}
         onClick={(e) => e.stopPropagation()}
+        className="bottom-sheet-container"
       >
         {/* MODAL HEADER */}
         <div
@@ -639,7 +640,9 @@ export default function TransactionDetailModal({ transaction, onClose }) {
           {/* TAB 3: SKUS & PRODUCTOS */}
           {activeTab === 'skus' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              {/* VISTA TABLA PARA ESCRITORIO */}
               <div
+                className="skus-desktop-table"
                 style={{
                   border: '1px solid rgba(255, 255, 255, 0.08)',
                   borderRadius: '12px',
@@ -647,13 +650,13 @@ export default function TransactionDetailModal({ transaction, onClose }) {
                   backgroundColor: 'rgba(30, 41, 59, 0.3)',
                 }}
               >
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem' }}>
                   <thead>
                     <tr style={{ background: 'rgba(15, 23, 42, 0.8)', borderBottom: '1px solid rgba(255, 255, 255, 0.08)', textAlign: 'left' }}>
-                      <th style={{ padding: '0.75rem 1rem', color: '#94a3b8', fontWeight: 600 }}>Producto / SKU</th>
-                      <th style={{ padding: '0.75rem 1rem', color: '#94a3b8', fontWeight: 600, textAlign: 'center' }}>Cant.</th>
-                      <th style={{ padding: '0.75rem 1rem', color: '#94a3b8', fontWeight: 600, textAlign: 'right' }}>Precio Unit.</th>
-                      <th style={{ padding: '0.75rem 1rem', color: '#94a3b8', fontWeight: 600, textAlign: 'right' }}>Subtotal</th>
+                      <th style={{ padding: '0.65rem 0.85rem', color: '#94a3b8', fontWeight: 600, fontSize: '0.74rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Producto / SKU</th>
+                      <th style={{ padding: '0.65rem 0.85rem', color: '#94a3b8', fontWeight: 600, fontSize: '0.74rem', textTransform: 'uppercase', letterSpacing: '0.04em', textAlign: 'center' }}>Cant.</th>
+                      <th style={{ padding: '0.65rem 0.85rem', color: '#94a3b8', fontWeight: 600, fontSize: '0.74rem', textTransform: 'uppercase', letterSpacing: '0.04em', textAlign: 'right' }}>Precio Unit.</th>
+                      <th style={{ padding: '0.65rem 0.85rem', color: '#94a3b8', fontWeight: 600, fontSize: '0.74rem', textTransform: 'uppercase', letterSpacing: '0.04em', textAlign: 'right' }}>Subtotal</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -662,57 +665,162 @@ export default function TransactionDetailModal({ transaction, onClose }) {
                         key={idx}
                         style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.05)', transition: 'background 0.2s' }}
                       >
-                        <td style={{ padding: '0.85rem 1rem' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem' }}>
+                        <td style={{ padding: '0.7rem 0.85rem' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                             {item.imageUrl ? (
                               <img
                                 src={item.imageUrl}
                                 alt={item.name}
                                 style={{
-                                  width: '44px',
-                                  height: '44px',
+                                  width: '40px',
+                                  height: '40px',
                                   objectFit: 'contain',
-                                  borderRadius: '8px',
+                                  borderRadius: '6px',
                                   background: '#ffffff',
                                   padding: '2px',
+                                  flexShrink: 0,
                                 }}
                               />
                             ) : (
                               <div
                                 style={{
-                                  width: '44px',
-                                  height: '44px',
-                                  borderRadius: '8px',
+                                  width: '40px',
+                                  height: '40px',
+                                  borderRadius: '6px',
                                   background: 'rgba(255,255,255,0.05)',
                                   display: 'flex',
                                   alignItems: 'center',
                                   justifyContent: 'center',
+                                  flexShrink: 0,
                                 }}
                               >
-                                <Package size={20} color="#64748b" />
+                                <Package size={18} color="#64748b" />
                               </div>
                             )}
                             <div>
-                              <strong style={{ color: '#ffffff', display: 'block', fontSize: '0.88rem' }}>{item.name}</strong>
-                              <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>
+                              <strong style={{ color: '#ffffff', display: 'block', fontSize: '0.84rem', lineHeight: '1.3', fontWeight: 600 }}>{item.name}</strong>
+                              <span style={{ fontSize: '0.72rem', color: '#94a3b8' }}>
                                 SKU: <code style={{ color: '#38bdf8' }}>{item.id}</code> • Marca: {item.brand}
                               </span>
                             </div>
                           </div>
                         </td>
-                        <td style={{ padding: '0.85rem 1rem', textAlign: 'center', fontWeight: 600, color: '#f1f5f9' }}>
+                        <td style={{ padding: '0.7rem 0.85rem', textAlign: 'center', fontWeight: 600, color: '#f1f5f9', fontSize: '0.84rem' }}>
                           {item.quantity}
                         </td>
-                        <td style={{ padding: '0.85rem 1rem', textAlign: 'right', color: '#cbd5e1' }}>
+                        <td style={{ padding: '0.7rem 0.85rem', textAlign: 'right', color: '#cbd5e1', fontSize: '0.82rem' }}>
                           C$ {item.unitPrice?.toLocaleString('es-NI', { minimumFractionDigits: 2 })}
                         </td>
-                        <td style={{ padding: '0.85rem 1rem', textAlign: 'right', fontWeight: 700, color: '#38bdf8' }}>
+                        <td style={{ padding: '0.7rem 0.85rem', textAlign: 'right', fontWeight: 700, color: '#38bdf8', fontSize: '0.84rem' }}>
                           C$ {item.totalPrice?.toLocaleString('es-NI', { minimumFractionDigits: 2 })}
                         </td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
+              </div>
+
+              {/* VISTA TARJETAS CARDS PARA MÓVIL */}
+              <div className="skus-mobile-cards">
+                {transaction.skus?.map((item, idx) => (
+                  <div
+                    key={idx}
+                    style={{
+                      backgroundColor: 'rgba(30, 41, 59, 0.45)',
+                      border: '1px solid rgba(255, 255, 255, 0.08)',
+                      borderRadius: '12px',
+                      padding: '0.85rem',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '0.75rem',
+                    }}
+                  >
+                    {/* ENCABEZADO PRODUCTO + IMAGEN */}
+                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.75rem' }}>
+                      {item.imageUrl ? (
+                        <img
+                          src={item.imageUrl}
+                          alt={item.name}
+                          style={{
+                            width: '44px',
+                            height: '44px',
+                            objectFit: 'contain',
+                            borderRadius: '8px',
+                            background: '#ffffff',
+                            padding: '2px',
+                            flexShrink: 0,
+                          }}
+                        />
+                      ) : (
+                        <div
+                          style={{
+                            width: '44px',
+                            height: '44px',
+                            borderRadius: '8px',
+                            background: 'rgba(255,255,255,0.06)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            flexShrink: 0,
+                          }}
+                        >
+                          <Package size={20} color="#64748b" />
+                        </div>
+                      )}
+
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem', flex: 1, minWidth: 0 }}>
+                        <strong style={{ color: '#ffffff', fontSize: '0.84rem', lineHeight: '1.3', fontWeight: 700 }}>
+                          {item.name}
+                        </strong>
+                        <div style={{ fontSize: '0.72rem', color: '#94a3b8', display: 'flex', flexWrap: 'wrap', gap: '0.4rem' }}>
+                          <span>SKU: <code style={{ color: '#38bdf8' }}>{item.id}</code></span>
+                          {item.brand && <span>• Marca: <strong style={{ color: '#cbd5e1' }}>{item.brand}</strong></span>}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* BARRA INFERIOR CON DETALLES DE CANTIDAD, PRECIO UNITARIO Y SUBTOTAL */}
+                    <div
+                      style={{
+                        display: 'grid',
+                        gridTemplateColumns: 'repeat(3, 1fr)',
+                        gap: '0.5rem',
+                        backgroundColor: 'rgba(15, 23, 42, 0.6)',
+                        padding: '0.55rem 0.65rem',
+                        borderRadius: '8px',
+                        border: '1px solid rgba(255, 255, 255, 0.05)',
+                        alignItems: 'center',
+                      }}
+                    >
+                      <div>
+                        <span style={{ fontSize: '0.68rem', color: '#94a3b8', display: 'block', textTransform: 'uppercase', fontWeight: 600 }}>
+                          Cant.
+                        </span>
+                        <strong style={{ fontSize: '0.82rem', color: '#f1f5f9', fontWeight: 700 }}>
+                          {item.quantity} unid.
+                        </strong>
+                      </div>
+
+                      <div style={{ textAlign: 'center' }}>
+                        <span style={{ fontSize: '0.68rem', color: '#94a3b8', display: 'block', textTransform: 'uppercase', fontWeight: 600 }}>
+                          Precio Unit.
+                        </span>
+                        <span style={{ fontSize: '0.78rem', color: '#cbd5e1', fontWeight: 600 }}>
+                          C$ {item.unitPrice?.toLocaleString('es-NI', { minimumFractionDigits: 2 })}
+                        </span>
+                      </div>
+
+                      <div style={{ textAlign: 'right' }}>
+                        <span style={{ fontSize: '0.68rem', color: '#94a3b8', display: 'block', textTransform: 'uppercase', fontWeight: 600 }}>
+                          Subtotal
+                        </span>
+                        <strong style={{ fontSize: '0.82rem', color: '#38bdf8', fontWeight: 800 }}>
+                          C$ {item.totalPrice?.toLocaleString('es-NI', { minimumFractionDigits: 2 })}
+                        </strong>
+                      </div>
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
           )}
@@ -993,6 +1101,25 @@ export default function TransactionDetailModal({ transaction, onClose }) {
           </button>
         </div>
       </div>
+
+      <style jsx>{`
+        .skus-desktop-table {
+          display: block;
+        }
+        .skus-mobile-cards {
+          display: none;
+        }
+        @media (max-width: 768px) {
+          .skus-desktop-table {
+            display: none !important;
+          }
+          .skus-mobile-cards {
+            display: flex !important;
+            flex-direction: column;
+            gap: 0.75rem;
+          }
+        }
+      `}</style>
     </div>
   );
 }

@@ -670,8 +670,8 @@ export default function PricesTable() {
           </div>
         </div>
 
-        {/* Scrollable Prices Table */}
-        <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch', borderRadius: '12px', border: '1px solid var(--border-subtle)', width: '100%' }}>
+        {/* Scrollable Prices Table (Desktop >=769px) */}
+        <div className="desktop-only" style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch', borderRadius: '12px', border: '1px solid var(--border-subtle)', width: '100%' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.8rem', tableLayout: 'auto' }}>
             <thead>
               <tr style={{ background: 'rgba(15, 23, 42, 0.95)', borderBottom: '1px solid var(--border-subtle)', color: 'var(--text-muted)', fontSize: '0.72rem', textTransform: 'uppercase' }}>
@@ -753,27 +753,22 @@ export default function PricesTable() {
                       }}
                       className="hover-row"
                     >
-                      {/* SKU ID */}
                       <td style={{ padding: '0.6rem 0.75rem', fontFamily: 'var(--font-mono)', fontWeight: 700, color: 'var(--accent-primary)' }}>
                         {sku.id}
                       </td>
 
-                      {/* Descripción */}
                       <td style={{ padding: '0.6rem 0.75rem', color: '#ffffff', fontWeight: 500, maxWidth: '300px' }}>
                         {sku.description}
                       </td>
 
-                      {/* Precio de Lista */}
                       <td style={{ padding: '0.6rem 0.75rem', textAlign: 'right', fontFamily: 'var(--font-mono)', color: sku.discountPct > 0 ? 'var(--text-dim)' : 'var(--text-muted)', textDecoration: sku.discountPct > 0 ? 'line-through' : 'none' }}>
                         {sku.listPrice !== null ? `C$ ${sku.listPrice.toLocaleString('es-NI', { minimumFractionDigits: 2 })}` : '—'}
                       </td>
 
-                      {/* Precio Base / Venta */}
                       <td style={{ padding: '0.6rem 0.75rem', textAlign: 'right', fontFamily: 'var(--font-mono)', fontWeight: 700, color: sku.basePrice !== null ? '#34d399' : 'var(--text-dim)', fontSize: '0.88rem' }}>
                         {sku.basePrice !== null ? `C$ ${sku.basePrice.toLocaleString('es-NI', { minimumFractionDigits: 2 })}` : '—'}
                       </td>
 
-                      {/* Descuento % Badge */}
                       <td style={{ padding: '0.6rem 0.75rem', textAlign: 'center' }}>
                         {sku.discountPct > 0 ? (
                           <span
@@ -787,28 +782,16 @@ export default function PricesTable() {
                         )}
                       </td>
 
-                      {/* Última Actualización */}
                       <td style={{ padding: '0.6rem 0.75rem', textAlign: 'center', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
                         {sku.priceUpdatedAt ? new Date(sku.priceUpdatedAt).toLocaleString('es-NI') : 'Pendiente'}
                       </td>
 
-                      {/* ACCIONES: Botones Editar y Refrescar */}
                       <td style={{ padding: '0.6rem 0.75rem', textAlign: 'center' }}>
                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem' }}>
                           <button
                             onClick={() => handleOpenEditModal(sku)}
                             className="btn-secondary"
-                            style={{
-                              padding: '0.25rem 0.6rem',
-                              fontSize: '0.74rem',
-                              minHeight: '30px',
-                              color: '#a5b4fc',
-                              borderColor: 'rgba(165, 180, 252, 0.4)',
-                              background: 'rgba(165, 180, 252, 0.1)',
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: '0.3rem',
-                            }}
+                            style={{ padding: '0.25rem 0.55rem', fontSize: '0.72rem', minHeight: '30px', display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}
                             title="Editar Cost Price, Base Price y Fixed Prices en VTEX"
                           >
                             <Edit3 size={13} /> Editar
@@ -832,6 +815,97 @@ export default function PricesTable() {
               )}
             </tbody>
           </table>
+        </div>
+
+        {/* Mobile Price Cards Grid (<769px) */}
+        <div className="mobile-only" style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
+          {loading ? (
+            <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-muted)' }}>
+              <RefreshCw size={22} className="animate-spin" color="var(--accent-primary)" style={{ margin: '0 auto 0.5rem auto' }} />
+              Cargando catálogo de precios...
+            </div>
+          ) : skus.length === 0 ? (
+            <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-muted)' }}>
+              No hay precios registrados.
+            </div>
+          ) : (
+            skus.map((sku) => {
+              const isUpdatingThis = updatingSkuId === sku.id;
+
+              return (
+                <div
+                  key={sku.id}
+                  style={{
+                    background: 'rgba(15, 23, 42, 0.85)',
+                    border: '1px solid var(--border-subtle)',
+                    borderRadius: '14px',
+                    padding: '0.95rem',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '0.75rem',
+                    boxShadow: '0 4px 15px rgba(0,0,0,0.3)',
+                  }}
+                >
+                  {/* Header: SKU ID & Descuento Badge */}
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid rgba(255,255,255,0.06)', paddingBottom: '0.5rem' }}>
+                    <span style={{ fontSize: '0.92rem', fontWeight: 800, color: '#38bdf8', fontFamily: 'var(--font-mono)' }}>
+                      SKU #{sku.id}
+                    </span>
+
+                    {sku.discountPct > 0 ? (
+                      <span className="badge badge-emerald" style={{ padding: '0.25rem 0.6rem', fontSize: '0.76rem', fontWeight: 800 }}>
+                        -{sku.discountPct}% OFF
+                      </span>
+                    ) : (
+                      <span style={{ fontSize: '0.72rem', color: 'var(--text-dim)' }}>Precio Estándar</span>
+                    )}
+                  </div>
+
+                  {/* Descripción Producto */}
+                  <p style={{ fontSize: '0.85rem', color: '#ffffff', margin: 0, fontWeight: 500, lineHeight: 1.3 }}>
+                    {sku.description || 'Sin descripción'}
+                  </p>
+
+                  {/* Desglose de Precios (MSRP vs Base Venta) */}
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'rgba(0,0,0,0.3)', padding: '0.65rem 0.85rem', borderRadius: '10px' }}>
+                    <div>
+                      <span style={{ fontSize: '0.68rem', color: 'var(--text-dim)', display: 'block' }}>MSRP (Precio Lista)</span>
+                      <span style={{ fontSize: '0.84rem', color: sku.discountPct > 0 ? '#94a3b8' : '#ffffff', textDecoration: sku.discountPct > 0 ? 'line-through' : 'none', fontFamily: 'var(--font-mono)' }}>
+                        {sku.listPrice !== null ? `C$ ${sku.listPrice.toLocaleString('es-NI', { minimumFractionDigits: 2 })}` : '—'}
+                      </span>
+                    </div>
+
+                    <div style={{ textAlign: 'right' }}>
+                      <span style={{ fontSize: '0.68rem', color: '#34d399', display: 'block', fontWeight: 700 }}>PRECIO BASE (VENTA)</span>
+                      <strong style={{ fontSize: '1.05rem', color: '#34d399', fontFamily: 'var(--font-mono)', fontWeight: 800 }}>
+                        {sku.basePrice !== null ? `C$ ${sku.basePrice.toLocaleString('es-NI', { minimumFractionDigits: 2 })}` : '—'}
+                      </strong>
+                    </div>
+                  </div>
+
+                  {/* Botones de Acción Móvil */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <button
+                      onClick={() => handleOpenEditModal(sku)}
+                      className="btn-primary"
+                      style={{ flex: 1, minHeight: '38px', fontSize: '0.8rem', justifyContent: 'center', borderRadius: '8px' }}
+                    >
+                      <Edit3 size={15} /> Editar Precio
+                    </button>
+
+                    <button
+                      onClick={() => handleRefreshSingleSku(sku.id)}
+                      disabled={isUpdatingThis}
+                      className="btn-secondary"
+                      style={{ minHeight: '38px', fontSize: '0.8rem', padding: '0 0.85rem', borderRadius: '8px' }}
+                    >
+                      <RefreshCw size={15} className={isUpdatingThis ? 'animate-spin' : ''} />
+                    </button>
+                  </div>
+                </div>
+              );
+            })
+          )}
         </div>
 
         {/* Table Pagination Footer */}
@@ -876,7 +950,7 @@ export default function PricesTable() {
             backgroundColor: 'rgba(11, 15, 25, 0.85)',
             backdropFilter: 'blur(12px)',
             WebkitBackdropFilter: 'blur(12px)',
-            zIndex: 9999,
+            zIndex: 99999,
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
@@ -899,6 +973,7 @@ export default function PricesTable() {
               boxSizing: 'border-box',
             }}
             onClick={(e) => e.stopPropagation()}
+            className="bottom-sheet-container"
           >
             {/* Modal Header */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1.25rem', borderBottom: '1px solid rgba(255, 255, 255, 0.1)', paddingBottom: '0.85rem' }}>

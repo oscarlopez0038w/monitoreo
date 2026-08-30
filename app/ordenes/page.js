@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, Fragment } from 'react';
 import AppLayout from '@/components/AppLayout';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import { getNicaraguaNow } from '@/lib/dateUtils';
@@ -446,8 +446,8 @@ export default function OrdenesPage() {
     <AppLayout>
       <main style={{ maxWidth: '1600px', margin: '0 auto', width: '100%' }}>
         
-        {/* Header Header & Title */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem', marginBottom: '1.5rem' }}>
+        {/* 1. Header & Title para Escritorio (desktop-only: Intacto Original) */}
+        <div className="desktop-only" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem', marginBottom: '1.5rem' }}>
           <div>
             <h1 style={{ fontSize: '1.35rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.5rem', background: 'linear-gradient(to right, #ffffff, #94a3b8)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', margin: 0 }}>
               <ShoppingCart size={24} color="#34d399" />
@@ -479,6 +479,48 @@ export default function OrdenesPage() {
             <button onClick={() => fetchOrders(paging.currentPage)} disabled={loading} className="btn-secondary" style={{ padding: '0.45rem 0.85rem', fontSize: '0.82rem' }}>
               <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
               Actualizar Órdenes
+            </button>
+          </div>
+        </div>
+
+        {/* 2. Header & Title para Móvil (mobile-only: 1 Sola Línea sin Scroll) */}
+        <div className="mobile-only" style={{ marginBottom: '1rem' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.65rem', gap: '0.5rem' }}>
+            <h1 style={{ fontSize: '1.2rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.4rem', background: 'linear-gradient(to right, #ffffff, #94a3b8)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', margin: 0 }}>
+              <ShoppingCart size={20} color="#34d399" />
+              Órdenes
+            </h1>
+
+            <button
+              onClick={handleExportAllOrders}
+              disabled={exportingAll}
+              className="btn-secondary"
+              style={{ padding: '0.25rem 0.55rem', fontSize: '0.72rem', height: '30px', minHeight: '30px', borderColor: 'rgba(52, 211, 153, 0.4)', color: '#34d399', borderRadius: '7px', display: 'inline-flex', alignItems: 'center', gap: '0.25rem', whiteSpace: 'nowrap', flexShrink: 0 }}
+            >
+              <FileSpreadsheet size={12} className={exportingAll ? 'animate-spin' : ''} />
+              {exportingAll ? 'Exportando...' : 'Descargar Órdenes'}
+            </button>
+          </div>
+
+          <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center', width: '100%' }}>
+            <button
+              onClick={handleActivateWebhook}
+              disabled={registeringHook}
+              className="btn-primary"
+              style={{ flex: 1, padding: '0.25rem 0.45rem', fontSize: '0.7rem', height: '30px', minHeight: '30px', borderRadius: '7px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '0.25rem', whiteSpace: 'nowrap' }}
+            >
+              <Zap size={12} className={registeringHook ? 'animate-spin' : ''} />
+              {registeringHook ? 'Activando...' : '⚡ Webhook VTEX'}
+            </button>
+
+            <button
+              onClick={() => fetchOrders(paging.currentPage)}
+              disabled={loading}
+              className="btn-secondary"
+              style={{ flex: 1, padding: '0.25rem 0.45rem', fontSize: '0.7rem', height: '30px', minHeight: '30px', borderRadius: '7px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '0.25rem', whiteSpace: 'nowrap' }}
+            >
+              <RefreshCw size={12} className={loading ? 'animate-spin' : ''} />
+              {loading ? 'Cargando...' : 'Actualizar'}
             </button>
           </div>
         </div>
@@ -724,7 +766,7 @@ export default function OrdenesPage() {
         </div>
 
         {/* Metric Cards Summary - Alineación Uniforme & Z-Index Elevado */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '0.75rem', marginBottom: '1.25rem', alignItems: 'stretch', position: 'relative', zIndex: 50 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(135px, 1fr))', gap: '0.75rem', marginBottom: '1.25rem', alignItems: 'stretch', position: 'relative', zIndex: 50 }}>
           
           {/* Card 1: Total Órdenes */}
           <div className="glass-card" style={{ padding: '0.75rem 0.85rem', display: 'flex', flexDirection: 'column', justifyContent: 'center', textAlign: 'center', minHeight: '115px' }}>
@@ -767,7 +809,7 @@ export default function OrdenesPage() {
           </div>
 
           {/* Card 6: Tipo de Entrega (Pickup vs Delivery) */}
-          <div className="glass-card" style={{ padding: '0.65rem 0.85rem', background: 'linear-gradient(135deg, rgba(15, 23, 42, 0.9), rgba(30, 41, 59, 0.95))', border: '1px solid rgba(56, 189, 248, 0.3)', gridColumn: 'span 1', minWidth: '210px', display: 'flex', flexDirection: 'column', justifyContent: 'center', minHeight: '115px' }}>
+          <div className="glass-card mobile-full-span" style={{ padding: '0.65rem 0.85rem', background: 'linear-gradient(135deg, rgba(15, 23, 42, 0.9), rgba(30, 41, 59, 0.95))', border: '1px solid rgba(56, 189, 248, 0.3)', display: 'flex', flexDirection: 'column', justifyContent: 'center', minHeight: '115px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.3rem' }}>
               <span style={{ fontSize: '0.7rem', color: 'var(--text-dim)', textTransform: 'uppercase', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
                 <Truck size={12} color="#38bdf8" /> Tipo de Entrega
@@ -804,7 +846,7 @@ export default function OrdenesPage() {
           </div>
 
           {/* Card 7: Top Tiendas Pickup (Superpuesta con Z-Index Máximo) */}
-          <div className="glass-card" style={{ padding: '0.65rem 0.85rem', background: 'linear-gradient(135deg, rgba(15, 23, 42, 0.95), rgba(30, 41, 59, 0.98))', border: '1px solid rgba(129, 140, 248, 0.35)', gridColumn: 'span 1', minWidth: '220px', position: 'relative', zIndex: 100, minHeight: '115px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+          <div className="glass-card mobile-full-span" style={{ padding: '0.65rem 0.85rem', background: 'linear-gradient(135deg, rgba(15, 23, 42, 0.95), rgba(30, 41, 59, 0.98))', border: '1px solid rgba(129, 140, 248, 0.35)', position: 'relative', zIndex: 100, minHeight: '115px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
             <div>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.3rem' }}>
                 <span style={{ fontSize: '0.7rem', color: 'var(--text-dim)', textTransform: 'uppercase', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
@@ -925,9 +967,11 @@ export default function OrdenesPage() {
 
         </div>
 
-        {/* Orders Table Container con Z-Index Bajo */}
+        {/* Orders Table & Cards Container con Z-Index Bajo */}
         <div className="glass-card" style={{ padding: '1.25rem', position: 'relative', zIndex: 1 }}>
-          <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch', borderRadius: '12px', border: '1px solid var(--border-subtle)', width: '100%' }}>
+          
+          {/* 1. Vista de Tabla para Escritorio (≥769px) */}
+          <div className="desktop-only" style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch', borderRadius: '12px', border: '1px solid var(--border-subtle)', width: '100%' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.8rem', tableLayout: 'auto' }}>
               <thead>
                 <tr style={{ background: 'rgba(15, 23, 42, 0.95)', borderBottom: '1px solid var(--border-subtle)', color: 'var(--text-muted)', fontSize: '0.72rem', textTransform: 'uppercase' }}>
@@ -984,8 +1028,8 @@ export default function OrdenesPage() {
                     const tasaCeroInfo = order.tasaCero?.isTasaCero ? order.tasaCero : getTasaCeroInfoFromDetail(detail);
 
                     return (
-                      <>
-                        <tr key={order.orderId} style={{ borderBottom: '1px solid var(--border-subtle)', background: isExpanded ? 'rgba(56, 189, 248, 0.04)' : 'transparent' }}>
+                      <Fragment key={order.orderId}>
+                        <tr style={{ borderBottom: '1px solid var(--border-subtle)', background: isExpanded ? 'rgba(56, 189, 248, 0.04)' : 'transparent' }}>
                           <td style={{ padding: '0.55rem 0.6rem', textAlign: 'center' }}>
                             <button
                               onClick={() => toggleExpandOrder(order.orderId)}
@@ -1315,12 +1359,221 @@ export default function OrdenesPage() {
                             </td>
                           </tr>
                         )}
-                      </>
+                      </Fragment>
                     );
                   })
                 )}
               </tbody>
             </table>
+          </div>
+
+          {/* 2. Vista de Tarjetas Táctiles para Móvil (≤768px) */}
+          <div className="mobile-only" style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
+            {loading && orders.length === 0 ? (
+              <div style={{ padding: '3rem 1rem', textAlign: 'center', color: 'var(--text-muted)' }}>
+                <RefreshCw size={24} className="animate-spin" style={{ margin: '0 auto 0.5rem auto', color: 'var(--accent-primary)' }} />
+                Consultando órdenes en VTEX OMS...
+              </div>
+            ) : orders.length === 0 ? (
+              <div style={{ padding: '3rem 1rem', textAlign: 'center', color: 'var(--text-muted)' }}>
+                <Package size={32} style={{ margin: '0 auto 0.75rem auto', opacity: 0.4 }} />
+                <p style={{ fontWeight: 500, color: 'var(--text-main)' }}>No se encontraron órdenes en el rango seleccionado</p>
+                <p style={{ fontSize: '0.8rem', color: 'var(--text-dim)' }}>Prueba ampliando el rango de fechas.</p>
+              </div>
+            ) : (
+              orders.map((order) => {
+                const isExpanded = expandedOrderId === order.orderId;
+                const detail = orderDetails[order.orderId];
+                const formattedDate = order.creationDate
+                  ? new Date(order.creationDate).toLocaleString('es-NI', { dateStyle: 'short', timeStyle: 'short' })
+                  : '-';
+
+                const totalFormatted = (order.totalValue ? order.totalValue / 100 : 0).toLocaleString('es-NI', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                const tasaCeroInfo = order.tasaCero?.isTasaCero ? order.tasaCero : getTasaCeroInfoFromDetail(detail);
+
+                return (
+                  <div
+                    key={order.orderId}
+                    style={{
+                      backgroundColor: isExpanded ? 'rgba(56, 189, 248, 0.08)' : 'rgba(30, 41, 59, 0.6)',
+                      border: `1px solid ${isExpanded ? 'rgba(56, 189, 248, 0.35)' : 'rgba(255, 255, 255, 0.08)'}`,
+                      borderRadius: '14px',
+                      padding: '0.95rem',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '0.75rem',
+                      boxShadow: '0 4px 15px rgba(0, 0, 0, 0.25)',
+                    }}
+                  >
+                    {/* Header Card Móvil: ID Orden + Badge Tasa 0 + Estado OMS */}
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem', flexWrap: 'wrap' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap' }}>
+                        <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 800, fontSize: '0.92rem', color: '#ffffff' }}>
+                          #{order.orderId}
+                        </span>
+                        {renderTasaCeroBadge(tasaCeroInfo)}
+                      </div>
+                      {renderStatusBadge(order.status, order.statusDescription)}
+                    </div>
+
+                    {/* Fila 2: Fecha de Creación & Nombre del Cliente */}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.5rem', fontSize: '0.78rem' }}>
+                      <span style={{ color: '#94a3b8', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+                        <Calendar size={12} color="#64748b" /> {formattedDate}
+                      </span>
+                      <span style={{ color: '#ffffff', fontWeight: 600, maxWidth: '150px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        👤 {order.clientName || 'Cliente General'}
+                      </span>
+                    </div>
+
+                    {/* Fila 3: Caja Destacada de Total C$ + Método de Entrega */}
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'rgba(0, 0, 0, 0.35)', padding: '0.65rem 0.85rem', borderRadius: '10px', gap: '0.5rem' }}>
+                      <div>
+                        <span style={{ fontSize: '0.66rem', color: '#94a3b8', display: 'block', fontWeight: 600 }}>TOTAL ORDEN</span>
+                        <strong style={{ fontSize: '1.05rem', color: '#10b981', fontFamily: 'var(--font-mono)', fontWeight: 800 }}>
+                          C$ {totalFormatted}
+                        </strong>
+                      </div>
+
+                      <div>
+                        {order.fulfillmentType === 'pickup' ? (
+                          <span
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '0.3rem',
+                              padding: '0.25rem 0.55rem',
+                              borderRadius: '12px',
+                              fontSize: '0.72rem',
+                              fontWeight: 700,
+                              background: 'rgba(56, 189, 248, 0.15)',
+                              color: '#38bdf8',
+                              border: '1px solid rgba(56, 189, 248, 0.3)',
+                              maxWidth: '150px',
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                              whiteSpace: 'nowrap',
+                            }}
+                            title={order.pickupStore ? `Tienda: ${order.pickupStore}` : 'Retiro en Tienda'}
+                          >
+                            <Store size={12} style={{ flexShrink: 0 }} />
+                            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                              {order.pickupStore ? `Pickup (${order.pickupStore})` : 'Pickup Store'}
+                            </span>
+                          </span>
+                        ) : (
+                          <span
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '0.3rem',
+                              padding: '0.25rem 0.55rem',
+                              borderRadius: '12px',
+                              fontSize: '0.72rem',
+                              fontWeight: 700,
+                              background: 'rgba(52, 211, 153, 0.15)',
+                              color: '#34d399',
+                              border: '1px solid rgba(52, 211, 153, 0.3)',
+                            }}
+                          >
+                            <Truck size={12} style={{ flexShrink: 0 }} />
+                            <span>Delivery</span>
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Botón Ver/Ocultar Detalle */}
+                    <button
+                      onClick={() => toggleExpandOrder(order.orderId)}
+                      className="btn-secondary"
+                      style={{
+                        width: '100%',
+                        padding: '0.45rem',
+                        fontSize: '0.78rem',
+                        fontWeight: 600,
+                        borderRadius: '8px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '0.4rem',
+                        backgroundColor: isExpanded ? 'rgba(56, 189, 248, 0.15)' : 'rgba(255, 255, 255, 0.05)',
+                        color: isExpanded ? '#38bdf8' : '#e2e8f0',
+                        border: `1px solid ${isExpanded ? 'rgba(56, 189, 248, 0.3)' : 'rgba(255, 255, 255, 0.1)'}`,
+                      }}
+                    >
+                      {isExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                      {isExpanded ? 'Ocultar Items & Detalle' : 'Ver Items, SKUs & Dirección'}
+                    </button>
+
+                    {/* Detalle Expandido en Móvil */}
+                    {isExpanded && (
+                      <div style={{ marginTop: '0.4rem', paddingTop: '0.75rem', borderTop: '1px dashed rgba(255, 255, 255, 0.1)' }}>
+                        {loadingDetailId === order.orderId ? (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--text-muted)', fontSize: '0.78rem' }}>
+                            <RefreshCw size={14} className="animate-spin" color="var(--accent-primary)" />
+                            Cargando items de la orden #{order.orderId}...
+                          </div>
+                        ) : detail ? (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
+                            {/* Información de Dirección y Destinatario */}
+                            {(() => {
+                              const addr = detail.shippingData?.address || {};
+                              const receiverName = addr.receiverName || order.clientName || 'Cliente General';
+                              const fullAddressParts = [addr.street, addr.number, addr.neighborhood, addr.city, addr.state].filter(Boolean);
+                              const fullAddress = fullAddressParts.length > 0 ? fullAddressParts.join(', ') : 'Dirección no especificada';
+
+                              return (
+                                <div style={{ background: 'rgba(15, 23, 42, 0.85)', padding: '0.75rem', borderRadius: '10px', border: '1px solid rgba(56, 189, 248, 0.25)', fontSize: '0.76rem', display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
+                                  <span style={{ color: '#38bdf8', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+                                    <MapPin size={12} /> Destinatario & Entrega
+                                  </span>
+                                  <div style={{ color: '#ffffff', fontWeight: 700 }}>👤 {receiverName}</div>
+                                  <div style={{ color: '#94a3b8' }}>📍 {fullAddress}</div>
+                                </div>
+                              );
+                            })()}
+
+                            {/* Lista de Items/SKUs de la orden */}
+                            {detail.items && detail.items.length > 0 && (
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                                <span style={{ fontSize: '0.72rem', color: '#94a3b8', fontWeight: 700, textTransform: 'uppercase' }}>
+                                  📦 Productos en la Orden ({detail.items.length})
+                                </span>
+                                {detail.items.map((item, idx) => {
+                                  const sellingP = (item.sellingPrice || item.price ? (item.sellingPrice || item.price) / 100 : 0);
+                                  const quantity = item.quantity || 1;
+                                  const totalItemVal = sellingP * quantity;
+
+                                  return (
+                                    <div key={idx} style={{ background: 'rgba(15, 23, 42, 0.9)', padding: '0.65rem 0.75rem', borderRadius: '8px', border: '1px solid rgba(255, 255, 255, 0.06)', display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.5rem' }}>
+                                        <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#ffffff', flex: 1 }}>
+                                          {item.name || item.skuName || 'Producto SINSA'}
+                                        </span>
+                                        <span style={{ fontSize: '0.72rem', padding: '0.15rem 0.45rem', borderRadius: '6px', background: 'rgba(251, 191, 36, 0.15)', color: '#fbbf24', fontWeight: 700, flexShrink: 0 }}>
+                                          {quantity} unid.
+                                        </span>
+                                      </div>
+                                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.74rem', marginTop: '0.2rem' }}>
+                                        <span style={{ color: '#94a3b8', fontFamily: 'var(--font-mono)' }}>SKU: {item.id || item.sellerSku}</span>
+                                        <strong style={{ color: '#10b981', fontFamily: 'var(--font-mono)' }}>C$ {totalItemVal.toLocaleString('es-NI', { minimumFractionDigits: 2 })}</strong>
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          <span style={{ color: '#94a3b8', fontSize: '0.78rem' }}>No se pudo obtener el detalle de items.</span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })
+            )}
           </div>
 
           {/* Pagination Footer */}

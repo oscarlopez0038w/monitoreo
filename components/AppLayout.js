@@ -261,8 +261,12 @@ export default function AppLayout({ children }) {
         @media (max-width: 768px) {
           .mobile-header {
             display: flex !important;
+            z-index: 100 !important;
           }
           .app-main-content {
+            width: 100% !important;
+            max-width: 100vw !important;
+            overflow-x: hidden !important;
             padding: 1rem 0.85rem 2rem 0.85rem !important;
           }
         }

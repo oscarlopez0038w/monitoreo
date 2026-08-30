@@ -356,7 +356,7 @@ export default function CartSimulator() {
         }}
       >
         {/* Selector de Pestaña: Excel / Manual */}
-        <div style={{ display: 'flex', gap: '1rem', borderBottom: '1px solid var(--border-subtle)', pb: '1rem', marginBottom: '1.25rem' }}>
+        <div style={{ display: 'flex', gap: '1rem', borderBottom: '1px solid var(--border-subtle)', pb: '1rem', marginBottom: '1.25rem', flexWrap: 'wrap' }} className="mobile-stack">
           <button
             onClick={() => setActiveTab('excel')}
             style={{

@@ -213,8 +213,8 @@ export default function SkuTable({ onRefreshNeeded, refreshTrigger }) {
         </div>
       </div>
 
-      {/* Table Element */}
-      <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch', borderRadius: '12px', border: '1px solid var(--border-subtle)', width: '100%' }}>
+      {/* Table Element (Desktop >=769px) */}
+      <div className="desktop-only" style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch', borderRadius: '12px', border: '1px solid var(--border-subtle)', width: '100%' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.78rem', tableLayout: 'auto' }}>
           <thead>
             {/* Fila 1: Encabezados Principales y Grupos */}
@@ -437,7 +437,6 @@ export default function SkuTable({ onRefreshNeeded, refreshTrigger }) {
                   </td>
                   <td style={{ padding: '0.45rem 0.35rem', textAlign: 'right', whiteSpace: 'nowrap' }}>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '0.3rem' }}>
-                      {/* Botón Switch de Activar/Desactivar SKU (Icono Compacto) */}
                       <button
                         onClick={() => handleToggleSkuActive(sku.id, sku.is_active !== false)}
                         disabled={togglingActiveSkuId === sku.id}
@@ -465,7 +464,6 @@ export default function SkuTable({ onRefreshNeeded, refreshTrigger }) {
                         )}
                       </button>
 
-                      {/* Botón de Refrescar Inventario de SKU (Icono Compacto) */}
                       <button
                         onClick={() => handleSingleSkuRefresh(sku.id)}
                         disabled={updatingSkuId === sku.id}
@@ -493,6 +491,119 @@ export default function SkuTable({ onRefreshNeeded, refreshTrigger }) {
             )}
           </tbody>
         </table>
+      </div>
+
+      {/* Mobile SKU Card Grid (<769px) */}
+      <div className="mobile-only" style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
+        {loading && skus.length === 0 ? (
+          <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-muted)' }}>
+            <RefreshCw size={24} className="animate-spin" style={{ margin: '0 auto 0.5rem auto', color: 'var(--accent-primary)' }} />
+            Cargando SKUs...
+          </div>
+        ) : skus.length === 0 ? (
+          <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-muted)' }}>
+            No hay SKUs registrados.
+          </div>
+        ) : (
+          skus.map((sku) => {
+            const isUnderSafety = (sku.safety_stock || 0) > 0 && (sku.total_stock || 0) < sku.safety_stock;
+
+            return (
+              <div
+                key={sku.id}
+                style={{
+                  background: 'rgba(15, 23, 42, 0.85)',
+                  border: isUnderSafety ? '1px solid rgba(251, 191, 36, 0.4)' : '1px solid var(--border-subtle)',
+                  borderRadius: '14px',
+                  padding: '0.95rem',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '0.75rem',
+                  boxShadow: '0 4px 15px rgba(0,0,0,0.3)',
+                }}
+              >
+                {/* Header: SKU ID & Badges */}
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid rgba(255,255,255,0.06)', paddingBottom: '0.5rem' }}>
+                  <span style={{ fontSize: '0.95rem', fontWeight: 800, color: '#38bdf8', fontFamily: 'var(--font-mono)' }}>
+                    SKU #{sku.id}
+                  </span>
+
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                    {(sku.safety_stock || 0) > 0 && (
+                      <span className={`badge ${isUnderSafety ? 'badge-rose' : 'badge-amber'}`} style={{ fontSize: '0.7rem', padding: '0.15rem 0.45rem' }}>
+                        {isUnderSafety ? '⚠️ Alerta Stock' : `Seg: ${sku.safety_stock}`}
+                      </span>
+                    )}
+
+                    {sku.is_active !== false ? (
+                      <span className="badge badge-emerald" style={{ fontSize: '0.7rem', padding: '0.15rem 0.45rem' }}>
+                        ● Activo
+                      </span>
+                    ) : (
+                      <span className="badge badge-rose" style={{ fontSize: '0.7rem', padding: '0.15rem 0.45rem' }}>
+                        ● Inactivo
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Description */}
+                <p style={{ fontSize: '0.85rem', color: '#ffffff', margin: 0, fontWeight: 500, lineHeight: 1.3 }}>
+                  {sku.description || 'Sin descripción de producto'}
+                </p>
+
+                {/* Inventory Breakdown Pills */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.4rem', background: 'rgba(0,0,0,0.3)', padding: '0.55rem', borderRadius: '10px' }}>
+                  <div style={{ textAlign: 'center' }}>
+                    <span style={{ fontSize: '0.66rem', color: '#fbbf24', display: 'block', fontWeight: 700 }}>B. MEGA</span>
+                    <strong style={{ fontSize: '0.85rem', color: '#ffffff' }}>{sku.stock_wh1 ?? 0}</strong>
+                    <span style={{ fontSize: '0.62rem', color: '#64748b', display: 'block' }}>/{sku.wh1_total ?? 0}</span>
+                  </div>
+
+                  <div style={{ textAlign: 'center', borderLeft: '1px solid rgba(255,255,255,0.08)', borderRight: '1px solid rgba(255,255,255,0.08)' }}>
+                    <span style={{ fontSize: '0.66rem', color: '#a5b4fc', display: 'block', fontWeight: 700 }}>B. CEDIS</span>
+                    <strong style={{ fontSize: '0.85rem', color: '#ffffff' }}>{sku.stock_wh2 ?? 0}</strong>
+                    <span style={{ fontSize: '0.62rem', color: '#64748b', display: 'block' }}>/{sku.wh2_total ?? 0}</span>
+                  </div>
+
+                  <div style={{ textAlign: 'center' }}>
+                    <span style={{ fontSize: '0.66rem', color: '#34d399', display: 'block', fontWeight: 700 }}>TOTAL DISP.</span>
+                    <strong style={{ fontSize: '0.9rem', color: '#34d399', fontWeight: 800 }}>{sku.total_stock ?? 0}</strong>
+                    <span style={{ fontSize: '0.62rem', color: '#64748b', display: 'block' }}>/{sku.total_quantity ?? 0}</span>
+                  </div>
+                </div>
+
+                {/* Mobile Action Controls */}
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem', paddingTop: '0.2rem' }}>
+                  <button
+                    onClick={() => handleToggleSkuActive(sku.id, sku.is_active !== false)}
+                    disabled={togglingActiveSkuId === sku.id}
+                    className="btn-secondary"
+                    style={{ flex: 1, minHeight: '38px', fontSize: '0.78rem', justifyContent: 'center', borderRadius: '8px', border: sku.is_active !== false ? '1px solid rgba(248,113,113,0.3)' : '1px solid rgba(52,211,153,0.3)', color: sku.is_active !== false ? '#fb7185' : '#34d399' }}
+                  >
+                    {togglingActiveSkuId === sku.id ? (
+                      <RefreshCw size={14} className="animate-spin" />
+                    ) : sku.is_active !== false ? (
+                      'Desactivar SKU'
+                    ) : (
+                      'Activar SKU'
+                    )}
+                  </button>
+
+                  <button
+                    onClick={() => handleSingleSkuRefresh(sku.id)}
+                    disabled={updatingSkuId === sku.id}
+                    className="btn-secondary"
+                    style={{ minHeight: '38px', fontSize: '0.78rem', padding: '0 0.85rem', borderRadius: '8px', color: '#38bdf8', borderColor: 'rgba(56,189,248,0.3)' }}
+                  >
+                    <RefreshCw size={14} className={updatingSkuId === sku.id ? 'animate-spin' : ''} />
+                    Sincronizar
+                  </button>
+                </div>
+              </div>
+            );
+          })
+        )}
       </div>
 
       {/* Pagination Footer */}

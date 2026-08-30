@@ -220,9 +220,10 @@ export default function Sidebar({ vtexStatus, supabaseStatus, mobileOpen, onClos
           style={{
             position: 'fixed',
             inset: 0,
-            backgroundColor: 'rgba(0,0,0,0.6)',
-            backdropFilter: 'blur(4px)',
-            zIndex: 49,
+            backgroundColor: 'rgba(0,0,0,0.75)',
+            backdropFilter: 'blur(6px)',
+            WebkitBackdropFilter: 'blur(6px)',
+            zIndex: 9998,
           }}
           className="mobile-backdrop"
         />
@@ -233,7 +234,7 @@ export default function Sidebar({ vtexStatus, supabaseStatus, mobileOpen, onClos
         style={{
           width: '270px',
           minWidth: '270px',
-          background: 'rgba(11, 15, 25, 0.95)',
+          background: 'rgba(11, 15, 25, 0.98)',
           backdropFilter: 'blur(20px)',
           WebkitBackdropFilter: 'blur(20px)',
           borderRight: '1px solid var(--border-subtle)',
@@ -674,11 +675,19 @@ export default function Sidebar({ vtexStatus, supabaseStatus, mobileOpen, onClos
             left: 0 !important;
             bottom: 0 !important;
             height: 100vh !important;
+            width: 280px !important;
+            max-width: 85vw !important;
+            min-width: 0 !important;
+            z-index: 9999 !important;
+            background: #0b0f19 !important;
+            box-shadow: 12px 0 40px rgba(0, 0, 0, 0.9) !important;
             transform: translateX(-100%);
-            transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            visibility: hidden;
+            transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), visibility 0.3s ease;
           }
           .app-sidebar.mobile-open {
             transform: translateX(0) !important;
+            visibility: visible !important;
           }
           .mobile-close-btn {
             display: flex !important;

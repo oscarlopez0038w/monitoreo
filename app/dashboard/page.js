@@ -585,7 +585,7 @@ export default function DashboardPage() {
     }
   };
 
-  const handleSelectPreset = (presetId) => {
+  const handleSelectPreset = (presetId, autoFetch = false) => {
     setSelectedPreset(presetId);
     if (presetId === 'custom') {
       return;
@@ -663,6 +663,10 @@ export default function DashboardPage() {
     setEndDateB(eB);
     setStartDateC(sC);
     setEndDateC(eC);
+
+    if (autoFetch) {
+      fetchAnalytics(sA, eA, sB, eB, sC, eC);
+    }
   };
 
   // Selector de Modo de Moneda: 'usd' por defecto (Dólares USD $), 'nio' (Córdobas C$)
@@ -858,75 +862,169 @@ export default function DashboardPage() {
             </p>
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
-            
-            {/* SELECTOR DE MONEDA ($ USD Dólares por defecto o C$ Córdobas) */}
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '0.2rem',
-                background: 'rgba(15, 23, 42, 0.8)',
-                padding: '0.2rem 0.4rem',
-                borderRadius: '10px',
-                border: '1px solid rgba(255, 255, 255, 0.12)',
-              }}
-            >
-              <CircleDollarSign size={14} color="#34d399" />
-              <span style={{ fontSize: '0.72rem', color: '#94a3b8', fontWeight: 600, marginRight: '0.15rem' }}>Moneda:</span>
-              {[
-                { id: 'usd', label: '🇺🇸 $ USD' },
-                { id: 'nio', label: '🇳🇮 C$ NIO' },
-              ].map((m) => (
-                <button
-                  key={m.id}
-                  onClick={() => setCurrencyMode(m.id)}
-                  style={{
-                    padding: '0.25rem 0.5rem',
-                    borderRadius: '6px',
-                    fontSize: '0.72rem',
-                    fontWeight: currencyMode === m.id ? 700 : 500,
-                    border: 'none',
-                    cursor: 'pointer',
-                    transition: 'all 0.2s',
-                    backgroundColor: currencyMode === m.id ? '#34d399' : 'transparent',
-                    color: currencyMode === m.id ? '#0f172a' : '#94a3b8',
-                  }}
-                >
-                  {m.label}
-                </button>
-              ))}
-            </div>
+  {/* 1. Vista de Controles para Escritorio (desktop-only: Intacto Original) */}
+  <div className="desktop-only" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+    {/* SELECTOR DE MONEDA ($ USD Dólares por defecto o C$ Córdobas) */}
+    <div
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: '0.2rem',
+        background: 'rgba(15, 23, 42, 0.8)',
+        padding: '0.2rem 0.4rem',
+        borderRadius: '10px',
+        border: '1px solid rgba(255, 255, 255, 0.12)',
+      }}
+    >
+      <CircleDollarSign size={14} color="#34d399" />
+      <span style={{ fontSize: '0.72rem', color: '#94a3b8', fontWeight: 600, marginRight: '0.15rem' }}>Moneda:</span>
+      {[
+        { id: 'usd', label: '🇺🇸 $ USD' },
+        { id: 'nio', label: '🇳🇮 C$ NIO' },
+      ].map((m) => (
+        <button
+          key={m.id}
+          onClick={() => setCurrencyMode(m.id)}
+          style={{
+            padding: '0.25rem 0.5rem',
+            borderRadius: '6px',
+            fontSize: '0.72rem',
+            fontWeight: currencyMode === m.id ? 700 : 500,
+            border: 'none',
+            cursor: 'pointer',
+            transition: 'all 0.2s',
+            backgroundColor: currencyMode === m.id ? '#34d399' : 'transparent',
+            color: currencyMode === m.id ? '#0f172a' : '#94a3b8',
+          }}
+        >
+          {m.label}
+        </button>
+      ))}
+    </div>
 
-            {/* Badge Tasa de Cambio BCN */}
-            <div
-              style={{
-                fontSize: '0.72rem',
-                color: '#34d399',
-                backgroundColor: 'rgba(52, 211, 153, 0.12)',
-                border: '1px solid rgba(52, 211, 153, 0.3)',
-                padding: '0.35rem 0.65rem',
-                borderRadius: '8px',
-                fontWeight: 600,
-              }}
-            >
-              Tasa BCN: 1 USD = C$ {data?.bcnExchangeRate || 36.6243}
-            </div>
+    {/* Badge Tasa de Cambio BCN */}
+    <div
+      style={{
+        fontSize: '0.72rem',
+        color: '#34d399',
+        backgroundColor: 'rgba(52, 211, 153, 0.12)',
+        border: '1px solid rgba(52, 211, 153, 0.3)',
+        padding: '0.35rem 0.65rem',
+        borderRadius: '8px',
+        fontWeight: 600,
+      }}
+    >
+      Tasa BCN: 1 USD = C$ {data?.bcnExchangeRate || 36.6243}
+    </div>
 
-            <button onClick={() => fetchAnalytics()} disabled={loading} className="btn-secondary" style={{ padding: '0.35rem 0.75rem', fontSize: '0.78rem' }}>
-              <RefreshCw size={13} className={loading ? 'animate-spin' : ''} />
-              Actualizar
-            </button>
-          </div>
+    <button onClick={() => fetchAnalytics()} disabled={loading} className="btn-secondary" style={{ padding: '0.35rem 0.75rem', fontSize: '0.78rem' }}>
+      <RefreshCw size={13} className={loading ? 'animate-spin' : ''} />
+      Actualizar
+    </button>
+  </div>
+
+  {/* 2. Vista de Controles para Móvil (mobile-only: 3 Botones Mismo Tamaño en 1 Sola Línea) */}
+  <div className="mobile-only" style={{ width: '100%', marginTop: '0.5rem' }}>
+    <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', flexWrap: 'nowrap', width: '100%' }}>
+      {/* Botón 1: Moneda Switcher */}
+      <div
+        style={{
+          flex: 1,
+          height: '32px',
+          display: 'inline-flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: '0.15rem',
+          background: 'rgba(15, 23, 42, 0.8)',
+          padding: '0 0.3rem',
+          borderRadius: '8px',
+          border: '1px solid rgba(255, 255, 255, 0.12)',
+          boxSizing: 'border-box',
+        }}
+      >
+        {[
+          { id: 'usd', label: '$ USD' },
+          { id: 'nio', label: 'C$ NIO' },
+        ].map((m) => (
+          <button
+            key={m.id}
+            onClick={() => setCurrencyMode(m.id)}
+            style={{
+              flex: 1,
+              padding: '0.2rem 0.25rem',
+              borderRadius: '5px',
+              fontSize: '0.68rem',
+              fontWeight: currencyMode === m.id ? 800 : 500,
+              border: 'none',
+              cursor: 'pointer',
+              whiteSpace: 'nowrap',
+              backgroundColor: currencyMode === m.id ? '#34d399' : 'transparent',
+              color: currencyMode === m.id ? '#0f172a' : '#94a3b8',
+            }}
+          >
+            {m.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Botón 2: Tasa BCN */}
+      <div
+        style={{
+          flex: 1.2,
+          height: '32px',
+          fontSize: '0.68rem',
+          color: '#34d399',
+          backgroundColor: 'rgba(52, 211, 153, 0.12)',
+          border: '1px solid rgba(52, 211, 153, 0.35)',
+          padding: '0 0.4rem',
+          borderRadius: '8px',
+          fontWeight: 700,
+          display: 'inline-flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          whiteSpace: 'nowrap',
+          boxSizing: 'border-box',
+        }}
+        title={`Tasa BCN: 1 USD = C$ ${data?.bcnExchangeRate || 36.6243}`}
+      >
+        BCN: C$ {data?.bcnExchangeRate || 36.6243}
+      </div>
+
+      {/* Botón 3: Actualizar */}
+      <button
+        onClick={() => fetchAnalytics()}
+        disabled={loading}
+        className="btn-secondary"
+        style={{
+          flex: 1,
+          height: '32px',
+          minHeight: '32px',
+          padding: '0 0.4rem',
+          fontSize: '0.68rem',
+          borderRadius: '8px',
+          display: 'inline-flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: '0.25rem',
+          whiteSpace: 'nowrap',
+          boxSizing: 'border-box',
+        }}
+      >
+        <RefreshCw size={12} className={loading ? 'animate-spin' : ''} />
+        Actualizar
+      </button>
+    </div>
+  </div>
         </div>
 
         {/* Dynamic Compact Date Range Picker with Presets Dropdown */}
-        <div className="glass-card" style={{ padding: '0.65rem 0.95rem', marginBottom: '0.9rem', position: 'relative', zIndex: 100, overflow: 'visible' }}>
+        {/* 1. Vista de Selector de Fechas para Escritorio (desktop-only: Intacto Original) */}
+        <div className="desktop-only glass-card" style={{ padding: '0.65rem 0.95rem', marginBottom: '0.9rem', position: 'relative', zIndex: 100, overflow: 'visible' }}>
           <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem', justifyContent: 'space-between' }}>
             
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
               
-              {/* Dropdown Selector de Preset (matching screenshot style) */}
+              {/* Dropdown Selector de Preset */}
               <div ref={dropdownRef} style={{ position: 'relative', zIndex: 101 }}>
                 <button
                   onClick={() => setShowRangeDropdown(!showRangeDropdown)}
@@ -976,9 +1074,12 @@ export default function DashboardPage() {
                   >
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.45rem' }}>
                       {presetOptions.map((opt) => (
-                        <label
+                        <div
                           key={opt.id}
-                          onClick={() => handleSelectPreset(opt.id)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleSelectPreset(opt.id);
+                          }}
                           style={{
                             display: 'flex',
                             alignItems: 'center',
@@ -986,21 +1087,22 @@ export default function DashboardPage() {
                             fontSize: '0.82rem',
                             color: selectedPreset === opt.id ? '#ffffff' : '#94a3b8',
                             cursor: 'pointer',
-                            padding: '0.35rem 0.5rem',
+                            padding: '0.4rem 0.6rem',
                             borderRadius: '6px',
-                            background: selectedPreset === opt.id ? 'rgba(56, 189, 248, 0.15)' : 'transparent',
+                            background: selectedPreset === opt.id ? 'rgba(56, 189, 248, 0.18)' : 'transparent',
                             fontWeight: selectedPreset === opt.id ? 700 : 500,
+                            userSelect: 'none',
                           }}
                         >
                           <input
                             type="radio"
                             name="presetRadio"
                             checked={selectedPreset === opt.id}
-                            onChange={() => handleSelectPreset(opt.id)}
-                            style={{ accentColor: '#38bdf8', cursor: 'pointer' }}
+                            readOnly
+                            style={{ accentColor: '#38bdf8', cursor: 'pointer', pointerEvents: 'none' }}
                           />
                           {opt.label}
-                        </label>
+                        </div>
                       ))}
 
                       {/* Botón Aplicar */}
@@ -1021,7 +1123,7 @@ export default function DashboardPage() {
                 )}
               </div>
 
-              {/* Rango de Fechas A, B y C (visibles para confirmación / ajuste fino) */}
+              {/* Rango de Fechas A, B y C */}
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', background: 'rgba(56, 189, 248, 0.08)', padding: '0.2rem 0.5rem', borderRadius: '8px', border: '1px solid rgba(56, 189, 248, 0.25)' }}>
                   <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#38bdf8', whiteSpace: 'nowrap' }}>
@@ -1107,6 +1209,136 @@ export default function DashboardPage() {
           </div>
         </div>
 
+        {/* 2. Vista de Selector de Fechas y Comparación para Móvil (mobile-only) */}
+        <div className="mobile-only glass-card" style={{ padding: '0.65rem', marginBottom: '0.9rem', position: 'relative', zIndex: 100, overflow: 'visible' }}>
+          {/* Fila 1: Botón Preset 'Creado: Hoy ˅' a la izquierda + Botón 'Aplicar Comparación' a la derecha (Misma Línea) */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.4rem', width: '100%', marginBottom: '0.65rem' }}>
+            {/* Dropdown Selector de Preset para Móvil (Selector Nativo Infalible) */}
+            <div style={{ position: 'relative', flex: 1 }}>
+              <select
+                value={selectedPreset}
+                onChange={(e) => {
+                  handleSelectPreset(e.target.value, true);
+                }}
+                style={{
+                  width: '100%',
+                  height: '34px',
+                  padding: '0 1.8rem 0 0.55rem',
+                  borderRadius: '8px',
+                  fontSize: '0.74rem',
+                  fontWeight: 600,
+                  color: '#ffffff',
+                  backgroundColor: 'rgba(56, 189, 248, 0.12)',
+                  border: '1px solid rgba(56, 189, 248, 0.4)',
+                  outline: 'none',
+                  appearance: 'none',
+                  WebkitAppearance: 'none',
+                  cursor: 'pointer',
+                  boxSizing: 'border-box',
+                }}
+              >
+                {presetOptions.map((opt) => (
+                  <option key={opt.id} value={opt.id} style={{ backgroundColor: '#0f172a', color: '#ffffff' }}>
+                    Creado: {opt.label}
+                  </option>
+                ))}
+              </select>
+              <ChevronDown size={13} color="#94a3b8" style={{ position: 'absolute', right: '8px', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }} />
+            </div>
+
+            {/* Botón Aplicar Comparación A la Par del Preset en la Misma Fila */}
+            <button
+              onClick={() => fetchAnalytics(startDateA, endDateA, startDateB, endDateB, startDateC, endDateC)}
+              disabled={loading}
+              className="btn-primary"
+              style={{
+                flex: 1,
+                height: '34px',
+                minHeight: '34px',
+                padding: '0 0.4rem',
+                fontSize: '0.72rem',
+                borderRadius: '8px',
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '0.25rem',
+                whiteSpace: 'nowrap',
+                boxSizing: 'border-box',
+              }}
+            >
+              <Filter size={12} />
+              {loading ? 'Consultando...' : 'Aplicar Comparación'}
+            </button>
+          </div>
+
+          {/* Filas de Rangos A, B y C para Móvil */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', width: '100%' }}>
+            {/* Rango A */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.3rem', background: 'rgba(56, 189, 248, 0.08)', padding: '0.25rem 0.4rem', borderRadius: '8px', border: '1px solid rgba(56, 189, 248, 0.25)', width: '100%', boxSizing: 'border-box' }}>
+              <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#38bdf8', whiteSpace: 'nowrap' }}>🔵 A:</span>
+              <input
+                type="date"
+                className="glass-input"
+                style={{ fontSize: '0.74rem', padding: '0.2rem 0.35rem', minHeight: '28px', flex: 1, textAlign: 'center' }}
+                value={startDateA}
+                onChange={(e) => { setStartDateA(e.target.value); setSelectedPreset('custom'); }}
+              />
+              <span style={{ color: 'var(--text-dim)', fontSize: '0.72rem' }}>a</span>
+              <input
+                type="date"
+                className="glass-input"
+                style={{ fontSize: '0.74rem', padding: '0.2rem 0.35rem', minHeight: '28px', flex: 1, textAlign: 'center' }}
+                value={endDateA}
+                onChange={(e) => { setEndDateA(e.target.value); setSelectedPreset('custom'); }}
+              />
+            </div>
+
+            <div style={{ textAlign: 'center', color: 'var(--text-dim)', fontWeight: 700, fontSize: '0.7rem', margin: '-0.1rem 0' }}>vs.</div>
+
+            {/* Rango B */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.3rem', background: 'rgba(129, 140, 248, 0.08)', padding: '0.25rem 0.4rem', borderRadius: '8px', border: '1px solid rgba(129, 140, 248, 0.25)', width: '100%', boxSizing: 'border-box' }}>
+              <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#a5b4fc', whiteSpace: 'nowrap' }}>🟣 B:</span>
+              <input
+                type="date"
+                className="glass-input"
+                style={{ fontSize: '0.74rem', padding: '0.2rem 0.35rem', minHeight: '28px', flex: 1, textAlign: 'center' }}
+                value={startDateB}
+                onChange={(e) => { setStartDateB(e.target.value); setSelectedPreset('custom'); }}
+              />
+              <span style={{ color: 'var(--text-dim)', fontSize: '0.72rem' }}>a</span>
+              <input
+                type="date"
+                className="glass-input"
+                style={{ fontSize: '0.74rem', padding: '0.2rem 0.35rem', minHeight: '28px', flex: 1, textAlign: 'center' }}
+                value={endDateB}
+                onChange={(e) => { setEndDateB(e.target.value); setSelectedPreset('custom'); }}
+              />
+            </div>
+
+            <div style={{ textAlign: 'center', color: 'var(--text-dim)', fontWeight: 700, fontSize: '0.7rem', margin: '-0.1rem 0' }}>vs.</div>
+
+            {/* Rango C */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.3rem', background: 'rgba(52, 211, 153, 0.08)', padding: '0.25rem 0.4rem', borderRadius: '8px', border: '1px solid rgba(52, 211, 153, 0.25)', width: '100%', boxSizing: 'border-box' }}>
+              <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#34d399', whiteSpace: 'nowrap' }}>🟢 C:</span>
+              <input
+                type="date"
+                className="glass-input"
+                style={{ fontSize: '0.74rem', padding: '0.2rem 0.35rem', minHeight: '28px', flex: 1, textAlign: 'center' }}
+                value={startDateC}
+                onChange={(e) => { setStartDateC(e.target.value); setSelectedPreset('custom'); }}
+              />
+              <span style={{ color: 'var(--text-dim)', fontSize: '0.72rem' }}>a</span>
+              <input
+                type="date"
+                className="glass-input"
+                style={{ fontSize: '0.74rem', padding: '0.2rem 0.35rem', minHeight: '28px', flex: 1, textAlign: 'center' }}
+                value={endDateC}
+                onChange={(e) => { setEndDateC(e.target.value); setSelectedPreset('custom'); }}
+              />
+            </div>
+          </div>
+        </div>
+
         {/* Global Loading & Error Status Banners */}
         {loading && (
           <div className="glass-card" style={{ padding: '1.5rem', textAlign: 'center', marginBottom: '0.9rem', color: 'var(--text-muted)' }}>
@@ -1126,7 +1358,7 @@ export default function DashboardPage() {
           <>
             {/* Top Key Executive Performance Indicators (Rejilla Estricta 4x1 o 4x2) */}
             <div style={{ marginBottom: '1.25rem' }}>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.85rem' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '0.85rem' }} className="mobile-card-grid">
                 {/* Card 1: Ventas Netas (Principal) */}
                 <div className="glass-card" style={{ padding: '0.9rem 1.05rem', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', minHeight: '118px' }}>
                   <div>
@@ -1325,32 +1557,31 @@ export default function DashboardPage() {
 
             {/* Social Selling vs. Web Direct Breakdown Grid */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', gap: '1.5rem', marginBottom: '1.5rem' }}>
-              
               {/* Channel Attribution: Social Selling vs Web */}
-              <div className="glass-card" style={{ padding: '1.5rem' }}>
+              <div className="glass-card" style={{ padding: '1.25rem' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', flexWrap: 'wrap', gap: '0.5rem' }}>
-                  <h3 style={{ fontSize: '1rem', fontWeight: 700, color: '#ffffff', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                    <Share2 size={18} color="var(--accent-primary)" />
-                    Ventas por Canal: {periods?.current?.label} vs. {periods?.previous?.label} vs. {periods?.previous2?.label}
+                  <h3 style={{ fontSize: '0.92rem', fontWeight: 700, color: '#ffffff', display: 'flex', alignItems: 'flex-start', gap: '0.4rem', lineHeight: 1.35 }}>
+                    <Share2 size={18} color="var(--accent-primary)" style={{ flexShrink: 0, marginTop: '2px' }} />
+                    <span>Ventas por Canal: <strong>{periods?.current?.label}</strong> vs. <strong>{periods?.previous?.label}</strong> vs. <strong>{periods?.previous2?.label}</strong></span>
                   </h3>
                 </div>
 
                 {/* --- Social Selling Section --- */}
-                <div style={{ marginBottom: '1.25rem', background: 'rgba(52, 211, 153, 0.04)', padding: '0.95rem 1rem', borderRadius: '12px', border: '1px solid rgba(52, 211, 153, 0.18)' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
-                    <span style={{ color: '#ffffff', fontWeight: 700, fontSize: '0.88rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                <div style={{ marginBottom: '1.25rem', background: 'rgba(52, 211, 153, 0.04)', padding: '0.85rem 0.9rem', borderRadius: '12px', border: '1px solid rgba(52, 211, 153, 0.18)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem', flexWrap: 'wrap', gap: '0.3rem' }}>
+                    <span style={{ color: '#ffffff', fontWeight: 700, fontSize: '0.86rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
                       <Users size={15} color="#34d399" /> Social Selling / Vendedores
                     </span>
                     {renderTrendBadge(channels?.socialSelling?.changePct || 0)}
                   </div>
 
                   {/* Período A */}
-                  <div style={{ marginBottom: '0.6rem' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.78rem', marginBottom: '0.2rem' }}>
-                      <span style={{ color: 'var(--text-muted)' }}>
-                        <strong style={{ color: '#34d399' }}>{periods?.current?.label}:</strong> {channels?.socialSelling?.current?.netCount || 0} órdenes aprobadas <span style={{ opacity: 0.75, fontSize: '0.74rem' }}>({channels?.socialSelling?.current?.grossCount || 0} totales: {channels?.socialSelling?.current?.canceledCount || 0} canc.)</span>
+                  <div style={{ marginBottom: '0.65rem' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', fontSize: '0.76rem', marginBottom: '0.2rem', gap: '0.5rem' }}>
+                      <span style={{ color: 'var(--text-muted)', flex: 1 }}>
+                        <strong style={{ color: '#34d399' }}>{periods?.current?.label}:</strong> {channels?.socialSelling?.current?.netCount || 0} órdenes aprobadas <span style={{ opacity: 0.75, fontSize: '0.72rem' }}>({channels?.socialSelling?.current?.grossCount || 0} tot / {channels?.socialSelling?.current?.canceledCount || 0} canc)</span>
                       </span>
-                      <span style={{ color: '#34d399', fontWeight: 700 }}>
+                      <span style={{ color: '#34d399', fontWeight: 700, whiteSpace: 'nowrap', flexShrink: 0, textAlign: 'right' }}>
                         {channels?.socialSelling?.current?.pct || 0}% ({formatCurrency(channels?.socialSelling?.current?.netRevenueNio || channels?.socialSelling?.current?.revenueNio || 0, channels?.socialSelling?.current?.netRevenueUsd || channels?.socialSelling?.current?.revenueUsd || 0)})
                       </span>
                     </div>
@@ -1361,12 +1592,12 @@ export default function DashboardPage() {
                   </div>
 
                   {/* Período B */}
-                  <div style={{ marginBottom: '0.6rem' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.78rem', marginBottom: '0.2rem' }}>
-                      <span style={{ color: 'var(--text-dim)' }}>
-                        <strong style={{ color: '#a5b4fc' }}>{periods?.previous?.label}:</strong> {channels?.socialSelling?.previous?.netCount || 0} órdenes aprobadas <span style={{ opacity: 0.75, fontSize: '0.74rem' }}>({channels?.socialSelling?.previous?.grossCount || 0} totales: {channels?.socialSelling?.previous?.canceledCount || 0} canc.)</span>
+                  <div style={{ marginBottom: '0.65rem' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', fontSize: '0.76rem', marginBottom: '0.2rem', gap: '0.5rem' }}>
+                      <span style={{ color: 'var(--text-dim)', flex: 1 }}>
+                        <strong style={{ color: '#a5b4fc' }}>{periods?.previous?.label}:</strong> {channels?.socialSelling?.previous?.netCount || 0} órdenes aprobadas <span style={{ opacity: 0.75, fontSize: '0.72rem' }}>({channels?.socialSelling?.previous?.grossCount || 0} tot / {channels?.socialSelling?.previous?.canceledCount || 0} canc)</span>
                       </span>
-                      <span style={{ color: 'var(--text-dim)', fontWeight: 600 }}>
+                      <span style={{ color: 'var(--text-dim)', fontWeight: 600, whiteSpace: 'nowrap', flexShrink: 0, textAlign: 'right' }}>
                         {channels?.socialSelling?.previous?.pct || 0}% ({formatCurrency(channels?.socialSelling?.previous?.netRevenueNio || channels?.socialSelling?.previous?.revenueNio || 0, channels?.socialSelling?.previous?.netRevenueUsd || channels?.socialSelling?.previous?.revenueUsd || 0)})
                       </span>
                     </div>
@@ -1377,11 +1608,11 @@ export default function DashboardPage() {
 
                   {/* Período C */}
                   <div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.78rem', marginBottom: '0.2rem' }}>
-                      <span style={{ color: 'var(--text-dim)' }}>
-                        <strong style={{ color: '#34d399' }}>{periods?.previous2?.label}:</strong> {channels?.socialSelling?.previous2?.netCount || 0} órdenes aprobadas <span style={{ opacity: 0.75, fontSize: '0.74rem' }}>({channels?.socialSelling?.previous2?.grossCount || 0} totales: {channels?.socialSelling?.previous2?.canceledCount || 0} canc.)</span>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', fontSize: '0.76rem', marginBottom: '0.2rem', gap: '0.5rem' }}>
+                      <span style={{ color: 'var(--text-dim)', flex: 1 }}>
+                        <strong style={{ color: '#34d399' }}>{periods?.previous2?.label}:</strong> {channels?.socialSelling?.previous2?.netCount || 0} órdenes aprobadas <span style={{ opacity: 0.75, fontSize: '0.72rem' }}>({channels?.socialSelling?.previous2?.grossCount || 0} tot / {channels?.socialSelling?.previous2?.canceledCount || 0} canc)</span>
                       </span>
-                      <span style={{ color: 'var(--text-dim)', fontWeight: 600 }}>
+                      <span style={{ color: 'var(--text-dim)', fontWeight: 600, whiteSpace: 'nowrap', flexShrink: 0, textAlign: 'right' }}>
                         {channels?.socialSelling?.previous2?.pct || 0}% ({formatCurrency(channels?.socialSelling?.previous2?.netRevenueNio || channels?.socialSelling?.previous2?.revenueNio || 0, channels?.socialSelling?.previous2?.netRevenueUsd || channels?.socialSelling?.previous2?.revenueUsd || 0)})
                       </span>
                     </div>
@@ -1392,21 +1623,21 @@ export default function DashboardPage() {
                 </div>
 
                 {/* --- Web Directa Section --- */}
-                <div style={{ marginBottom: '1rem', background: 'rgba(56, 189, 248, 0.04)', padding: '0.95rem 1rem', borderRadius: '12px', border: '1px solid rgba(56, 189, 248, 0.18)' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
-                    <span style={{ color: '#ffffff', fontWeight: 700, fontSize: '0.88rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                <div style={{ marginBottom: '1rem', background: 'rgba(56, 189, 248, 0.04)', padding: '0.85rem 0.9rem', borderRadius: '12px', border: '1px solid rgba(56, 189, 248, 0.18)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem', flexWrap: 'wrap', gap: '0.3rem' }}>
+                    <span style={{ color: '#ffffff', fontWeight: 700, fontSize: '0.86rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
                       <Globe size={15} color="#38bdf8" /> Web Directa / E-Commerce (Orgánico)
                     </span>
                     {renderTrendBadge(channels?.webDirect?.changePct || 0)}
                   </div>
 
                   {/* Período A */}
-                  <div style={{ marginBottom: '0.6rem' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.78rem', marginBottom: '0.2rem' }}>
-                      <span style={{ color: 'var(--text-muted)' }}>
-                        <strong style={{ color: '#38bdf8' }}>{periods?.current?.label}:</strong> {channels?.webDirect?.current?.netCount || 0} órdenes aprobadas <span style={{ opacity: 0.75, fontSize: '0.74rem' }}>({channels?.webDirect?.current?.grossCount || 0} totales: {channels?.webDirect?.current?.canceledCount || 0} canc.)</span>
+                  <div style={{ marginBottom: '0.65rem' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', fontSize: '0.76rem', marginBottom: '0.2rem', gap: '0.5rem' }}>
+                      <span style={{ color: 'var(--text-muted)', flex: 1 }}>
+                        <strong style={{ color: '#38bdf8' }}>{periods?.current?.label}:</strong> {channels?.webDirect?.current?.netCount || 0} órdenes aprobadas <span style={{ opacity: 0.75, fontSize: '0.72rem' }}>({channels?.webDirect?.current?.grossCount || 0} tot / {channels?.webDirect?.current?.canceledCount || 0} canc)</span>
                       </span>
-                      <span style={{ color: '#38bdf8', fontWeight: 700 }}>
+                      <span style={{ color: '#38bdf8', fontWeight: 700, whiteSpace: 'nowrap', flexShrink: 0, textAlign: 'right' }}>
                         {channels?.webDirect?.current?.pct || 0}% ({formatCurrency(channels?.webDirect?.current?.netRevenueNio || channels?.webDirect?.current?.revenueNio || 0, channels?.webDirect?.current?.netRevenueUsd || channels?.webDirect?.current?.revenueUsd || 0)})
                       </span>
                     </div>
@@ -1417,12 +1648,12 @@ export default function DashboardPage() {
                   </div>
 
                   {/* Período B */}
-                  <div style={{ marginBottom: '0.6rem' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.78rem', marginBottom: '0.2rem' }}>
-                      <span style={{ color: 'var(--text-dim)' }}>
-                        <strong style={{ color: '#a5b4fc' }}>{periods?.previous?.label}:</strong> {channels?.webDirect?.previous?.netCount || 0} órdenes aprobadas <span style={{ opacity: 0.75, fontSize: '0.74rem' }}>({channels?.webDirect?.previous?.grossCount || 0} totales: {channels?.webDirect?.previous?.canceledCount || 0} canc.)</span>
+                  <div style={{ marginBottom: '0.65rem' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', fontSize: '0.76rem', marginBottom: '0.2rem', gap: '0.5rem' }}>
+                      <span style={{ color: 'var(--text-dim)', flex: 1 }}>
+                        <strong style={{ color: '#a5b4fc' }}>{periods?.previous?.label}:</strong> {channels?.webDirect?.previous?.netCount || 0} órdenes aprobadas <span style={{ opacity: 0.75, fontSize: '0.72rem' }}>({channels?.webDirect?.previous?.grossCount || 0} tot / {channels?.webDirect?.previous?.canceledCount || 0} canc)</span>
                       </span>
-                      <span style={{ color: 'var(--text-dim)', fontWeight: 600 }}>
+                      <span style={{ color: 'var(--text-dim)', fontWeight: 600, whiteSpace: 'nowrap', flexShrink: 0, textAlign: 'right' }}>
                         {channels?.webDirect?.previous?.pct || 0}% ({formatCurrency(channels?.webDirect?.previous?.netRevenueNio || channels?.webDirect?.previous?.revenueNio || 0, channels?.webDirect?.previous?.netRevenueUsd || channels?.webDirect?.previous?.revenueUsd || 0)})
                       </span>
                     </div>
@@ -1433,11 +1664,11 @@ export default function DashboardPage() {
 
                   {/* Período C */}
                   <div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.78rem', marginBottom: '0.2rem' }}>
-                      <span style={{ color: 'var(--text-dim)' }}>
-                        <strong style={{ color: '#34d399' }}>{periods?.previous2?.label}:</strong> {channels?.webDirect?.previous2?.netCount || 0} órdenes aprobadas <span style={{ opacity: 0.75, fontSize: '0.74rem' }}>({channels?.webDirect?.previous2?.grossCount || 0} totales: {channels?.webDirect?.previous2?.canceledCount || 0} canc.)</span>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', fontSize: '0.76rem', marginBottom: '0.2rem', gap: '0.5rem' }}>
+                      <span style={{ color: 'var(--text-dim)', flex: 1 }}>
+                        <strong style={{ color: '#34d399' }}>{periods?.previous2?.label}:</strong> {channels?.webDirect?.previous2?.netCount || 0} órdenes aprobadas <span style={{ opacity: 0.75, fontSize: '0.72rem' }}>({channels?.webDirect?.previous2?.grossCount || 0} tot / {channels?.webDirect?.previous2?.canceledCount || 0} canc)</span>
                       </span>
-                      <span style={{ color: 'var(--text-dim)', fontWeight: 600 }}>
+                      <span style={{ color: 'var(--text-dim)', fontWeight: 600, whiteSpace: 'nowrap', flexShrink: 0, textAlign: 'right' }}>
                         {channels?.webDirect?.previous2?.pct || 0}% ({formatCurrency(channels?.webDirect?.previous2?.netRevenueNio || channels?.webDirect?.previous2?.revenueNio || 0, channels?.webDirect?.previous2?.netRevenueUsd || channels?.webDirect?.previous2?.revenueUsd || 0)})
                       </span>
                     </div>

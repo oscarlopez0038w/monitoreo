@@ -196,43 +196,45 @@ export default function TransaccionesPage() {
     <AppLayout>
       <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', width: '100%', maxWidth: '1400px', margin: '0 auto' }}>
         {/* PAGE TITLE & HEADER */}
-        <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: '1rem' }}>
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-              <div
-                style={{
-                  width: '42px',
-                  height: '42px',
-                  borderRadius: '12px',
-                  background: 'linear-gradient(135deg, #f43f5e 0%, #e11d48 100%)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  boxShadow: '0 4px 18px rgba(244, 63, 94, 0.35)',
-                }}
-              >
-                <CreditCard size={22} color="#ffffff" />
-              </div>
-              <div>
-                <h1 style={{ fontSize: '1.6rem', fontWeight: 800, margin: 0, background: 'linear-gradient(to right, #ffffff, #cbd5e1)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
-                  Monitoreo de Transacciones VTEX
-                </h1>
-                <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', margin: '0.15rem 0 0 0' }}>
-                  Supervisión de pagos en tiempo real, diagnósticos de rechazo, SKUs y datos del cliente
-                </p>
-              </div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: '1.25rem' }}>
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.85rem', flex: '1 1 320px' }}>
+            <div
+              style={{
+                width: '44px',
+                height: '44px',
+                borderRadius: '12px',
+                background: 'linear-gradient(135deg, #f43f5e 0%, #e11d48 100%)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                boxShadow: '0 4px 18px rgba(244, 63, 94, 0.35)',
+                flexShrink: 0,
+                marginTop: '2px',
+              }}
+            >
+              <CreditCard size={22} color="#ffffff" />
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
+              <h1 style={{ fontSize: '1.5rem', fontWeight: 800, margin: 0, lineHeight: 1.25, background: 'linear-gradient(to right, #ffffff, #cbd5e1)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
+                Monitoreo de Transacciones VTEX
+              </h1>
+              <p style={{ fontSize: '0.84rem', color: 'var(--text-muted)', margin: 0, lineHeight: 1.4 }}>
+                Supervisión de pagos en tiempo real, diagnósticos de rechazo, SKUs y datos del cliente
+              </p>
             </div>
           </div>
 
           {/* CONTROLS & AUTO REFRESH */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }} className="mobile-full-width">
             <button
               onClick={() => fetchTransactionsData(false)}
               style={{
-                display: 'flex',
+                display: 'inline-flex',
                 alignItems: 'center',
+                justifyContent: 'center',
                 gap: '0.5rem',
-                padding: '0.55rem 1rem',
+                height: '40px',
+                padding: '0 1.1rem',
                 borderRadius: '10px',
                 backgroundColor: 'rgba(56, 189, 248, 0.12)',
                 border: '1px solid rgba(56, 189, 248, 0.25)',
@@ -240,8 +242,9 @@ export default function TransaccionesPage() {
                 fontWeight: 600,
                 fontSize: '0.85rem',
                 cursor: 'pointer',
-                transition: 'all 0.2s',
+                transition: 'all 0.2s ease',
               }}
+              className="mobile-flex-1"
             >
               <RefreshCw size={15} className={isLoading ? 'spin-icon' : ''} />
               <span>Actualizar</span>
@@ -250,10 +253,12 @@ export default function TransaccionesPage() {
             <button
               onClick={exportToCSV}
               style={{
-                display: 'flex',
+                display: 'inline-flex',
                 alignItems: 'center',
+                justifyContent: 'center',
                 gap: '0.5rem',
-                padding: '0.55rem 1rem',
+                height: '40px',
+                padding: '0 1.1rem',
                 borderRadius: '10px',
                 backgroundColor: 'rgba(52, 211, 153, 0.12)',
                 border: '1px solid rgba(52, 211, 153, 0.25)',
@@ -261,8 +266,9 @@ export default function TransaccionesPage() {
                 fontWeight: 600,
                 fontSize: '0.85rem',
                 cursor: 'pointer',
-                transition: 'all 0.2s',
+                transition: 'all 0.2s ease',
               }}
+              className="mobile-flex-1"
             >
               <Download size={15} />
               <span>Exportar CSV</span>
@@ -390,15 +396,15 @@ export default function TransaccionesPage() {
             gap: '1rem',
           }}
         >
-          <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: '1rem' }}>
+          <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: '1rem' }} className="mobile-filter-row-wrap">
             {/* DATE RANGE FILTERS */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flexWrap: 'wrap' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flexWrap: 'wrap' }} className="mobile-date-block">
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', color: 'var(--text-muted)', fontSize: '0.85rem', fontWeight: 600, flexShrink: 0 }}>
                 <Calendar size={16} color="#38bdf8" />
                 <span>Fecha:</span>
               </div>
 
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }} className="mobile-date-inputs-wrapper">
                 <input
                   type="date"
                   value={startDate}
@@ -411,9 +417,10 @@ export default function TransaccionesPage() {
                     padding: '0.4rem 0.65rem',
                     fontSize: '0.82rem',
                     outline: 'none',
+                    textAlign: 'center',
                   }}
                 />
-                <span style={{ color: 'var(--text-dim)', fontSize: '0.8rem' }}>a</span>
+                <span style={{ color: 'var(--text-dim)', fontSize: '0.8rem', flexShrink: 0 }}>a</span>
                 <input
                   type="date"
                   value={endDate}
@@ -426,23 +433,25 @@ export default function TransaccionesPage() {
                     padding: '0.4rem 0.65rem',
                     fontSize: '0.82rem',
                     outline: 'none',
+                    textAlign: 'center',
                   }}
                 />
               </div>
 
               {/* QUICK DATE BUTTONS */}
-              <div style={{ display: 'flex', gap: '0.35rem', marginLeft: '0.5rem' }}>
+              <div style={{ display: 'flex', gap: '0.35rem' }} className="mobile-quick-btns">
                 <button
                   onClick={() => setQuickDate('today')}
                   style={{
-                    padding: '0.35rem 0.65rem',
-                    borderRadius: '6px',
+                    padding: '0.4rem 0.75rem',
+                    borderRadius: '8px',
                     backgroundColor: startDate === nicNow.todayStr && endDate === nicNow.todayStr ? 'rgba(56, 189, 248, 0.2)' : 'rgba(255, 255, 255, 0.05)',
-                    border: '1px solid rgba(255, 255, 255, 0.1)',
+                    border: startDate === nicNow.todayStr && endDate === nicNow.todayStr ? '1px solid rgba(56, 189, 248, 0.4)' : '1px solid rgba(255, 255, 255, 0.1)',
                     color: startDate === nicNow.todayStr && endDate === nicNow.todayStr ? '#38bdf8' : 'var(--text-muted)',
                     fontSize: '0.78rem',
                     fontWeight: 600,
                     cursor: 'pointer',
+                    transition: 'all 0.15s ease',
                   }}
                 >
                   Hoy
@@ -451,14 +460,15 @@ export default function TransaccionesPage() {
                 <button
                   onClick={() => setQuickDate('yesterday')}
                   style={{
-                    padding: '0.35rem 0.65rem',
-                    borderRadius: '6px',
+                    padding: '0.4rem 0.75rem',
+                    borderRadius: '8px',
                     backgroundColor: 'rgba(255, 255, 255, 0.05)',
                     border: '1px solid rgba(255, 255, 255, 0.1)',
                     color: 'var(--text-muted)',
                     fontSize: '0.78rem',
                     fontWeight: 600,
                     cursor: 'pointer',
+                    transition: 'all 0.15s ease',
                   }}
                 >
                   Ayer
@@ -467,14 +477,15 @@ export default function TransaccionesPage() {
                 <button
                   onClick={() => setQuickDate('7days')}
                   style={{
-                    padding: '0.35rem 0.65rem',
-                    borderRadius: '6px',
+                    padding: '0.4rem 0.75rem',
+                    borderRadius: '8px',
                     backgroundColor: 'rgba(255, 255, 255, 0.05)',
                     border: '1px solid rgba(255, 255, 255, 0.1)',
                     color: 'var(--text-muted)',
                     fontSize: '0.78rem',
                     fontWeight: 600,
                     cursor: 'pointer',
+                    transition: 'all 0.15s ease',
                   }}
                 >
                   Últimos 7 días
@@ -483,8 +494,8 @@ export default function TransaccionesPage() {
             </div>
 
             {/* STATUS FILTER PILLS */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap' }}>
-              <Filter size={15} color="#94a3b8" />
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap' }} className="mobile-status-pills">
+              <Filter size={15} color="#94a3b8" style={{ marginRight: '0.2rem' }} />
               {[
                 { id: 'all', label: 'Todas' },
                 { id: 'approved', label: 'Aprobadas' },
@@ -505,7 +516,8 @@ export default function TransaccionesPage() {
                       fontWeight: isActive ? 700 : 500,
                       fontSize: '0.8rem',
                       cursor: 'pointer',
-                      border: isActive ? '1px solid rgba(56, 189, 248, 0.4)' : '1px solid transparent',
+                      border: isActive ? '1px solid rgba(56, 189, 248, 0.4)' : '1px solid rgba(255, 255, 255, 0.08)',
+                      transition: 'all 0.15s ease',
                     }}
                   >
                     {st.label}
@@ -570,6 +582,49 @@ export default function TransaccionesPage() {
         @keyframes spin {
           to {
             transform: rotate(360deg);
+          }
+        }
+        @media (max-width: 768px) {
+          .mobile-filter-row-wrap {
+            flex-direction: column !important;
+            align-items: stretch !important;
+            width: 100% !important;
+          }
+          .mobile-date-block {
+            width: 100% !important;
+            flex-direction: column !important;
+            align-items: stretch !important;
+            gap: 0.5rem !important;
+          }
+          .mobile-date-inputs-wrapper {
+            width: 100% !important;
+            display: flex !important;
+            align-items: center !important;
+            gap: 0.4rem !important;
+          }
+          .mobile-date-inputs-wrapper input[type="date"] {
+            flex: 1 !important;
+            min-width: 0 !important;
+          }
+          .mobile-quick-btns {
+            width: 100% !important;
+          }
+          .mobile-quick-btns button {
+            flex: 1 !important;
+            text-align: center !important;
+          }
+          .mobile-status-pills {
+            width: 100% !important;
+          }
+          .mobile-status-pills button {
+            flex: 1 1 auto !important;
+            text-align: center !important;
+          }
+          .mobile-full-width {
+            width: 100% !important;
+          }
+          .mobile-flex-1 {
+            flex: 1 1 auto !important;
           }
         }
       `}</style>

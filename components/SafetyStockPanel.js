@@ -338,7 +338,7 @@ export default function SafetyStockPanel({ onSafetyStockUpdated }) {
     <div className="glass-card" style={{ padding: '1.5rem', marginBottom: '1.5rem' }}>
       
       {/* Panel Header & Navigation Tabs */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem', marginBottom: '1.25rem' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem', marginBottom: '1.25rem' }} className="mobile-stack">
         <div>
           <h2 style={{ fontSize: '1.2rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.5rem', margin: '0 0 0.25rem 0' }}>
             <ShieldAlert size={22} color="var(--accent-amber)" />
@@ -350,7 +350,7 @@ export default function SafetyStockPanel({ onSafetyStockUpdated }) {
         </div>
 
         {/* Action Tabs */}
-        <div style={{ display: 'flex', gap: '0.5rem', background: 'rgba(15, 23, 42, 0.6)', padding: '0.25rem', borderRadius: '12px', border: '1px solid var(--border-subtle)' }}>
+        <div style={{ display: 'flex', gap: '0.5rem', background: 'rgba(15, 23, 42, 0.6)', padding: '0.25rem', borderRadius: '12px', border: '1px solid var(--border-subtle)', width: '100%', maxWidth: 'max-content' }} className="mobile-stack">
           <button
             onClick={() => setActiveTab('list')}
             style={{

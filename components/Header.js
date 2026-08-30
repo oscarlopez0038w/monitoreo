@@ -12,10 +12,10 @@ export default function Header({ vtexStatus, supabaseStatus, onRefreshStats }) {
 
   return (
     <header className="glass-card" style={{ padding: '1.25rem 1.5rem', marginBottom: '1.5rem', borderRadius: '20px' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }} className="mobile-stack">
         
         {/* Brand & Logo */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '1.25rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }} className="mobile-stack">
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem' }}>
             <div
               style={{
@@ -33,29 +33,32 @@ export default function Header({ vtexStatus, supabaseStatus, onRefreshStats }) {
               <Zap size={22} color="#ffffff" />
             </div>
             <div>
-              <h1 style={{ fontSize: '1.3rem', fontWeight: 700, letterSpacing: '-0.02em', background: 'linear-gradient(to right, #ffffff, #94a3b8)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
+              <h1 style={{ fontSize: '1.25rem', fontWeight: 700, letterSpacing: '-0.02em', background: 'linear-gradient(to right, #ffffff, #94a3b8)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
                 VTEX SKU Extractor
               </h1>
-              <p style={{ fontSize: '0.82rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap' }}>
+              <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap' }}>
                 <span style={{ color: 'var(--accent-primary)', fontWeight: 600 }}>SINSA</span> • Catalog System API Integration
               </p>
             </div>
           </div>
 
           {/* Navigation Tabs */}
-          <nav style={{ display: 'flex', gap: '0.4rem', background: 'rgba(15, 23, 42, 0.6)', padding: '0.25rem', borderRadius: '12px', border: '1px solid var(--border-subtle)', marginLeft: '0.5rem' }}>
+          <nav style={{ display: 'flex', gap: '0.4rem', background: 'rgba(15, 23, 42, 0.6)', padding: '0.25rem', borderRadius: '12px', border: '1px solid var(--border-subtle)', width: '100%', maxWidth: 'max-content' }}>
             <Link
               href="/"
               style={{
                 display: 'inline-flex',
                 alignItems: 'center',
+                justifyContent: 'center',
                 gap: '0.4rem',
-                padding: '0.4rem 0.85rem',
+                padding: '0.45rem 0.85rem',
                 borderRadius: '8px',
-                fontSize: '0.84rem',
+                fontSize: '0.82rem',
                 fontWeight: 600,
                 textDecoration: 'none',
                 transition: 'all 0.2s ease',
+                flex: 1,
+                minHeight: '38px',
                 background: isHome ? 'var(--gradient-btn)' : 'transparent',
                 color: isHome ? '#ffffff' : 'var(--text-muted)',
                 boxShadow: isHome ? '0 2px 10px rgba(56, 189, 248, 0.3)' : 'none',
@@ -69,13 +72,16 @@ export default function Header({ vtexStatus, supabaseStatus, onRefreshStats }) {
               style={{
                 display: 'inline-flex',
                 alignItems: 'center',
+                justifyContent: 'center',
                 gap: '0.4rem',
-                padding: '0.4rem 0.85rem',
+                padding: '0.45rem 0.85rem',
                 borderRadius: '8px',
-                fontSize: '0.84rem',
+                fontSize: '0.82rem',
                 fontWeight: 600,
                 textDecoration: 'none',
                 transition: 'all 0.2s ease',
+                flex: 1,
+                minHeight: '38px',
                 background: isSafetyStock ? 'var(--gradient-btn)' : 'transparent',
                 color: isSafetyStock ? '#ffffff' : 'var(--text-muted)',
                 boxShadow: isSafetyStock ? '0 2px 10px rgba(56, 189, 248, 0.3)' : 'none',
@@ -88,24 +94,24 @@ export default function Header({ vtexStatus, supabaseStatus, onRefreshStats }) {
         </div>
 
         {/* Integration Status Badges */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', flexWrap: 'wrap', width: '100%', maxWidth: 'max-content' }}>
           
           {/* Active SKUs Stat Badge */}
           {typeof supabaseStatus?.activeSkus === 'number' && (
-            <div className="badge badge-emerald" style={{ background: 'rgba(52, 211, 153, 0.15)', padding: '0.35rem 0.85rem', fontSize: '0.82rem', border: '1px solid rgba(52, 211, 153, 0.35)' }}>
+            <div className="badge badge-emerald" style={{ background: 'rgba(52, 211, 153, 0.15)', padding: '0.35rem 0.75rem', fontSize: '0.78rem', border: '1px solid rgba(52, 211, 153, 0.35)' }}>
               <ShieldCheck size={14} color="#34d399" />
               <span>SKUs Activos: <strong style={{ color: '#ffffff', fontWeight: 700 }}>{supabaseStatus.activeSkus.toLocaleString('es-NI')}</strong></span>
             </div>
           )}
 
           {/* VTEX Status */}
-          <div className={`badge ${vtexStatus?.configured ? 'badge-emerald' : 'badge-amber'}`}>
+          <div className={`badge ${vtexStatus?.configured ? 'badge-emerald' : 'badge-amber'}`} style={{ fontSize: '0.78rem', padding: '0.35rem 0.65rem' }}>
             {vtexStatus?.configured ? <ShieldCheck size={14} /> : <AlertCircle size={14} />}
-            VTEX: {vtexStatus?.configured ? 'Conectado' : 'Pendiente .env.local'}
+            VTEX: {vtexStatus?.configured ? 'Conectado' : 'Pendiente'}
           </div>
 
           {/* Supabase Status */}
-          <div className={`badge ${supabaseStatus?.configured ? 'badge-emerald' : 'badge-amber'}`}>
+          <div className={`badge ${supabaseStatus?.configured ? 'badge-emerald' : 'badge-amber'}`} style={{ fontSize: '0.78rem', padding: '0.35rem 0.65rem' }}>
             <Database size={14} />
             Supabase: {supabaseStatus?.configured ? 'Conectado' : 'Sin Configurar'}
           </div>
@@ -114,7 +120,7 @@ export default function Header({ vtexStatus, supabaseStatus, onRefreshStats }) {
           <button
             onClick={onRefreshStats}
             className="btn-secondary"
-            style={{ padding: '0.4rem 0.75rem', fontSize: '0.82rem', borderRadius: '10px' }}
+            style={{ padding: '0.45rem 0.85rem', fontSize: '0.82rem', borderRadius: '10px', minHeight: '38px' }}
             title="Recargar estado"
           >
             <RefreshCw size={14} />
