@@ -166,10 +166,10 @@ export default function TransactionsTable({ transactions, onSelectTransaction, i
                   </code>
                 </td>
 
-                {/* MÉTODO DE PAGO Y TARJETA (TERMINACIÓN) */}
+                {/* MÉTODO DE PAGO Y FINANCIAMIENTO */}
                 <td style={{ padding: '1rem 1.2rem' }}>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', flexWrap: 'wrap' }}>
                       <span
                         style={{
                           padding: '0.2rem 0.55rem',
@@ -185,12 +185,28 @@ export default function TransactionsTable({ transactions, onSelectTransaction, i
                         }}
                       >
                         <CreditCard size={13} color="#a5b4fc" />
-                        {tx.payment?.systemName || 'Tarjeta'}
+                        {tx.payment?.cardBrand || tx.payment?.systemName || 'Tarjeta'}
+                      </span>
+
+                      {/* FINANCIAMIENTO VS CONTADO PILL */}
+                      <span
+                        style={{
+                          padding: '0.15rem 0.45rem',
+                          borderRadius: '6px',
+                          fontSize: '0.72rem',
+                          fontWeight: 800,
+                          backgroundColor: tx.payment?.isFinanced ? 'rgba(168, 85, 247, 0.2)' : 'rgba(34, 197, 94, 0.15)',
+                          color: tx.payment?.isFinanced ? '#c084fc' : '#4ade80',
+                          border: `1px solid ${tx.payment?.isFinanced ? 'rgba(168, 85, 247, 0.4)' : 'rgba(34, 197, 94, 0.3)'}`,
+                        }}
+                      >
+                        {tx.payment?.isFinanced ? `⚡ Cuotas (x${tx.payment.installments})` : 'Contado'}
                       </span>
                     </div>
+
                     {tx.payment?.cardNumber && tx.payment.cardNumber !== 'N/A' && (
                       <span style={{ fontSize: '0.76rem', color: '#38bdf8', fontWeight: 700, fontFamily: 'monospace', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
-                        💳 {tx.payment.cardNumber.startsWith('****') ? tx.payment.cardNumber : `**** ${tx.payment.cardNumber.slice(-4)}`}
+                        💳 {tx.payment.cardNumber}
                       </span>
                     )}
                   </div>
@@ -204,23 +220,28 @@ export default function TransactionsTable({ transactions, onSelectTransaction, i
                 </td>
 
                 {/* DIAGNÓSTICO / ERROR */}
-                <td style={{ padding: '1rem 1.2rem', maxWidth: '280px' }}>
+                <td style={{ padding: '1rem 1.2rem', maxWidth: '300px' }}>
                   {tx.errorDiagnostics?.isRefund ? (
-                    <span style={{ color: '#c7d2fe', fontSize: '0.78rem', fontWeight: 600 }}>
-                      🔄 Devolución / Anulación Post-Venta
-                    </span>
+                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', backgroundColor: 'rgba(99, 102, 241, 0.15)', border: '1px solid rgba(99, 102, 241, 0.35)', padding: '0.25rem 0.6rem', borderRadius: '6px', color: '#c7d2fe', fontSize: '0.76rem', fontWeight: 700 }}>
+                      <span>🔄 Devolución Post-Venta</span>
+                    </div>
                   ) : isCanceled ? (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', color: '#f87171', fontSize: '0.8rem' }}>
-                      <AlertTriangle size={15} style={{ flexShrink: 0 }} color="#f87171" />
-                      <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        <span style={{ fontWeight: 600 }}>
-                          {tx.errorDiagnostics?.title || 'Transacción Rechazada'}
-                        </span>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                      <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', backgroundColor: 'rgba(239, 68, 68, 0.12)', border: '1px solid rgba(239, 68, 68, 0.3)', padding: '0.25rem 0.55rem', borderRadius: '6px', color: '#f87171', fontSize: '0.76rem', fontWeight: 800 }}>
+                        <AlertTriangle size={13} color="#f87171" style={{ flexShrink: 0 }} />
+                        <span>Code {tx.errorDiagnostics?.code || tx.returnCode || 'ERR'}: {tx.errorDiagnostics?.title || 'Rechazada'}</span>
+                      </div>
+                    </div>
+                  ) : isApproved ? (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
+                      <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', backgroundColor: 'rgba(34, 197, 94, 0.12)', border: '1px solid rgba(34, 197, 94, 0.3)', padding: '0.25rem 0.55rem', borderRadius: '6px', color: '#34d399', fontSize: '0.76rem', fontWeight: 800 }}>
+                        <CheckCircle2 size={13} color="#34d399" style={{ flexShrink: 0 }} />
+                        <span>Code 00: Autorizado {tx.authId ? `#${tx.authId}` : ''}</span>
                       </div>
                     </div>
                   ) : (
-                    <span style={{ color: '#34d399', fontSize: '0.78rem', fontWeight: 600 }}>
-                      ● Procesada correctamente
+                    <span style={{ color: '#fbbf24', fontSize: '0.78rem', fontWeight: 600 }}>
+                      ● En proceso
                     </span>
                   )}
                 </td>

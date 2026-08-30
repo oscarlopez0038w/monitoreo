@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { isVtexConfigured, fetchVtexOrders } from '@/lib/vtex';
 import { supabaseAdmin, isSupabaseConfigured } from '@/lib/supabase';
 import { getNicaraguaNow } from '@/lib/dateUtils';
+import { getGa4ConfigStatus, fetchGa4FunnelMetrics } from '@/lib/ga4DataApi';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -24,7 +25,15 @@ export async function GET(request) {
     const startIso = new Date(`${startDate}T00:00:00-06:00`).toISOString();
     const endIso = new Date(`${endDate}T23:59:59-06:00`).toISOString();
 
-    // 1. Obtener órdenes reales de VTEX OMS en el período
+    // 1. Verificar estado de GA4 Data API y cargar reporte real si está disponible
+    const ga4Status = getGa4ConfigStatus();
+    let liveGa4Report = null;
+
+    if (ga4Status.canFetchLiveReport) {
+      liveGa4Report = await fetchGa4FunnelMetrics(startDate, endDate).catch(() => null);
+    }
+
+    // 2. Obtener órdenes reales de VTEX OMS en el período
     const firstRes = await fetchVtexOrders(startIso, endIso, '', '', 1, 100).catch(() => null);
     const allOrders = firstRes?.list ? [...firstRes.list] : [];
     const totalPages = Math.min(firstRes?.paging?.pages || 1, 15);
@@ -131,9 +140,20 @@ export async function GET(request) {
     });
 
     // Sesiones y Etapas del Embudo 360º
-    const estimatedSessions = customSessions > 0 ? customSessions : Math.round(totalOrdersCount / 0.024);
-    const productViews = Math.round(estimatedSessions * 0.68);
-    const bannerClicks = Math.round(estimatedSessions * 0.35); // ~35% interactúa con banners/promociones
+    let estimatedSessions = 0;
+    let isRealGa4Data = false;
+
+    if (customSessions > 0) {
+      estimatedSessions = customSessions;
+    } else if (liveGa4Report?.success && liveGa4Report?.sessions > 0) {
+      estimatedSessions = liveGa4Report.sessions;
+      isRealGa4Data = true;
+    } else {
+      estimatedSessions = Math.round(totalOrdersCount / 0.024);
+    }
+
+    const productViews = liveGa4Report?.pageViews || Math.round(estimatedSessions * 0.68);
+    const bannerClicks = Math.round(estimatedSessions * 0.35);
     const addToCarts = Math.round(estimatedSessions * 0.18);
     const beginCheckouts = Math.round(estimatedSessions * 0.052);
     const purchases = totalOrdersCount;
@@ -148,8 +168,8 @@ export async function GET(request) {
         count: estimatedSessions,
         pctOfTotal: 100,
         pctOfPrevious: 100,
-        dropOffCount: estimatedSessions - productViews,
-        dropOffPct: Math.round(((estimatedSessions - productViews) / estimatedSessions) * 100),
+        dropOffCount: Math.max(0, estimatedSessions - productViews),
+        dropOffPct: Math.round(((estimatedSessions - productViews) / Math.max(estimatedSessions, 1)) * 100),
       },
       {
         step: 2,
@@ -158,10 +178,10 @@ export async function GET(request) {
         description: 'Navegación por fichas de productos y clics en banners promocionales del sitio',
         count: productViews,
         bannerClicks,
-        pctOfTotal: Math.round((productViews / estimatedSessions) * 100),
-        pctOfPrevious: Math.round((productViews / estimatedSessions) * 100),
-        dropOffCount: productViews - addToCarts,
-        dropOffPct: Math.round(((productViews - addToCarts) / productViews) * 100),
+        pctOfTotal: Math.round((productViews / Math.max(estimatedSessions, 1)) * 100),
+        pctOfPrevious: Math.round((productViews / Math.max(estimatedSessions, 1)) * 100),
+        dropOffCount: Math.max(0, productViews - addToCarts),
+        dropOffPct: Math.round(((productViews - addToCarts) / Math.max(productViews, 1)) * 100),
       },
       {
         step: 3,
@@ -169,10 +189,10 @@ export async function GET(request) {
         name: '3. Añadidos al Carrito (Add to Cart)',
         description: 'Usuarios que agregaron productos al carrito aprovechando promociones',
         count: addToCarts,
-        pctOfTotal: Math.round((addToCarts / estimatedSessions) * 100),
-        pctOfPrevious: Math.round((addToCarts / productViews) * 100),
-        dropOffCount: addToCarts - beginCheckouts,
-        dropOffPct: Math.round(((addToCarts - beginCheckouts) / addToCarts) * 100),
+        pctOfTotal: Math.round((addToCarts / Math.max(estimatedSessions, 1)) * 100),
+        pctOfPrevious: Math.round((addToCarts / Math.max(productViews, 1)) * 100),
+        dropOffCount: Math.max(0, addToCarts - beginCheckouts),
+        dropOffPct: Math.round(((addToCarts - beginCheckouts) / Math.max(addToCarts, 1)) * 100),
       },
       {
         step: 4,
@@ -180,10 +200,10 @@ export async function GET(request) {
         name: '4. Inicio de Checkout',
         description: 'Compradores que avanzaron a seleccionar método de entrega y pago',
         count: beginCheckouts,
-        pctOfTotal: parseFloat(((beginCheckouts / estimatedSessions) * 100).toFixed(1)),
-        pctOfPrevious: Math.round((beginCheckouts / addToCarts) * 100),
-        dropOffCount: beginCheckouts - purchases,
-        dropOffPct: Math.round(((beginCheckouts - purchases) / beginCheckouts) * 100),
+        pctOfTotal: parseFloat(((beginCheckouts / Math.max(estimatedSessions, 1)) * 100).toFixed(1)),
+        pctOfPrevious: Math.round((beginCheckouts / Math.max(addToCarts, 1)) * 100),
+        dropOffCount: Math.max(0, beginCheckouts - purchases),
+        dropOffPct: Math.round(((beginCheckouts - purchases) / Math.max(beginCheckouts, 1)) * 100),
       },
       {
         step: 5,
@@ -193,7 +213,7 @@ export async function GET(request) {
         count: paymentApprovedCount,
         revenueNio: Math.round(totalApprovedRevenueNio * 100) / 100,
         revenueUsd: parseFloat((totalApprovedRevenueNio / BCN_EXCHANGE_RATE).toFixed(2)),
-        pctOfTotal: parseFloat(((paymentApprovedCount / estimatedSessions) * 100).toFixed(2)),
+        pctOfTotal: parseFloat(((paymentApprovedCount / Math.max(estimatedSessions, 1)) * 100).toFixed(2)),
         pctOfPrevious: Math.round((paymentApprovedCount / Math.max(beginCheckouts, 1)) * 100),
         dropOffCount: Math.max(0, beginCheckouts - paymentApprovedCount),
         dropOffPct: Math.round(((beginCheckouts - paymentApprovedCount) / Math.max(beginCheckouts, 1)) * 100),
@@ -206,7 +226,7 @@ export async function GET(request) {
         count: invoicedCount,
         revenueNio: Math.round(totalApprovedRevenueNio * 100) / 100,
         revenueUsd: parseFloat((totalApprovedRevenueNio / BCN_EXCHANGE_RATE).toFixed(2)),
-        pctOfTotal: parseFloat(((invoicedCount / estimatedSessions) * 100).toFixed(2)),
+        pctOfTotal: parseFloat(((invoicedCount / Math.max(estimatedSessions, 1)) * 100).toFixed(2)),
         pctOfPrevious: Math.round((invoicedCount / Math.max(paymentApprovedCount, 1)) * 100),
         dropOffCount: 0,
         dropOffPct: 0,
@@ -285,9 +305,20 @@ export async function GET(request) {
       amountUsd: parseFloat(((r.amountNio || 0) / BCN_EXCHANGE_RATE).toFixed(2)),
     })).sort((a, b) => b.count - a.count).slice(0, 5);
 
+    // Cálculos de KPIs Adicionales E-Commerce
+    const averageOrderValueNio = paymentApprovedCount > 0 ? totalApprovedRevenueNio / paymentApprovedCount : 0;
+    const averageOrderValueUsd = averageOrderValueNio / BCN_EXCHANGE_RATE;
+
+    const checkoutToPaymentRate = beginCheckouts > 0 ? Math.round((paymentApprovedCount / beginCheckouts) * 100) : 0;
+    const cartToPurchaseRate = addToCarts > 0 ? parseFloat(((purchases / addToCarts) * 100).toFixed(1)) : 0;
+    
+    const abandonedCartsCount = Math.max(0, addToCarts - purchases);
+    const abandonedCartRevenueNio = abandonedCartsCount * averageOrderValueNio;
+    const abandonedCartRevenueUsd = abandonedCartRevenueNio / BCN_EXCHANGE_RATE;
+
     const ga4Configured = Boolean(
-      (process.env.GA4_PROPERTY_ID && process.env.GA4_CLIENT_EMAIL) ||
-      (process.env.GA4_MEASUREMENT_ID && process.env.GA4_API_SECRET)
+      (ga4Status.propertyId && ga4Status.isServiceAccountConfigured) ||
+      (ga4Status.measurementId && ga4Status.isApiSecretConfigured)
     );
 
     return NextResponse.json({
@@ -296,8 +327,12 @@ export async function GET(request) {
       startDate,
       endDate,
       ga4Configured,
-      ga4MeasurementId: process.env.GA4_MEASUREMENT_ID || null,
-      ga4ApiSecretConfigured: Boolean(process.env.GA4_API_SECRET),
+      ga4PropertyId: ga4Status.propertyId,
+      ga4PropertyConfigured: ga4Status.isPropertyConfigured,
+      ga4MeasurementId: ga4Status.measurementId,
+      ga4ApiSecretConfigured: ga4Status.isApiSecretConfigured,
+      isRealGa4Data,
+      ga4StatusDetails: ga4Status,
       funnelSteps: funnelSteps360,
       analyticsKpis: {
         estimatedSessions,
@@ -308,7 +343,13 @@ export async function GET(request) {
         purchases,
         overallConversionRate: parseFloat(((purchases / Math.max(estimatedSessions, 1)) * 100).toFixed(2)),
         cartAbandonmentRate: Math.round(((addToCarts - purchases) / Math.max(addToCarts, 1)) * 100),
-        abandonedCartsCount: Math.max(0, addToCarts - purchases),
+        abandonedCartsCount,
+        abandonedCartRevenueNio: Math.round(abandonedCartRevenueNio * 100) / 100,
+        abandonedCartRevenueUsd: parseFloat(abandonedCartRevenueUsd.toFixed(2)),
+        averageOrderValueNio: Math.round(averageOrderValueNio * 100) / 100,
+        averageOrderValueUsd: parseFloat(averageOrderValueUsd.toFixed(2)),
+        checkoutToPaymentRate,
+        cartToPurchaseRate,
         totalRevenueNio: Math.round(totalRevenueNio * 100) / 100,
         totalRevenueUsd: parseFloat((totalRevenueNio / BCN_EXCHANGE_RATE).toFixed(2)),
         approvedRevenueNio: Math.round(totalApprovedRevenueNio * 100) / 100,
@@ -365,3 +406,4 @@ export async function GET(request) {
     return NextResponse.json({ success: false, error: err.message }, { status: 500 });
   }
 }
+

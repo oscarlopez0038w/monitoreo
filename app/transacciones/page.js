@@ -128,19 +128,25 @@ export default function TransaccionesPage() {
       'TransactionId',
       'Estado',
       'Fecha / Hora',
+      'Modalidad de Pago',
+      'Cuotas / Minicuotas',
+      'Cuota Estimada Mensual',
+      'Monto Total (NIO)',
+      'Método / Franquicia',
+      'Tipo Tarjeta',
+      'BIN (Primeros 6 Dígitos)',
+      'Tarjeta (Máscara)',
+      'Tarjetahabiente (Nombre en Tarjeta)',
       'Cliente Nombre',
       'Cliente Email',
       'Cliente Telefono',
-      'Documento / Cedula',
-      'Monto (NIO)',
-      'Método de Pago',
-      'Tarjeta (Dígitos)',
-      'Tarjetahabiente',
       'Pasarela / Adquirente',
       'Identificador Pago (TID)',
+      'Código Autorización (AuthId)',
       'Código de Error (ReturnCode)',
       'Diagnóstico de Error (Título)',
       'Explicación del Error (Detalle)',
+      'Recomendación SAC',
       'SKUs e Ítems del Carrito',
       'Dirección de Entrega',
     ];
@@ -151,19 +157,25 @@ export default function TransaccionesPage() {
       escapeCSV(t.transactionId),
       escapeCSV(t.status),
       escapeCSV(t.startDate ? formatNicaraguaDateTime(t.startDate) : ''),
+      escapeCSV(t.payment?.isFinanced ? 'Financiamiento (Cuotas)' : 'Contado'),
+      t.payment?.installments || 1,
+      t.payment?.installmentValue || t.amount || 0,
+      t.amount || 0,
+      escapeCSV(t.payment?.cardBrand || t.payment?.systemName),
+      escapeCSV(t.payment?.cardType || 'Crédito'),
+      escapeCSV(t.payment?.bin || 'N/A'),
+      escapeCSV(t.payment?.cardNumber),
+      escapeCSV(t.payment?.cardHolder),
       escapeCSV(t.client?.name),
       escapeCSV(t.client?.email),
       escapeCSV(t.client?.phone),
-      escapeCSV(t.client?.document),
-      t.amount || 0,
-      escapeCSV(t.payment?.systemName),
-      escapeCSV(t.payment?.cardNumber),
-      escapeCSV(t.payment?.cardHolder),
       escapeCSV(t.payment?.acquirer || 'Tilopay'),
       escapeCSV(t.payment?.tid),
+      escapeCSV(t.payment?.authId),
       escapeCSV(t.status === 'Approved' ? '00' : (t.errorDiagnostics?.code || t.payment?.returnCode || 'N/A')),
       escapeCSV(t.errorDiagnostics?.title || (t.status === 'Approved' ? 'Transacción Aprobada Exitosamente' : 'Transacción Cancelada')),
       escapeCSV(t.errorDiagnostics?.description || (t.status === 'Approved' ? 'El pago fue procesado y autorizado correctamente por la pasarela de pago y el banco emisor.' : 'Sin detalles adicionales')),
+      escapeCSV(t.errorDiagnostics?.sacRecommendation),
       escapeCSV((t.skus || []).map((s) => `${s.name} (Cant: ${s.quantity})`).join('; ')),
       escapeCSV(t.shipping?.fullAddressFormatted),
     ]);
@@ -476,7 +488,8 @@ export default function TransaccionesPage() {
               {[
                 { id: 'all', label: 'Todas' },
                 { id: 'approved', label: 'Aprobadas' },
-                { id: 'canceled', label: 'Canceladas / Error' },
+                { id: 'canceled', label: 'Rechazadas / Error' },
+                { id: 'refund', label: '🔄 Devoluciones' },
                 { id: 'pending', label: 'Pendientes' },
               ].map((st) => {
                 const isActive = statusFilter === st.id;
@@ -487,7 +500,6 @@ export default function TransaccionesPage() {
                     style={{
                       padding: '0.4rem 0.85rem',
                       borderRadius: '20px',
-                      border: 'none',
                       backgroundColor: isActive ? 'rgba(56, 189, 248, 0.2)' : 'rgba(255, 255, 255, 0.04)',
                       color: isActive ? '#38bdf8' : 'var(--text-muted)',
                       fontWeight: isActive ? 700 : 500,
@@ -508,7 +520,7 @@ export default function TransaccionesPage() {
             <Search size={17} color="#64748b" style={{ position: 'absolute', left: '1rem', top: '50%', transform: 'translateY(-50%)' }} />
             <input
               type="text"
-              placeholder="Buscar por Key (ej. 511100), ID de orden, cliente, correo o SKU..."
+              placeholder="Buscar por Key, Orden VTEX, Cliente, Email, Auth Code (ej: 849102), o Código de Error (ej: 12, 51)..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               style={{

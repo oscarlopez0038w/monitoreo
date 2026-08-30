@@ -150,7 +150,20 @@ export default function EmbudoPage() {
         'Monto Aprobado ($ USD)': s.revenueUsd || 0,
       }));
 
-      // 2. Sheet Fuentes de Tráfico (UTM Sources)
+      // 2. Sheet Resumen KPIs E-Commerce
+      const kpisSummaryData = [
+        { 'Métrica': 'Sesiones Web (Tráfico)', 'Valor': data.analyticsKpis?.estimatedSessions || 0, 'Notas': data.isRealGa4Data ? 'Datos Reales GA4 Data API' : 'Estimación / Entrada Manual' },
+        { 'Métrica': 'Compras Confirmadas', 'Valor': data.analyticsKpis?.purchases || 0, 'Notas': 'Órdenes VTEX OMS' },
+        { 'Métrica': 'Tasa Conversión Global', 'Valor': `${data.analyticsKpis?.overallConversionRate || 0}%`, 'Notas': 'Compras / Sesiones' },
+        { 'Métrica': 'Ticket Promedio (AOV $ USD)', 'Valor': `$ ${data.analyticsKpis?.averageOrderValueUsd || 0}`, 'Notas': 'Monto Aprobado por Orden' },
+        { 'Métrica': 'Ticket Promedio (AOV C$ NIO)', 'Valor': `C$ ${data.analyticsKpis?.averageOrderValueNio || 0}`, 'Notas': 'Monto Aprobado por Orden' },
+        { 'Métrica': 'Tasa Checkout -> Pago', 'Valor': `${data.analyticsKpis?.checkoutToPaymentRate || 0}%`, 'Notas': 'Autorizaciones Exitosas en Pasarela' },
+        { 'Métrica': 'Carritos Abandonados', 'Valor': data.analyticsKpis?.abandonedCartsCount || 0, 'Notas': 'Add to Cart sin compra' },
+        { 'Métrica': 'Valor Perdido por Abandono ($ USD)', 'Valor': `$ ${data.analyticsKpis?.abandonedCartRevenueUsd || 0}`, 'Notas': 'Oportunidad Recuperable' },
+        { 'Métrica': 'Propiedad GA4 Configurada', 'Valor': data.ga4PropertyConfigured ? 'Sí (Conectada)' : 'No configurada', 'Notas': data.ga4PropertyConfigured ? 'Vincular .env.local GA4_PROPERTY_ID' : 'Pendiente' },
+      ];
+
+      // 3. Sheet Fuentes de Tráfico (UTM Sources)
       const sourcesData = (data.attribution?.sources || []).map((src) => ({
         'Fuente / Canal de Tráfico': src.source,
         'Órdenes Generadas': src.count,
@@ -159,7 +172,7 @@ export default function EmbudoPage() {
         'Ventas Atribuidas ($ USD)': src.revenueUsd,
       }));
 
-      // 3. Sheet Campañas de Marketing (UTM Campaigns)
+      // 4. Sheet Campañas de Marketing (UTM Campaigns)
       const campaignsData = (data.attribution?.campaigns || []).map((cmp) => ({
         'Campaña de Marketing': cmp.campaign,
         'Órdenes Generadas': cmp.count,
@@ -168,7 +181,7 @@ export default function EmbudoPage() {
         'Ventas Atribuidas ($ USD)': cmp.revenueUsd,
       }));
 
-      // 4. Sheet Banners & Promociones
+      // 5. Sheet Banners & Promociones
       const promoData = (data.attribution?.promotions || []).map((p) => ({
         'Banner / Promoción': p.name,
         'Tipo': p.type,
@@ -179,17 +192,20 @@ export default function EmbudoPage() {
 
       const wb = XLSX.utils.book_new();
       const wsSteps = XLSX.utils.json_to_sheet(stepsData);
+      const wsKpis = XLSX.utils.json_to_sheet(kpisSummaryData);
       const wsSources = XLSX.utils.json_to_sheet(sourcesData);
       const wsCampaigns = XLSX.utils.json_to_sheet(campaignsData);
       const wsPromo = XLSX.utils.json_to_sheet(promoData);
 
       const colWidths = [{ wch: 35 }, { wch: 35 }, { wch: 18 }, { wch: 22 }, { wch: 22 }, { wch: 18 }, { wch: 22 }];
       wsSteps['!cols'] = colWidths;
+      wsKpis['!cols'] = [{ wch: 35 }, { wch: 25 }, { wch: 35 }];
       wsSources['!cols'] = colWidths;
       wsCampaigns['!cols'] = colWidths;
       wsPromo['!cols'] = colWidths;
 
       XLSX.utils.book_append_sheet(wb, wsSteps, 'Embudo 360');
+      XLSX.utils.book_append_sheet(wb, wsKpis, 'Resumen KPIs');
       XLSX.utils.book_append_sheet(wb, wsSources, 'Fuentes de Tráfico');
       XLSX.utils.book_append_sheet(wb, wsCampaigns, 'Campañas Marketing');
       XLSX.utils.book_append_sheet(wb, wsPromo, 'Banners & Promociones');
@@ -225,9 +241,16 @@ export default function EmbudoPage() {
               <Filter size={26} color="#38bdf8" />
               Embudo 360º de Ventas, Tráfico, Banners & Atribución E-Commerce
             </h1>
-            <p style={{ fontSize: '0.86rem', color: 'var(--text-muted)', margin: '0.2rem 0 0 0' }}>
-              Mide la conversión desde el tráfico web, fuentes de origen, campañas, banners y PDPs hasta la facturación OMS.
-            </p>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginTop: '0.25rem', flexWrap: 'wrap' }}>
+              <p style={{ fontSize: '0.86rem', color: 'var(--text-muted)', margin: 0 }}>
+                Mide la conversión desde el tráfico web, fuentes de origen, campañas, banners y PDPs hasta la facturación OMS.
+              </p>
+              {data?.isRealGa4Data && (
+                <span style={{ fontSize: '0.7rem', fontWeight: 800, color: '#10b981', backgroundColor: 'rgba(16, 185, 129, 0.12)', border: '1px solid rgba(16, 185, 129, 0.35)', padding: '0.15rem 0.5rem', borderRadius: '6px' }}>
+                  ⚡ Datos GA4 Data API En Vivo
+                </span>
+              )}
+            </div>
           </div>
 
           {/* CONTROLES Y FILTROS */}
@@ -351,8 +374,8 @@ export default function EmbudoPage() {
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
             
-            {/* CARDS RESUMEN EJECUTIVO (4 CARDS) */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '1rem' }}>
+            {/* CARDS RESUMEN EJECUTIVO (6 CARDS) */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))', gap: '1rem' }}>
               
               {/* Card 1: Tasa de Conversión Global */}
               <div className="glass-card" style={{ padding: '1.15rem', borderLeft: '4px solid #34d399' }}>
@@ -367,33 +390,59 @@ export default function EmbudoPage() {
                 </span>
               </div>
 
-              {/* Card 2: Fuente Principal de Tráfico */}
+              {/* Card 2: Ticket Promedio (AOV) */}
               <div className="glass-card" style={{ padding: '1.15rem', borderLeft: '4px solid #38bdf8' }}>
                 <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 700, marginBottom: '0.35rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                  <Globe size={15} color="#38bdf8" /> Canal Principal de Tráfico
+                  <ShoppingBag size={15} color="#38bdf8" /> Ticket Promedio (AOV)
                 </div>
-                <div style={{ fontSize: '1.2rem', fontWeight: 800, color: '#ffffff', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                  {attribution?.sources?.[0]?.source || 'direct / organico'}
+                <div style={{ fontSize: '1.45rem', fontWeight: 800, color: '#38bdf8', fontFamily: 'var(--font-mono)' }}>
+                  {formatCurrency(kpis?.averageOrderValueNio, kpis?.averageOrderValueUsd)}
                 </div>
-                <span style={{ fontSize: '0.76rem', color: '#38bdf8', fontWeight: 600 }}>
-                  Ventas: {formatCurrency(attribution?.sources?.[0]?.revenueNio, attribution?.sources?.[0]?.revenueUsd)}
+                <span style={{ fontSize: '0.76rem', color: 'var(--text-muted)' }}>
+                  Promedio acreditado por compra
                 </span>
               </div>
 
-              {/* Card 3: Campaña Destacada */}
+              {/* Card 3: Ingresos Perdidos por Abandono */}
+              <div className="glass-card" style={{ padding: '1.15rem', borderLeft: '4px solid #f87171' }}>
+                <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 700, marginBottom: '0.35rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                  <ShoppingCart size={15} color="#f87171" /> Oportunidad Abandono Carrito
+                </div>
+                <div style={{ fontSize: '1.4rem', fontWeight: 800, color: '#f87171', fontFamily: 'var(--font-mono)' }}>
+                  {formatCurrency(kpis?.abandonedCartRevenueNio, kpis?.abandonedCartRevenueUsd)}
+                </div>
+                <span style={{ fontSize: '0.76rem', color: 'var(--text-muted)' }}>
+                  {kpis?.abandonedCartsCount?.toLocaleString() || 0} carritos no concretados ({kpis?.cartAbandonmentRate || 0}% fuga)
+                </span>
+              </div>
+
+              {/* Card 4: Efectividad Checkout a Pago */}
               <div className="glass-card" style={{ padding: '1.15rem', borderLeft: '4px solid #fbbf24' }}>
                 <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 700, marginBottom: '0.35rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                  <Megaphone size={15} color="#fbbf24" /> Top Campaña de Marketing
+                  <CreditCard size={15} color="#fbbf24" /> Tasa Checkout a Pago
                 </div>
-                <div style={{ fontSize: '1.2rem', fontWeight: 800, color: '#ffffff', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                <div style={{ fontSize: '1.6rem', fontWeight: 800, color: '#fbbf24', fontFamily: 'var(--font-mono)' }}>
+                  {kpis?.checkoutToPaymentRate || 0}%
+                </div>
+                <span style={{ fontSize: '0.76rem', color: 'var(--text-muted)' }}>
+                  {kpis?.purchases || 0} compras de {kpis?.beginCheckouts?.toLocaleString()} inicios de checkout
+                </span>
+              </div>
+
+              {/* Card 5: Top Campaña de Marketing */}
+              <div className="glass-card" style={{ padding: '1.15rem', borderLeft: '4px solid #a855f7' }}>
+                <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 700, marginBottom: '0.35rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                  <Megaphone size={15} color="#a855f7" /> Top Campaña Marketing
+                </div>
+                <div style={{ fontSize: '1.15rem', fontWeight: 800, color: '#ffffff', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                   {attribution?.campaigns?.[0]?.campaign || 'Orgánico / Sin Campaña'}
                 </div>
-                <span style={{ fontSize: '0.76rem', color: '#fbbf24', fontWeight: 600 }}>
+                <span style={{ fontSize: '0.76rem', color: '#a855f7', fontWeight: 600 }}>
                   {attribution?.campaigns?.[0]?.count || 0} órdenes ({formatCurrency(attribution?.campaigns?.[0]?.revenueNio, attribution?.campaigns?.[0]?.revenueUsd)})
                 </span>
               </div>
 
-              {/* Card 4: Total de Ingresos Confirmados */}
+              {/* Card 6: Total de Facturación Aprobada */}
               <div className="glass-card" style={{ padding: '1.15rem', borderLeft: '4px solid #c084fc' }}>
                 <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 700, marginBottom: '0.35rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
                   <Zap size={15} color="#c084fc" /> Facturación Aprobada
@@ -410,12 +459,14 @@ export default function EmbudoPage() {
 
             {/* VISUALIZADOR DEL EMBUDO COMPLETO DE 6 ETAPAS */}
             <div className="glass-card" style={{ padding: '1.5rem', background: 'linear-gradient(135deg, rgba(15, 23, 42, 0.95), rgba(30, 41, 59, 0.98))' }}>
-              <h2 style={{ fontSize: '1.1rem', fontWeight: 800, color: '#ffffff', marginBottom: '1.25rem', display: 'flex', alignItems: 'center', gap: '0.6rem', margin: 0 }}>
-                <Filter size={22} color="#38bdf8" />
-                Embudo de Conversión de 6 Etapas (Journey del Comprador)
-              </h2>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+                <h2 style={{ fontSize: '1.1rem', fontWeight: 800, color: '#ffffff', display: 'flex', alignItems: 'center', gap: '0.6rem', margin: 0 }}>
+                  <Filter size={22} color="#38bdf8" />
+                  Embudo de Conversión de 6 Etapas (Journey del Comprador)
+                </h2>
+              </div>
 
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginTop: '1rem' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '1.2rem', marginTop: '1rem' }}>
                 {(data?.funnelSteps || []).map((step, idx) => {
                   const isLast = idx === (data.funnelSteps.length - 1);
 
@@ -428,8 +479,10 @@ export default function EmbudoPage() {
                   if (step.code === 'payment_approval') { stepColor = '#34d399'; icon = <ShieldCheck size={18} color={stepColor} />; }
                   if (step.code === 'invoiced') { stepColor = '#10b981'; icon = <CheckCircle2 size={18} color={stepColor} />; }
 
+                  const barPercentage = Math.min(Math.max(step.pctOfTotal, 2), 100);
+
                   return (
-                    <div key={step.step} style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+                    <div key={step.step} style={{ display: 'flex', flexDirection: 'column', gap: '0.45rem' }}>
                       <div
                         style={{
                           background: isLast ? 'rgba(16, 185, 129, 0.08)' : 'rgba(15, 23, 42, 0.7)',
@@ -458,94 +511,105 @@ export default function EmbudoPage() {
                         </div>
 
                         <div style={{ display: 'flex', alignItems: 'center', gap: '2rem', flexWrap: 'wrap' }}>
-                          <div style={{ textAlign: 'right', minWidth: '120px' }}>
-                            <div style={{ fontSize: '1.2rem', fontWeight: 800, color: '#ffffff', fontFamily: 'var(--font-mono)' }}>
-                              {step.count.toLocaleString()}
+                          <div style={{ textAlign: 'right' }}>
+                            <div style={{ fontSize: '1.25rem', fontWeight: 800, color: '#ffffff', fontFamily: 'var(--font-mono)' }}>
+                              {step.count?.toLocaleString()}
                             </div>
                             <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
                               {step.revenueNio ? formatCurrency(step.revenueNio, step.revenueUsd) : 'Eventos / Usuarios'}
                             </span>
                           </div>
 
-                          <div style={{ textAlign: 'right', minWidth: '90px' }}>
+                          <div style={{ textAlign: 'right', minWidth: '100px' }}>
                             <div style={{ fontSize: '1.1rem', fontWeight: 800, color: stepColor }}>
                               {step.pctOfTotal}%
                             </div>
                             <span style={{ fontSize: '0.7rem', color: 'var(--text-dim)' }}>
-                              Conversión Global
+                              del Tráfico Total
                             </span>
                           </div>
+
+                          {!isLast && step.dropOffPct > 0 && (
+                            <div style={{ background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.3)', borderRadius: '8px', padding: '0.35rem 0.65rem', textAlign: 'center', minWidth: '110px' }}>
+                              <div style={{ fontSize: '0.78rem', fontWeight: 800, color: '#f87171' }}>
+                                -{step.dropOffPct}% Abandono
+                              </div>
+                              <span style={{ fontSize: '0.68rem', color: '#fca5a5' }}>
+                                {step.dropOffCount?.toLocaleString()} no avanzan
+                              </span>
+                            </div>
+                          )}
                         </div>
                       </div>
 
-                      {!isLast && (
-                        <div style={{ display: 'flex', alignItems: 'center', padding: '0 0.5rem', gap: '1rem' }}>
-                          <div style={{ flex: 1, height: '6px', background: 'rgba(255, 255, 255, 0.06)', borderRadius: '3px', overflow: 'hidden' }}>
-                            <div style={{ width: `${Math.min(100, Math.max(4, step.pctOfTotal))}%`, height: '100%', background: stepColor, borderRadius: '3px' }} />
-                          </div>
-                          <div style={{ fontSize: '0.72rem', color: '#fca5a5', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
-                            <XCircle size={13} color="#f43f5e" />
-                            Abandono: {step.dropOffPct}% ({step.dropOffCount.toLocaleString()} perdidos)
-                          </div>
-                        </div>
-                      )}
+                      {/* BARRA DE PROGRESO DE LA ETAPA */}
+                      <div style={{ width: '100%', height: '6px', background: 'rgba(255, 255, 255, 0.05)', borderRadius: '3px', overflow: 'hidden' }}>
+                        <div
+                          style={{
+                            height: '100%',
+                            width: `${barPercentage}%`,
+                            background: `linear-gradient(90deg, ${stepColor}, #2563eb)`,
+                            borderRadius: '3px',
+                            transition: 'width 0.5s ease',
+                          }}
+                        />
+                      </div>
                     </div>
                   );
                 })}
               </div>
             </div>
 
-            {/* SECCIÓN DE ATRIBUCIÓN DE TRÁFICO Y CAMPAÑA (UTM SOURCES & CAMPAIGNS) */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(450px, 1fr))', gap: '1.25rem' }}>
+            {/* SECCIÓN DE ATRIBUCIÓN Y DETALLES */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(420px, 1fr))', gap: '1.25rem' }}>
               
-              {/* TABLA: CANALES & FUENTES DE TRÁFICO (UTM SOURCE / MEDIUM) */}
+              {/* TABLA: FUENTES DE TRÁFICO (UTM SOURCES) */}
               <div className="glass-card" style={{ padding: '1.25rem' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.5rem' }}>
-                  <h3 style={{ fontSize: '0.98rem', fontWeight: 700, color: '#38bdf8', margin: 0, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+                  <h3 style={{ fontSize: '1rem', fontWeight: 800, color: '#ffffff', margin: 0, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                     <Globe size={18} color="#38bdf8" />
-                    Atribución por Fuente de Tráfico (UTM Source)
+                    Atribución por Fuente / Canal (UTM Source)
                   </h3>
-
                   <div style={{ position: 'relative' }}>
-                    <Search size={14} color="var(--text-dim)" style={{ position: 'absolute', left: '0.6rem', top: '50%', transform: 'translateY(-50%)' }} />
+                    <Search size={14} color="var(--text-dim)" style={{ position: 'absolute', left: '0.5rem', top: '50%', transform: 'translateY(-50%)' }} />
                     <input
                       type="text"
-                      placeholder="Buscar fuente..."
+                      placeholder="Buscar canal..."
                       value={searchSource}
                       onChange={(e) => setSearchSource(e.target.value)}
-                      style={{ padding: '0.3rem 0.6rem 0.3rem 2rem', borderRadius: '8px', border: '1px solid var(--border-subtle)', background: 'rgba(15, 23, 42, 0.6)', color: '#ffffff', fontSize: '0.78rem', outline: 'none' }}
+                      style={{ padding: '0.25rem 0.5rem 0.25rem 1.8rem', background: 'rgba(15, 23, 42, 0.8)', border: '1px solid var(--border-subtle)', borderRadius: '6px', color: '#ffffff', fontSize: '0.75rem', outline: 'none' }}
                     />
                   </div>
                 </div>
 
                 <div style={{ overflowX: 'auto' }}>
-                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.84rem' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem' }}>
                     <thead>
-                      <tr style={{ background: 'rgba(30, 41, 59, 0.6)', borderBottom: '1px solid rgba(255, 255, 255, 0.08)', color: '#94a3b8', textAlign: 'left' }}>
-                        <th style={{ padding: '0.65rem 0.85rem' }}>Canal / Fuente</th>
-                        <th style={{ padding: '0.65rem 0.85rem', textAlign: 'center' }}>Órdenes</th>
-                        <th style={{ padding: '0.65rem 0.85rem', textAlign: 'right' }}>Ventas Atribuidas</th>
+                      <tr style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.1)', textAlign: 'left', color: 'var(--text-muted)' }}>
+                        <th style={{ padding: '0.5rem' }}>Canal de Tráfico</th>
+                        <th style={{ padding: '0.5rem', textAlign: 'center' }}>Órdenes</th>
+                        <th style={{ padding: '0.5rem', textAlign: 'right' }}>Ventas Atribuidas</th>
                       </tr>
                     </thead>
                     <tbody>
                       {filteredSources.length > 0 ? (
                         filteredSources.map((src, idx) => (
                           <tr key={idx} style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.04)' }}>
-                            <td style={{ padding: '0.65rem 0.85rem', color: '#ffffff', fontWeight: 600 }}>
-                              🌐 {src.source}
+                            <td style={{ padding: '0.55rem', fontWeight: 700, color: '#ffffff' }}>
+                              {src.source}
                             </td>
-                            <td style={{ padding: '0.65rem 0.85rem', textAlign: 'center', color: '#38bdf8', fontWeight: 700 }}>
+                            <td style={{ padding: '0.55rem', textAlign: 'center', color: '#38bdf8', fontWeight: 700 }}>
                               {src.count}
                             </td>
-                            <td style={{ padding: '0.65rem 0.85rem', textAlign: 'right', color: '#34d399', fontWeight: 800, fontFamily: 'var(--font-mono)' }}>
+                            <td style={{ padding: '0.55rem', textAlign: 'right', fontWeight: 700, color: '#34d399', fontFamily: 'var(--font-mono)' }}>
                               {formatCurrency(src.revenueNio, src.revenueUsd)}
                             </td>
                           </tr>
                         ))
                       ) : (
                         <tr>
-                          <td colSpan={3} style={{ padding: '1.5rem', textAlign: 'center', color: 'var(--text-dim)' }}>
-                            No se encontraron fuentes de tráfico.
+                          <td colSpan={3} style={{ padding: '1rem', textAlign: 'center', color: 'var(--text-dim)', fontStyle: 'italic' }}>
+                            No se encontraron canales de tráfico.
                           </td>
                         </tr>
                       )}
@@ -554,54 +618,53 @@ export default function EmbudoPage() {
                 </div>
               </div>
 
-              {/* TABLA: CAMPAÑAS DE MARKETING (UTM CAMPAIGN) */}
+              {/* TABLA: CAMPAÑAS DE MARKETING (UTM CAMPAIGNS) */}
               <div className="glass-card" style={{ padding: '1.25rem' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.5rem' }}>
-                  <h3 style={{ fontSize: '0.98rem', fontWeight: 700, color: '#fbbf24', margin: 0, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+                  <h3 style={{ fontSize: '1rem', fontWeight: 800, color: '#ffffff', margin: 0, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                     <Megaphone size={18} color="#fbbf24" />
-                    Atribución por Campañas (UTM Campaign)
+                    Atribución por Campaña (UTM Campaign)
                   </h3>
-
                   <div style={{ position: 'relative' }}>
-                    <Search size={14} color="var(--text-dim)" style={{ position: 'absolute', left: '0.6rem', top: '50%', transform: 'translateY(-50%)' }} />
+                    <Search size={14} color="var(--text-dim)" style={{ position: 'absolute', left: '0.5rem', top: '50%', transform: 'translateY(-50%)' }} />
                     <input
                       type="text"
                       placeholder="Buscar campaña..."
                       value={searchCampaign}
                       onChange={(e) => setSearchCampaign(e.target.value)}
-                      style={{ padding: '0.3rem 0.6rem 0.3rem 2rem', borderRadius: '8px', border: '1px solid var(--border-subtle)', background: 'rgba(15, 23, 42, 0.6)', color: '#ffffff', fontSize: '0.78rem', outline: 'none' }}
+                      style={{ padding: '0.25rem 0.5rem 0.25rem 1.8rem', background: 'rgba(15, 23, 42, 0.8)', border: '1px solid var(--border-subtle)', borderRadius: '6px', color: '#ffffff', fontSize: '0.75rem', outline: 'none' }}
                     />
                   </div>
                 </div>
 
                 <div style={{ overflowX: 'auto' }}>
-                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.84rem' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem' }}>
                     <thead>
-                      <tr style={{ background: 'rgba(30, 41, 59, 0.6)', borderBottom: '1px solid rgba(255, 255, 255, 0.08)', color: '#94a3b8', textAlign: 'left' }}>
-                        <th style={{ padding: '0.65rem 0.85rem' }}>Campaña</th>
-                        <th style={{ padding: '0.65rem 0.85rem', textAlign: 'center' }}>Órdenes</th>
-                        <th style={{ padding: '0.65rem 0.85rem', textAlign: 'right' }}>Ventas Atribuidas</th>
+                      <tr style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.1)', textAlign: 'left', color: 'var(--text-muted)' }}>
+                        <th style={{ padding: '0.5rem' }}>Nombre de Campaña</th>
+                        <th style={{ padding: '0.5rem', textAlign: 'center' }}>Órdenes</th>
+                        <th style={{ padding: '0.5rem', textAlign: 'right' }}>Ventas Atribuidas</th>
                       </tr>
                     </thead>
                     <tbody>
                       {filteredCampaigns.length > 0 ? (
                         filteredCampaigns.map((cmp, idx) => (
                           <tr key={idx} style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.04)' }}>
-                            <td style={{ padding: '0.65rem 0.85rem', color: '#ffffff', fontWeight: 600 }}>
-                              📣 {cmp.campaign}
+                            <td style={{ padding: '0.55rem', fontWeight: 700, color: '#ffffff' }}>
+                              {cmp.campaign}
                             </td>
-                            <td style={{ padding: '0.65rem 0.85rem', textAlign: 'center', color: '#fbbf24', fontWeight: 700 }}>
+                            <td style={{ padding: '0.55rem', textAlign: 'center', color: '#fbbf24', fontWeight: 700 }}>
                               {cmp.count}
                             </td>
-                            <td style={{ padding: '0.65rem 0.85rem', textAlign: 'right', color: '#34d399', fontWeight: 800, fontFamily: 'var(--font-mono)' }}>
+                            <td style={{ padding: '0.55rem', textAlign: 'right', fontWeight: 700, color: '#34d399', fontFamily: 'var(--font-mono)' }}>
                               {formatCurrency(cmp.revenueNio, cmp.revenueUsd)}
                             </td>
                           </tr>
                         ))
                       ) : (
                         <tr>
-                          <td colSpan={3} style={{ padding: '1.5rem', textAlign: 'center', color: 'var(--text-dim)' }}>
-                            No se encontraron campañas.
+                          <td colSpan={3} style={{ padding: '1rem', textAlign: 'center', color: 'var(--text-dim)', fontStyle: 'italic' }}>
+                            No se encontraron campañas de marketing.
                           </td>
                         </tr>
                       )}
@@ -612,31 +675,26 @@ export default function EmbudoPage() {
 
             </div>
 
-            {/* SECCIÓN INFERIOR: BANNERS, PROMOCIONES Y CATEGORÍAS PDP */}
+            {/* BANNERS, CATEGORÍAS Y AUDITORÍA GA4 */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: '1.25rem' }}>
               
-              {/* BANNERS & PROMOCIONES APLICADAS */}
+              {/* BANNERS Y PROMOCIONES */}
               <div className="glass-card" style={{ padding: '1.25rem' }}>
-                <h3 style={{ fontSize: '0.98rem', fontWeight: 700, color: '#c084fc', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <h3 style={{ fontSize: '0.98rem', fontWeight: 800, color: '#ffffff', marginBottom: '0.85rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                   <Tag size={18} color="#c084fc" />
-                  Banners, Promociones & Cupones Utilizados
+                  Rendimiento de Banners & Promociones
                 </h3>
-
-                {attribution?.promotions && attribution.promotions.length > 0 ? (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem' }}>
+                {attribution?.promotions?.length > 0 ? (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
                     {attribution.promotions.map((p, idx) => (
                       <div key={idx} style={{ background: 'rgba(255, 255, 255, 0.03)', padding: '0.65rem 0.85rem', borderRadius: '8px', border: '1px solid rgba(255, 255, 255, 0.05)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                         <div>
-                          <span style={{ fontSize: '0.84rem', fontWeight: 700, color: '#ffffff', display: 'block' }}>
-                            🏷️ {p.name}
-                          </span>
-                          <span style={{ fontSize: '0.72rem', color: '#c084fc', fontWeight: 600 }}>
-                            {p.count} órdenes beneficiadas
-                          </span>
+                          <div style={{ fontSize: '0.84rem', fontWeight: 700, color: '#ffffff' }}>{p.name}</div>
+                          <span style={{ fontSize: '0.7rem', color: '#c084fc' }}>{p.type}</span>
                         </div>
-
                         <div style={{ textAlign: 'right' }}>
-                          <div style={{ fontSize: '0.88rem', fontWeight: 800, color: '#34d399', fontFamily: 'var(--font-mono)' }}>
+                          <div style={{ fontSize: '0.82rem', fontWeight: 800, color: '#38bdf8' }}>{p.count} órdenes</div>
+                          <div style={{ fontSize: '0.74rem', color: '#34d399', fontWeight: 700, fontFamily: 'var(--font-mono)' }}>
                             {formatCurrency(p.revenueNio, p.revenueUsd)}
                           </div>
                         </div>
@@ -645,7 +703,7 @@ export default function EmbudoPage() {
                   </div>
                 ) : (
                   <div style={{ fontSize: '0.8rem', color: 'var(--text-dim)', fontStyle: 'italic', padding: '1rem 0' }}>
-                    No se registran promociones o cupones activos en el período.
+                    No se registran promociones o cupones activos.
                   </div>
                 )}
               </div>
@@ -657,14 +715,21 @@ export default function EmbudoPage() {
                     <ShieldCheck size={18} color="#34d399" />
                     Auditoría & Conexión GA4 E-Commerce
                   </h3>
-                  {data?.ga4MeasurementId && (
-                    <span style={{ fontSize: '0.7rem', fontWeight: 800, color: '#34d399', backgroundColor: 'rgba(52, 211, 153, 0.15)', border: '1px solid rgba(52, 211, 153, 0.4)', padding: '0.2rem 0.55rem', borderRadius: '6px' }}>
-                      ✓ GA4 Protocol Activo ({data.ga4MeasurementId})
-                    </span>
-                  )}
+                  <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
+                    {data?.ga4PropertyConfigured && (
+                      <span style={{ fontSize: '0.7rem', fontWeight: 800, color: '#38bdf8', backgroundColor: 'rgba(56, 189, 248, 0.15)', border: '1px solid rgba(56, 189, 248, 0.4)', padding: '0.2rem 0.55rem', borderRadius: '6px' }}>
+                        ✓ GA4 Propiedad Conectada
+                      </span>
+                    )}
+                    {data?.ga4MeasurementId && (
+                      <span style={{ fontSize: '0.7rem', fontWeight: 800, color: '#34d399', backgroundColor: 'rgba(52, 211, 153, 0.15)', border: '1px solid rgba(52, 211, 153, 0.4)', padding: '0.2rem 0.55rem', borderRadius: '6px' }}>
+                        ✓ Measurement ID ({data.ga4MeasurementId})
+                      </span>
+                    )}
+                  </div>
                 </div>
                 <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginBottom: '1rem' }}>
-                  Verifica que los objetos e-commerce se estén disparando correctamente en el DataLayer de VTEX hacia Google Analytics 4.
+                  Verifica la salud de los eventos e-commerce capturados en el DataLayer de VTEX y las llaves en `.env.local`.
                 </p>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem' }}>

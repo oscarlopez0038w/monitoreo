@@ -167,7 +167,7 @@ export default function TransactionDetailModal({ transaction, onClose }) {
           </button>
         </div>
 
-        {/* DIAGNOSTIC ALERT BANNER (SI HAY ERROR, RECHAZO O DEVOLUCIÓN) */}
+        {/* DIAGNOSTIC ALERT BANNER (APROBADA, RECHAZO O DEVOLUCIÓN) */}
         {transaction.errorDiagnostics?.isRefund ? (
           <div
             style={{
@@ -203,9 +203,53 @@ export default function TransactionDetailModal({ transaction, onClose }) {
               <p style={{ margin: '0.35rem 0 0 0', fontSize: '0.88rem', color: '#e0e7ff', lineHeight: 1.45 }}>
                 {transaction.errorDiagnostics?.description}
               </p>
-              {transaction.errorDiagnostics?.cancelReason && (
-                <p style={{ margin: '0.3rem 0 0 0', fontSize: '0.8rem', color: '#a5b4fc' }}>
-                  💡 <strong>Motivo en VTEX:</strong> {transaction.errorDiagnostics.cancelReason}
+              {transaction.errorDiagnostics?.sacRecommendation && (
+                <p style={{ margin: '0.35rem 0 0 0', fontSize: '0.82rem', color: '#a5b4fc', backgroundColor: 'rgba(99, 102, 241, 0.15)', padding: '0.35rem 0.65rem', borderRadius: '6px', border: '1px solid rgba(99, 102, 241, 0.25)' }}>
+                  💡 <strong>Recomendación SAC:</strong> {transaction.errorDiagnostics.sacRecommendation}
+                </p>
+              )}
+            </div>
+          </div>
+        ) : isApproved ? (
+          <div
+            style={{
+              backgroundColor: 'rgba(34, 197, 94, 0.08)',
+              borderBottom: '1px solid rgba(34, 197, 94, 0.25)',
+              padding: '0.85rem 1.5rem',
+              display: 'flex',
+              alignItems: 'flex-start',
+              gap: '0.85rem',
+              flexShrink: 0,
+            }}
+          >
+            <CheckCircle2 size={22} color="#4ade80" style={{ flexShrink: 0, marginTop: '2px' }} />
+            <div style={{ flex: 1 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+                <h4 style={{ margin: 0, fontSize: '0.95rem', color: '#4ade80', fontWeight: 700 }}>
+                  {transaction.errorDiagnostics?.title || 'Transacción Aprobada & Acreditada'}
+                </h4>
+                {transaction.authId && (
+                  <span
+                    style={{
+                      fontSize: '0.75rem',
+                      background: 'rgba(34, 197, 94, 0.2)',
+                      color: '#4ade80',
+                      border: '1px solid rgba(34, 197, 94, 0.4)',
+                      padding: '0.15rem 0.55rem',
+                      borderRadius: '6px',
+                      fontWeight: 800,
+                    }}
+                  >
+                    Auth Code: {transaction.authId}
+                  </span>
+                )}
+              </div>
+              <p style={{ margin: '0.3rem 0 0 0', fontSize: '0.86rem', color: '#bbf7d0', lineHeight: 1.4 }}>
+                {transaction.errorDiagnostics?.description || 'Cobro autorizado exitosamente por el banco y procesado en la pasarela Tilopay.'}
+              </p>
+              {transaction.errorDiagnostics?.sacRecommendation && (
+                <p style={{ margin: '0.35rem 0 0 0', fontSize: '0.8rem', color: '#86efac', backgroundColor: 'rgba(34, 197, 94, 0.12)', padding: '0.3rem 0.6rem', borderRadius: '6px' }}>
+                  ⚡ <strong>Estado SAC:</strong> {transaction.errorDiagnostics.sacRecommendation}
                 </p>
               )}
             </div>
@@ -249,9 +293,9 @@ export default function TransactionDetailModal({ transaction, onClose }) {
                   transaction.errorDiagnostics?.reason ||
                   'Transacción cancelada o rechazada por la pasarela de pago o el banco emisor.'}
               </p>
-              {transaction.errorDiagnostics?.cancelReason && (
-                <p style={{ margin: '0.3rem 0 0 0', fontSize: '0.8rem', color: '#fca5a5' }}>
-                  💡 <strong>Motivo de Cancelación VTEX:</strong> {transaction.errorDiagnostics.cancelReason}
+              {transaction.errorDiagnostics?.sacRecommendation && (
+                <p style={{ margin: '0.35rem 0 0 0', fontSize: '0.82rem', color: '#fecaca', backgroundColor: 'rgba(239, 68, 68, 0.15)', padding: '0.35rem 0.65rem', borderRadius: '6px', border: '1px solid rgba(239, 68, 68, 0.3)' }}>
+                  💡 <strong>Recomendación SAC:</strong> {transaction.errorDiagnostics.sacRecommendation}
                 </p>
               )}
             </div>
@@ -311,6 +355,49 @@ export default function TransactionDetailModal({ transaction, onClose }) {
           {/* TAB 1: RESUMEN & PAGO */}
           {activeTab === 'summary' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+              
+              {/* FINANCING VS CONTADO MODE BANNER */}
+              <div
+                style={{
+                  backgroundColor: transaction.payment?.isFinanced ? 'rgba(168, 85, 247, 0.12)' : 'rgba(34, 197, 94, 0.1)',
+                  border: `1px solid ${transaction.payment?.isFinanced ? 'rgba(168, 85, 247, 0.35)' : 'rgba(34, 197, 94, 0.3)'}`,
+                  borderRadius: '12px',
+                  padding: '0.85rem 1.25rem',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  flexWrap: 'wrap',
+                  gap: '0.75rem',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+                  <CreditCard size={22} color={transaction.payment?.isFinanced ? '#c084fc' : '#4ade80'} />
+                  <div>
+                    <span style={{ fontSize: '0.75rem', color: transaction.payment?.isFinanced ? '#e9d5ff' : '#bbf7d0', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', display: 'block' }}>
+                      Modalidad de Pago
+                    </span>
+                    <strong style={{ fontSize: '1.05rem', color: '#ffffff', fontWeight: 800 }}>
+                      {transaction.payment?.isFinanced
+                        ? `⚡ FINANCIAMIENTO (${transaction.payment.installments} CUOTAS / MINICUOTAS)`
+                        : '🟢 PAGO DE CONTADO (1 Pago Único)'}
+                    </strong>
+                  </div>
+                </div>
+
+                {transaction.payment?.isFinanced ? (
+                  <div style={{ backgroundColor: 'rgba(168, 85, 247, 0.25)', border: '1px solid rgba(168, 85, 247, 0.4)', padding: '0.35rem 0.85rem', borderRadius: '8px', textAlign: 'right' }}>
+                    <span style={{ fontSize: '0.72rem', color: '#e9d5ff', display: 'block' }}>Cuota Estimada:</span>
+                    <strong style={{ fontSize: '1rem', color: '#f3e8ff' }}>
+                      {Number(transaction.payment.installmentValue)?.toLocaleString('es-NI', { minimumFractionDigits: 2 })} {transaction.currency} / mes
+                    </strong>
+                  </div>
+                ) : (
+                  <span style={{ fontSize: '0.8rem', color: '#86efac', fontWeight: 700, backgroundColor: 'rgba(34, 197, 94, 0.18)', padding: '0.3rem 0.7rem', borderRadius: '6px' }}>
+                    Pago Inmediato 100%
+                  </span>
+                )}
+              </div>
+
               {/* TOP METRICS SUMMARY GRID */}
               <div
                 style={{
@@ -344,13 +431,13 @@ export default function TransactionDetailModal({ transaction, onClose }) {
                   }}
                 >
                   <span style={{ fontSize: '0.78rem', color: '#94a3b8', display: 'block', marginBottom: '0.25rem' }}>
-                    Método de Pago
+                    Franquicia & Método
                   </span>
                   <strong style={{ fontSize: '1.1rem', color: '#ffffff' }}>
-                    {transaction.payment?.systemName || 'Tarjeta'}
+                    {transaction.payment?.cardBrand || transaction.payment?.systemName || 'Tarjeta'} ({transaction.payment?.cardType || 'Crédito'})
                   </strong>
                   <span style={{ fontSize: '0.8rem', color: '#38bdf8', display: 'block', marginTop: '0.2rem', fontFamily: 'monospace', fontWeight: 700 }}>
-                    💳 {transaction.payment?.cardNumber && transaction.payment.cardNumber !== 'N/A' ? (transaction.payment.cardNumber.startsWith('****') ? transaction.payment.cardNumber : `**** ${transaction.payment.cardNumber.slice(-4)}`) : 'Dígitos No Disponibles'}
+                    💳 {transaction.payment?.cardNumber || 'Dígitos No Disponibles'}
                   </span>
                 </div>
 
@@ -371,7 +458,7 @@ export default function TransactionDetailModal({ transaction, onClose }) {
                 </div>
               </div>
 
-              {/* PAYMENT TECHNICAL DETAILS BOX */}
+              {/* FULL CARD & PAYMENT TECHNICAL DETAILS BOX */}
               <div
                 style={{
                   backgroundColor: 'rgba(30, 41, 59, 0.4)',
@@ -380,15 +467,52 @@ export default function TransactionDetailModal({ transaction, onClose }) {
                   padding: '1.25rem',
                 }}
               >
-                <h4 style={{ margin: '0 0 1rem 0', fontSize: '0.95rem', color: '#ffffff', fontWeight: 600 }}>
-                  Detalles Técnicos del Pago en Pasarela
+                <h4 style={{ margin: '0 0 1rem 0', fontSize: '0.95rem', color: '#ffffff', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  💳 Captura Completa de Datos de la Tarjeta y Transacción
                 </h4>
 
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', fontSize: '0.85rem' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1.1rem', fontSize: '0.85rem' }}>
+                  
+                  {/* NOMBRE EN TARJETA / TARJETAHABIENTE */}
                   <div>
-                    <span style={{ color: '#94a3b8', display: 'block' }}>ID de Transacción (TransactionId):</span>
+                    <span style={{ color: '#94a3b8', display: 'block', fontSize: '0.78rem' }}>Tarjetahabiente (Nombre en Tarjeta):</span>
+                    <strong style={{ color: '#38bdf8', fontSize: '0.95rem', display: 'block', marginTop: '0.2rem' }}>
+                      👤 {transaction.payment?.cardHolder || transaction.client?.name || 'N/A'}
+                    </strong>
+                    {transaction.payment?.isCardHolderExtracted && (
+                      <span style={{ fontSize: '0.72rem', color: '#34d399' }}>✓ Nombre extraído de pasarela</span>
+                    )}
+                  </div>
+
+                  {/* BIN & ULTIMOS DIGITOS */}
+                  <div>
+                    <span style={{ color: '#94a3b8', display: 'block', fontSize: '0.78rem' }}>BIN & Máscara de Tarjeta:</span>
+                    <strong style={{ color: '#e2e8f0', display: 'block', marginTop: '0.2rem', fontFamily: 'monospace' }}>
+                      BIN: {transaction.payment?.bin !== 'N/A' ? transaction.payment.bin : '••••••'} | {transaction.payment?.cardNumber || 'N/A'}
+                    </strong>
+                  </div>
+
+                  {/* MARCA Y TIPO DE TARJETA */}
+                  <div>
+                    <span style={{ color: '#94a3b8', display: 'block', fontSize: '0.78rem' }}>Tipo y Franquicia de Tarjeta:</span>
+                    <strong style={{ color: '#e2e8f0', display: 'block', marginTop: '0.2rem' }}>
+                      {transaction.payment?.cardBrand || 'Tarjeta'} ({transaction.payment?.cardType || 'Crédito'})
+                    </strong>
+                  </div>
+
+                  {/* PLAN DE FINANCIAMIENTO */}
+                  <div>
+                    <span style={{ color: '#94a3b8', display: 'block', fontSize: '0.78rem' }}>Plan de Cuotas / Financiamiento:</span>
+                    <strong style={{ color: transaction.payment?.isFinanced ? '#c084fc' : '#4ade80', display: 'block', marginTop: '0.2rem' }}>
+                      {transaction.payment?.installmentsDescription || 'Pago de Contado (1 cuota)'}
+                    </strong>
+                  </div>
+
+                  {/* ID DE TRANSACCION */}
+                  <div>
+                    <span style={{ color: '#94a3b8', display: 'block', fontSize: '0.78rem' }}>ID Transacción (TransactionId):</span>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '0.2rem' }}>
-                      <code style={{ background: 'rgba(0,0,0,0.3)', padding: '0.2rem 0.5rem', borderRadius: '6px', color: '#38bdf8' }}>
+                      <code style={{ background: 'rgba(0,0,0,0.3)', padding: '0.2rem 0.5rem', borderRadius: '6px', color: '#38bdf8', fontSize: '0.82rem' }}>
                         {transaction.transactionId}
                       </code>
                       <button
@@ -400,22 +524,25 @@ export default function TransactionDetailModal({ transaction, onClose }) {
                     </div>
                   </div>
 
+                  {/* TID / NSU */}
                   <div>
-                    <span style={{ color: '#94a3b8', display: 'block' }}>Identificador de Pago (TID):</span>
+                    <span style={{ color: '#94a3b8', display: 'block', fontSize: '0.78rem' }}>Identificador Pasarela (TID / NSU):</span>
                     <strong style={{ color: '#e2e8f0', display: 'block', marginTop: '0.2rem' }}>
                       {transaction.payment?.tid || 'N/A'}
                     </strong>
                   </div>
 
+                  {/* AUTH CODE */}
                   <div>
-                    <span style={{ color: '#94a3b8', display: 'block' }}>Código de Autorización (AuthId):</span>
-                    <strong style={{ color: '#e2e8f0', display: 'block', marginTop: '0.2rem' }}>
+                    <span style={{ color: '#94a3b8', display: 'block', fontSize: '0.78rem' }}>Código de Autorización Bancaria:</span>
+                    <strong style={{ color: '#4ade80', display: 'block', marginTop: '0.2rem' }}>
                       {transaction.payment?.authId || 'N/A'}
                     </strong>
                   </div>
 
+                  {/* CÓDIGO DE RETORNO / ESTADO */}
                   <div>
-                    <span style={{ color: '#94a3b8', display: 'block' }}>Código de Retorno / Error:</span>
+                    <span style={{ color: '#94a3b8', display: 'block', fontSize: '0.78rem' }}>Código de Retorno Banco:</span>
                     <div style={{ marginTop: '0.25rem' }}>
                       <span
                         style={{
@@ -433,16 +560,9 @@ export default function TransactionDetailModal({ transaction, onClose }) {
                       >
                         {isCanceled
                           ? `Código ${transaction.payment?.returnCode || transaction.errorDiagnostics?.code || 'N/A'}`
-                          : 'Código 00 - Exitoso'}
+                          : 'Código 00 - Autorizado Exitoso'}
                       </span>
                     </div>
-                  </div>
-
-                  <div>
-                    <span style={{ color: '#94a3b8', display: 'block' }}>Tarjetahabiente (Card Holder):</span>
-                    <strong style={{ color: '#e2e8f0', display: 'block', marginTop: '0.2rem' }}>
-                      {transaction.payment?.cardHolder || transaction.client?.name || 'N/A'}
-                    </strong>
                   </div>
 
                 </div>
@@ -646,63 +766,198 @@ export default function TransactionDetailModal({ transaction, onClose }) {
           )}
 
           {/* TAB 5: LOGS & INTERACCIONES DE PASARELA */}
-          {activeTab === 'logs' && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', maxWidth: '100%' }}>
-              {transaction.interactions?.length > 0 ? (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem', maxWidth: '100%' }}>
-                  {transaction.interactions.map((log, i) => (
-                    <div
-                      key={i}
-                      style={{
-                        backgroundColor: 'rgba(30, 41, 59, 0.4)',
-                        borderRadius: '10px',
-                        border: '1px solid rgba(255, 255, 255, 0.06)',
-                        padding: '0.85rem 1rem',
-                        fontSize: '0.82rem',
-                        wordBreak: 'break-word',
-                        overflowWrap: 'anywhere',
-                        maxWidth: '100%',
-                      }}
-                    >
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.35rem', flexWrap: 'wrap', gap: '0.5rem' }}>
-                        <span style={{ color: '#38bdf8', fontWeight: 600 }}>{log.Source || 'Gateway'}</span>
-                        <span style={{ color: '#64748b' }}>
-                          {log.Date ? new Date(log.Date).toLocaleString('es-NI') : ''}
-                        </span>
-                      </div>
-                      <div style={{ color: '#e2e8f0', fontWeight: 500, wordBreak: 'break-word', overflowWrap: 'anywhere' }}>
-                        {log.Status || log.Message}
-                      </div>
-                      {log.Message && log.Message !== log.Status && (
-                        <div
-                          style={{
-                            color: '#94a3b8',
-                            fontSize: '0.78rem',
-                            marginTop: '0.35rem',
-                            wordBreak: 'break-all',
-                            overflowWrap: 'anywhere',
-                            whiteSpace: 'pre-wrap',
-                            backgroundColor: 'rgba(15, 23, 42, 0.6)',
-                            padding: '0.65rem 0.85rem',
-                            borderRadius: '8px',
-                            border: '1px solid rgba(255, 255, 255, 0.05)',
-                            fontFamily: 'monospace',
-                            maxWidth: '100%',
-                          }}
-                        >
-                          {log.Message}
+          {activeTab === 'logs' && (() => {
+            const effectiveInteractions = (transaction.interactions && transaction.interactions.length > 0)
+              ? transaction.interactions
+              : [
+                  {
+                    Source: 'VTEX Payment Gateway',
+                    Date: transaction.startDate,
+                    Status: '1. Solicitud de Pago Iniciada en Checkout VTEX',
+                    Message: JSON.stringify({
+                      evento: 'Solicitud de Pago en Checkout',
+                      secuenciaKey: transaction.key,
+                      orderId: transaction.orderId,
+                      transactionId: transaction.transactionId || transaction.id,
+                      montoTotal: `${transaction.amount?.toLocaleString('es-NI', { minimumFractionDigits: 2 })} ${transaction.currency}`,
+                      metodoPago: transaction.payment?.systemName,
+                      tarjeta: transaction.payment?.cardNumber,
+                      titular: transaction.payment?.cardHolder,
+                      cliente: transaction.client?.name,
+                      email: transaction.client?.email,
+                      ipCliente: transaction.technical?.ipAddress,
+                    }, null, 2)
+                  },
+                  {
+                    Source: `${transaction.payment?.acquirer || 'Tilopay'} Conector`,
+                    Date: transaction.startDate,
+                    Status: `2. Envío de Solicitud de Cobro a Pasarela (${transaction.payment?.acquirer || 'Tilopay'})`,
+                    Message: JSON.stringify({
+                      evento: 'Procesamiento en Pasarela Conector',
+                      pasarelaAdquirente: transaction.payment?.acquirer || 'Tilopay',
+                      metodoPago: transaction.payment?.systemName,
+                      tarjeta: transaction.payment?.cardNumber,
+                      titular: transaction.payment?.cardHolder,
+                      tid: transaction.payment?.tid,
+                    }, null, 2)
+                  },
+                  {
+                    Source: 'Banco Emisor / Pasarela Adquirente',
+                    Date: transaction.startDate,
+                    Status: `3. Respuesta del Banco Emisor / Pasarela: ${
+                      isApproved ? 'Aprobado (Code 00)' : transaction.errorDiagnostics?.isRefund ? 'Devolución Post-Venta' : `Rechazado (Código ${transaction.errorDiagnostics?.code || transaction.payment?.returnCode || 'ERR'})`
+                    }`,
+                    Message: JSON.stringify({
+                      evento: 'Respuesta de Autorización Bancaria',
+                      codigoRetorno: transaction.errorDiagnostics?.code || transaction.payment?.returnCode || 'N/A',
+                      tituloRespuesta: transaction.errorDiagnostics?.title || 'Transacción Procesada',
+                      explicacionDetallada: transaction.errorDiagnostics?.description || 'Detalle no proporcionado por el conector',
+                      recomendacionSAC: transaction.errorDiagnostics?.sacRecommendation,
+                      codigoAutorizacionBancaria: transaction.authId || transaction.payment?.authId,
+                      tidPasarela: transaction.payment?.tid,
+                      motivoCancelacionVTEX: transaction.errorDiagnostics?.cancelReason,
+                    }, null, 2)
+                  },
+                  {
+                    Source: 'VTEX OMS (Order Management)',
+                    Date: transaction.startDate,
+                    Status: `4. Registro Final de Estado en OMS: ${transaction.status}`,
+                    Message: JSON.stringify({
+                      evento: 'Actualización de Estado de la Orden',
+                      estadoFinalOMS: transaction.status,
+                      rawStatusVTEX: transaction.rawStatus,
+                      ordenAutorizada: isApproved,
+                      motivoFinalizacion: transaction.errorDiagnostics?.cancelReason || (isApproved ? 'Aprobado y acreditado' : transaction.errorDiagnostics?.title),
+                    }, null, 2)
+                  }
+                ];
+
+            return (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', maxWidth: '100%' }}>
+                
+                {/* ENCABEZADO Y RESUMEN TÉCNICO DE LOGS */}
+                <div style={{ background: 'rgba(15, 23, 42, 0.7)', padding: '0.85rem 1rem', borderRadius: '10px', border: '1px solid rgba(56, 189, 248, 0.2)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
+                  <span style={{ fontSize: '0.82rem', color: '#94a3b8', fontWeight: 600 }}>
+                    Eventos de Diagnóstico Registrados: <strong style={{ color: '#38bdf8' }}>{effectiveInteractions.length} eventos</strong>
+                  </span>
+                  <span style={{ fontSize: '0.75rem', color: '#64748b' }}>
+                    VTEX Transaction ID: <code style={{ color: '#cbd5e1' }}>{transaction.id || transaction.key}</code>
+                  </span>
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem', maxWidth: '100%' }}>
+                  {effectiveInteractions.map((log, i) => {
+                    let formattedJson = null;
+                    if (log.Message) {
+                      try {
+                        const jsonStart = log.Message.indexOf('{');
+                        const jsonEnd = log.Message.lastIndexOf('}');
+                        if (jsonStart !== -1 && jsonEnd !== -1 && jsonEnd > jsonStart) {
+                          const jsonStr = log.Message.substring(jsonStart, jsonEnd + 1);
+                          const parsed = JSON.parse(jsonStr);
+                          formattedJson = JSON.stringify(parsed, null, 2);
+                        }
+                      } catch (e) {
+                        // Not JSON
+                      }
+                    }
+
+                    return (
+                      <div
+                        key={i}
+                        style={{
+                          backgroundColor: 'rgba(30, 41, 59, 0.4)',
+                          borderRadius: '12px',
+                          border: '1px solid rgba(255, 255, 255, 0.08)',
+                          padding: '1rem',
+                          fontSize: '0.82rem',
+                          wordBreak: 'break-word',
+                          overflowWrap: 'anywhere',
+                          maxWidth: '100%',
+                          position: 'relative',
+                        }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.4rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+                          <span style={{ color: '#38bdf8', fontWeight: 700, fontSize: '0.86rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                            ⚡ Paso {i + 1}: {log.Source || 'Gateway Conector'}
+                          </span>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.6 me-2', flexWrap: 'wrap' }}>
+                            <span style={{ color: '#64748b', fontSize: '0.75rem' }}>
+                              {log.Date ? new Date(log.Date).toLocaleString('es-NI') : ''}
+                            </span>
+                            <button
+                              onClick={() => handleCopy(log.Message || log.Status || '', `log-${i}`)}
+                              style={{
+                                background: 'rgba(255, 255, 255, 0.06)',
+                                border: '1px solid rgba(255, 255, 255, 0.1)',
+                                borderRadius: '6px',
+                                color: copiedText === `log-${i}` ? '#34d399' : '#94a3b8',
+                                padding: '0.2rem 0.5rem',
+                                fontSize: '0.72rem',
+                                cursor: 'pointer',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '0.3rem',
+                                marginLeft: '0.5rem',
+                              }}
+                              title="Copiar log al portapapeles"
+                            >
+                              {copiedText === `log-${i}` ? <Check size={12} /> : <Copy size={12} />}
+                              {copiedText === `log-${i}` ? 'Copiado' : 'Copiar Log'}
+                            </button>
+                          </div>
                         </div>
-                      )}
-                    </div>
-                  ))}
+
+                        <div style={{ color: '#ffffff', fontWeight: 600, marginBottom: '0.35rem' }}>
+                          {log.Status || log.Message}
+                        </div>
+
+                        {formattedJson ? (
+                          <pre
+                            style={{
+                              color: '#34d399',
+                              fontSize: '0.76rem',
+                              marginTop: '0.5rem',
+                              backgroundColor: '#090d16',
+                              padding: '0.75rem 0.95rem',
+                              borderRadius: '8px',
+                              border: '1px solid rgba(52, 211, 153, 0.25)',
+                              fontFamily: 'Consolas, Monaco, monospace',
+                              overflowX: 'auto',
+                              whiteSpace: 'pre-wrap',
+                              wordBreak: 'break-all',
+                              maxHeight: '300px',
+                            }}
+                          >
+                            {formattedJson}
+                          </pre>
+                        ) : log.Message && log.Message !== log.Status ? (
+                          <div
+                            style={{
+                              color: '#94a3b8',
+                              fontSize: '0.78rem',
+                              marginTop: '0.35rem',
+                              wordBreak: 'break-all',
+                              overflowWrap: 'anywhere',
+                              whiteSpace: 'pre-wrap',
+                              backgroundColor: 'rgba(15, 23, 42, 0.6)',
+                              padding: '0.65rem 0.85rem',
+                              borderRadius: '8px',
+                              border: '1px solid rgba(255, 255, 255, 0.05)',
+                              fontFamily: 'monospace',
+                              maxWidth: '100%',
+                            }}
+                          >
+                            {log.Message}
+                          </div>
+                        ) : null}
+                      </div>
+                    );
+                  })}
                 </div>
-              ) : (
-                <div style={{ padding: '2rem', textAlign: 'center', color: '#64748b', fontSize: '0.88rem' }}>
-                  No hay eventos de interacción adicionales registrados para esta transacción.
-                </div>
-              )}
-            </div>
-          )}
+              </div>
+            );
+          })()}
         </div>
 
         {/* MODAL FOOTER */}

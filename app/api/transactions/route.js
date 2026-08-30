@@ -17,62 +17,71 @@ export const revalidate = 0;
 // Diccionario Completo de Códigos de Error Bancarios, ISO-8583 y Pasarela Tilopay
 const ERROR_DICTIONARY = {
   // Aprobadas
-  '00': { code: '00', title: 'Transacción Aprobada Exitosamente', description: 'El pago fue procesado y autorizado correctamente por la pasarela de pago (Tilopay) y el banco emisor.' },
-  '0': { code: '00', title: 'Transacción Aprobada Exitosamente', description: 'El pago fue procesado y autorizado correctamente por la pasarela de pago (Tilopay) y el banco emisor.' },
+  '00': { code: '00', title: 'Transacción Aprobada Exitosamente', description: 'El pago fue procesado y autorizado correctamente por la pasarela de pago (Tilopay) y el banco emisor.', sacRecommendation: 'Pago acreditado correctamente. La orden está autorizada y lista para facturación o despacho OMS.' },
+  '0': { code: '00', title: 'Transacción Aprobada Exitosamente', description: 'El pago fue procesado y autorizado correctamente por la pasarela de pago (Tilopay) y el banco emisor.', sacRecommendation: 'Pago acreditado correctamente. La orden está autorizada y lista para facturación o despacho OMS.' },
 
   // Referencias y Banco Emisor (01 - 07 / 1 - 7)
-  '01': { code: '01', title: 'Consulte al Banco Emisor (Code 01 - Refer to Issuer)', description: 'El banco emisor de la tarjeta requiere validación directa o autorización telefónica del tarjetahabiente.' },
-  '1': { code: '01', title: 'Consulte al Banco Emisor (Code 01 - Refer to Issuer)', description: 'El banco emisor de la tarjeta requiere validación directa o autorización telefónica del tarjetahabiente.' },
-  '02': { code: '02', title: 'Consulte al Banco Emisor - Condición Especial (Code 02)', description: 'El banco emisor requiere verificación manual de la cuenta antes de autorizar.' },
-  '2': { code: '02', title: 'Consulte al Banco Emisor - Condición Especial (Code 02)', description: 'El banco emisor requiere verificación manual de la cuenta antes de autorizar.' },
-  '03': { code: '03', title: 'Número de Comercio Inválido (Code 03 - Invalid Merchant)', description: 'Los detalles referentes al número de comercio son erróneos o la configuración de su instalación comercial presenta problemas.' },
-  '3': { code: '03', title: 'Número de Comercio Inválido (Code 03 - Invalid Merchant)', description: 'Los detalles referentes al número de comercio son erróneos o la configuración de su instalación comercial presenta problemas.' },
-  '04': { code: '04', title: 'Retener Tarjeta (Code 04 - Capture Card)', description: 'El banco emisor ordenó retener la tarjeta por posible bloqueo administrativo.' },
-  '4': { code: '04', title: 'Retener Tarjeta (Code 04 - Capture Card)', description: 'El banco emisor ordenó retener la tarjeta por posible bloqueo administrativo.' },
-  '05': { code: '05', title: 'Transacción No Honrada (Code 05 - Do Not Honor)', description: 'El banco emisor declinó la transacción por políticas internas de prevención de riesgo de la tarjeta.' },
-  '5': { code: '05', title: 'Transacción No Honrada (Code 05 - Do Not Honor)', description: 'El banco emisor declinó la transacción por políticas internas de prevención de riesgo de la tarjeta.' },
-  '06': { code: '06', title: 'Error General de Transacción (Code 06)', description: 'Ocurrió un error no especificado en el emisor. Se sugiere no reintentar inmediatamente.' },
-  '6': { code: '06', title: 'Error General de Transacción (Code 06)', description: 'Ocurrió un error no especificado en el emisor. Se sugiere no reintentar inmediatamente.' },
-  '07': { code: '07', title: 'Retener Tarjeta - Condición Especial (Code 07)', description: 'El banco emisor requiere la retención de la tarjeta por investigación de seguridad.' },
-  '7': { code: '07', title: 'Retener Tarjeta - Condición Especial (Code 07)', description: 'El banco emisor requiere la retención de la tarjeta por investigación de seguridad.' },
+  '01': { code: '01', title: 'Consulte al Banco Emisor (Code 01 - Refer to Issuer)', description: 'El banco emisor de la tarjeta requiere validación directa o autorización telefónica del tarjetahabiente.', sacRecommendation: 'Sugerir al cliente llamar a su banco emisor para autorizar compras por internet o validar su identidad.' },
+  '1': { code: '01', title: 'Consulte al Banco Emisor (Code 01 - Refer to Issuer)', description: 'El banco emisor de la tarjeta requiere validación directa o autorización telefónica del tarjetahabiente.', sacRecommendation: 'Sugerir al cliente llamar a su banco emisor para autorizar compras por internet o validar su identidad.' },
+  '02': { code: '02', title: 'Consulte al Banco Emisor - Condición Especial (Code 02)', description: 'El banco emisor requiere verificación manual de la cuenta antes de autorizar.', sacRecommendation: 'Indicar al cliente comunicarse con la línea de atención al cliente de su tarjeta bancaria.' },
+  '2': { code: '02', title: 'Consulte al Banco Emisor - Condición Especial (Code 02)', description: 'El banco emisor requiere verificación manual de la cuenta antes de autorizar.', sacRecommendation: 'Indicar al cliente comunicarse con la línea de atención al cliente de su tarjeta bancaria.' },
+  '03': { code: '03', title: 'Número de Comercio Inválido (Code 03 - Invalid Merchant)', description: 'Los detalles referentes al número de comercio son erróneos o la configuración de su instalación comercial presenta problemas.', sacRecommendation: 'Verificar la configuración de la afiliación de Tilopay / conector en el panel de VTEX.' },
+  '3': { code: '03', title: 'Número de Comercio Inválido (Code 03 - Invalid Merchant)', description: 'Los detalles referentes al número de comercio son erróneos o la configuración de su instalación comercial presenta problemas.', sacRecommendation: 'Verificar la configuración de la afiliación de Tilopay / conector en el panel de VTEX.' },
+  '04': { code: '04', title: 'Retener Tarjeta (Code 04 - Capture Card)', description: 'El banco emisor ordenó retener la tarjeta por posible bloqueo administrativo.', sacRecommendation: 'Pedir al cliente probar con otro método de pago o comunicarse con su entidad bancaria.' },
+  '4': { code: '04', title: 'Retener Tarjeta (Code 04 - Capture Card)', description: 'El banco emisor ordenó retener la tarjeta por posible bloqueo administrativo.', sacRecommendation: 'Pedir al cliente probar con otro método de pago o comunicarse con su entidad bancaria.' },
+  '05': { code: '05', title: 'Transacción No Honrada (Code 05 - Do Not Honor)', description: 'El banco emisor declinó la transacción por políticas internas de prevención de riesgo de la tarjeta.', sacRecommendation: 'Sugerir al cliente intentar con otra tarjeta de crédito/débito o llamar a su banco para autorizar la transacción.' },
+  '5': { code: '05', title: 'Transacción No Honrada (Code 05 - Do Not Honor)', description: 'El banco emisor declinó la transacción por políticas internas de prevención de riesgo de la tarjeta.', sacRecommendation: 'Sugerir al cliente intentar con otra tarjeta de crédito/débito o llamar a su banco para autorizar la transacción.' },
+  '06': { code: '06', title: 'Error General de Transacción (Code 06)', description: 'Ocurrió un error no especificado en el emisor. Se sugiere no reintentar inmediatamente.', sacRecommendation: 'Esperar unos minutos antes de reintentar o probar con un medio de pago alternativo.' },
+  '6': { code: '06', title: 'Error General de Transacción (Code 06)', description: 'Ocurrió un error no especificado en el emisor. Se sugiere no reintentar inmediatamente.', sacRecommendation: 'Esperar unos minutos antes de reintentar o probar con un medio de pago alternativo.' },
+  '07': { code: '07', title: 'Retener Tarjeta - Condición Especial (Code 07)', description: 'El banco emisor requiere la retención de la tarjeta por investigación de seguridad.', sacRecommendation: 'El cliente debe contactar de inmediato al departamento de seguridad de su tarjeta bancaria.' },
+  '7': { code: '07', title: 'Retener Tarjeta - Condición Especial (Code 07)', description: 'El banco emisor requiere la retención de la tarjeta por investigación de seguridad.', sacRecommendation: 'El cliente debe contactar de inmediato al departamento de seguridad de su tarjeta bancaria.' },
 
-  // Parámetros y Tarjeta (12 - 30)
-  '12': { code: '12', title: 'Transacción Inválida (Code 12 - Invalid Transaction)', description: 'La solicitud de pago contiene parámetros, montos o formatos no aceptados por la red bancaria.' },
-  '13': { code: '13', title: 'Monto Inválido (Code 13 - Invalid Amount)', description: 'El monto ingresado es menor a 0 o excede los límites decimales permitidos por la pasarela.' },
-  '14': { code: '14', title: 'Número de Tarjeta Inválido (Code 14 - Invalid Card Number)', description: 'El número de tarjeta digitado es incorrecto, no existe o falló la verificación de dígito chequeo (Luhn).' },
-  '15': { code: '15', title: 'Banco Emisor Desconocido (Code 15 - No Such Issuer)', description: 'El código BIN de la tarjeta no corresponde a ningún banco o emisor registrado.' },
-  '19': { code: '19', title: 'Reintente Transacción (Code 19 - Re-enter Transaction)', description: 'Error temporal en el envío de la solicitud. Intente procesar la transacción nuevamente.' },
-  '25': { code: '25', title: 'Rechazada por Banco Emisor (Code 25 - Issuer Decline)', description: 'El banco emisor de la tarjeta rechazó la transacción. Ocurre por restricciones de seguridad o tarjeta no habilitada para e-commerce. Sugerir al cliente contactar a su banco.' },
-  '28': { code: '28', title: 'Servicio Inaccesible (Code 28)', description: 'El archivo de cuentas del banco emisor está temporalmente fuera de línea.' },
-  '30': { code: '30', title: 'Error de Formato en Mensaje (Code 30 - Format Error)', description: 'Error en la estructura del mensaje enviado por la pasarela hacia el procesador del banco.' },
+  '12': {
+    code: '12',
+    title: 'Transacción Inválida / Parámetros No Soportados (Code 12)',
+    description: 'El procesador bancario (Tilopay/BAC) rechaza la transacción por una de 3 razones principales: 1) Intento de pago en Cuotas/Minicuotas con una tarjeta internacional o de un banco no participante. 2) Tarjeta de Débito local sin permiso e-commerce o restringida a POS físico. 3) Incompatibilidad en formato de datos (ej: caracteres especiales en dirección/nombre).',
+    sacRecommendation: 'Sugerencias SAC: 1) Si eligió Cuotas/Minicuotas, verificar que sea una tarjeta de crédito nacional de un banco emisor habilitado. 2) Si es tarjeta de Débito, sugerir pagar en 1 sola cuota o probar con tarjeta de crédito Visa/Mastercard/Amex.',
+  },
+  '13': { code: '13', title: 'Monto Inválido (Code 13 - Invalid Amount)', description: 'El monto ingresado es menor a 0 o excede los límites decimales permitidos por la pasarela.', sacRecommendation: 'Verificar el desglose del carrito y reintentar con el monto exacto en el checkout.' },
+  '14': { code: '14', title: 'Número de Tarjeta Inválido (Code 14 - Invalid Card Number)', description: 'El número de tarjeta digitado es incorrecto, no existe o falló la verificación de dígito chequeo (Luhn).', sacRecommendation: 'Pedir al cliente verificar los 16 dígitos de su tarjeta e ingresarlos nuevamente sin espacios.' },
+  '15': { code: '15', title: 'Banco Emisor Desconocido (Code 15 - No Such Issuer)', description: 'El código BIN de la tarjeta no corresponde a ningún banco o emisor registrado.', sacRecommendation: 'Sugerir utilizar una tarjeta emitida por un banco nacional o internacional reconocido.' },
+  '19': { code: '19', title: 'Reintente Transacción (Code 19 - Re-enter Transaction)', description: 'Error temporal en el envío de la solicitud. Intente procesar la transacción nuevamente.', sacRecommendation: 'Solicitar al cliente intentar la compra nuevamente en unos segundos.' },
+  '25': { code: '25', title: 'Rechazada por Banco Emisor (Code 25 - Issuer Decline)', description: 'El banco emisor de la tarjeta rechazó la transacción por restricciones de seguridad o tarjeta no habilitada para e-commerce.', sacRecommendation: 'Sugerir al cliente llamar a su banco emisor para habilitar compras por internet en e-commerce.' },
+  '28': { code: '28', title: 'Servicio Inaccesible (Code 28)', description: 'El archivo de cuentas del banco emisor está temporalmente fuera de línea.', sacRecommendation: 'El banco del cliente está en mantenimiento. Probar en 15-30 minutos o usar otra tarjeta.' },
+  '30': { code: '30', title: 'Error de Formato en Mensaje (Code 30 - Format Error)', description: 'Error en la estructura del mensaje enviado por la pasarela hacia el procesador del banco.', sacRecommendation: 'Verificar caracteres especiales en nombre o dirección de facturación del cliente.' },
 
   // Tarjetas Robadas / Perdidas (41 - 43)
-  '41': { code: '41', title: 'Tarjeta Reportada Perdida (Code 41 - Lost Card)', description: 'La tarjeta fue reportada como extraviada por el titular ante el banco emisor.' },
-  '42': { code: '42', title: 'Sin Cuenta Asociada (Code 42 - No Universal Account)', description: 'El número de tarjeta no posee una cuenta bancaria o de crédito activa asociada.' },
-  '43': { code: '43', title: 'Tarjeta Reportada Robada (Code 43 - Stolen Card)', description: 'La tarjeta fue reportada como robada por el titular ante el banco emisor.' },
+  '41': { code: '41', title: 'Tarjeta Reportada Perdida (Code 41 - Lost Card)', description: 'La tarjeta fue reportada como extraviada por el titular ante el banco emisor.', sacRecommendation: 'Solicitar al cliente utilizar otro método de pago activo.' },
+  '42': { code: '42', title: 'Sin Cuenta Asociada (Code 42 - No Universal Account)', description: 'El número de tarjeta no posee una cuenta bancaria o de crédito activa asociada.', sacRecommendation: 'Recomendar al cliente consultar con el banco emisor el estado de la tarjeta.' },
+  '43': { code: '43', title: 'Tarjeta Reportada Robada (Code 43 - Stolen Card)', description: 'La tarjeta fue reportada como robada por el titular ante el banco emisor.', sacRecommendation: 'Solicitar al cliente utilizar otro método de pago activo.' },
 
   // Saldos, Restricciones y Vencimiento (51 - 65)
-  '51': { code: '51', title: 'Fondos Insuficientes (Code 51 - Insufficient Funds)', description: 'La tarjeta de crédito/débito no posee saldo disponible o la línea de crédito fue superada.' },
-  '54': { code: '54', title: 'Tarjeta Vencida (Code 54 - Expired Card)', description: 'La fecha de expiración ingresada (mes/año) ha caducado.' },
-  '55': { code: '55', title: 'Clave / PIN Incorrecto (Code 55 - Incorrect PIN)', description: 'El código PIN o clave introducido por el cliente fue incorrecto.' },
-  '57': { code: '57', title: 'Transacción No Permitida a la Tarjeta (Code 57 - Transaction Not Permitted)', description: 'La tarjeta no está autorizada para compras e-commerce o transacciones en línea.' },
-  '58': { code: '58', title: 'Transacción No Permitida en Terminal (Code 58)', description: 'El comercio no tiene habilitado el tipo de procesamiento para esta tarjeta.' },
-  '61': { code: '61', title: 'Límite de Monto Superado (Code 61 - Exceeds Amount Limit)', description: 'El monto total excede el límite máximo de transacción individual permitido por el banco.' },
-  '62': { code: '62', title: 'Tarjeta Restringida / Bloqueo Preventivo (Code 62 - Restricted Card)', description: 'La tarjeta tiene bloqueos temporales por prevención de fraude del banco emisor.' },
-  '63': { code: '63', title: 'Violación de Seguridad (Code 63 - Security Violation)', description: 'Falló la validación de los protocolos de seguridad 3D Secure / OTP del banco emisor.' },
-  '65': { code: '65', title: 'Límite de Intentos Superado (Code 65 - Activity Limit Exceeded)', description: 'Se superó el número máximo de compras o intentos permitidos por día en la tarjeta.' },
+  '51': { code: '51', title: 'Fondos Insuficientes (Code 51 - Insufficient Funds)', description: 'La tarjeta de crédito/débito no posee saldo disponible o la línea de crédito fue superada.', sacRecommendation: 'Informar amablemente al cliente que su tarjeta no cuenta con saldo/disponible suficiente y solicitar otro medio de pago.' },
+  '54': { code: '54', title: 'Tarjeta Vencida (Code 54 - Expired Card)', description: 'La fecha de expiración ingresada (mes/año) ha caducado.', sacRecommendation: 'Verificar la fecha de vencimiento impresa en el plástico o probar con una tarjeta vigente.' },
+  '55': { code: '55', title: 'Clave / PIN Incorrecto (Code 55 - Incorrect PIN)', description: 'El código PIN o clave introducido por el cliente fue incorrecto.', sacRecommendation: 'Verificar el código PIN/clave ingresado o intentar nuevamente.' },
+  '57': { code: '57', title: 'Transacción No Permitida a la Tarjeta (Code 57 - Transaction Not Permitted)', description: 'La tarjeta no está autorizada para compras e-commerce o transacciones en línea.', sacRecommendation: 'El cliente debe solicitar a su banco activar las compras por internet/e-commerce en su tarjeta de crédito o débito.' },
+  '58': { code: '58', title: 'Transacción No Permitida en Terminal (Code 58)', description: 'El comercio o la terminal de la pasarela no tiene habilitado el tipo de procesamiento o franquicia para esta tarjeta (ej: marca no soportada, débito local o cuotas no contratadas).', sacRecommendation: 'Sugerencias SAC: 1) Probar con una tarjeta de crédito Visa o Mastercard. 2) Verificar si la terminal de Tilopay tiene habilitada esta marca de tarjeta.' },
+  '59': { code: '59', title: 'Sospecha de Fraude (Code 59 - Fraud Suspicion)', description: 'El sistema de prevención de fraude del banco emisor bloqueó la transacción preventivamente.', sacRecommendation: 'Indicar al cliente comunicarse con su banco para confirmar su identidad y desbloquear la tarjeta.' },
+  '61': { code: '61', title: 'Límite de Monto Superado (Code 61 - Exceeds Amount Limit)', description: 'El monto total excede el límite máximo de transacción individual permitido por el banco.', sacRecommendation: 'Sugerir al cliente dividir la compra en dos partes o solicitar un incremento temporal de límite a su banco.' },
+  '62': { code: '62', title: 'Tarjeta Restringida / Bloqueo Preventivo (Code 62 - Restricted Card)', description: 'La tarjeta tiene bloqueos temporales por prevención de fraude del banco emisor.', sacRecommendation: 'Pedir al cliente desbloquear la tarjeta desde su App Banca Móvil o llamada a su banco.' },
+  '63': { code: '63', title: 'Violación de Seguridad (Code 63 - Security Violation)', description: 'Falló la validación de los protocolos de seguridad 3D Secure / OTP del banco emisor.', sacRecommendation: 'Asegurarse de ingresar el código OTP recibido por SMS o autorizar la notificación push de su banca móvil.' },
+  '65': { code: '65', title: 'Límite de Intentos Superado (Code 65 - Activity Limit Exceeded)', description: 'Se superó el número máximo de compras o intentos permitidos por día en la tarjeta.', sacRecommendation: 'Sugerir intentar el pago el día de mañana o usar otra tarjeta de crédito.' },
 
   // CVV y Cuentas (75 - 85 & Redes Bancarias N7)
-  '75': { code: '75', title: 'Intentos de Código CVV/PIN Excedidos (Code 75)', description: 'Se excedió el número de intentos fallidos al ingresar el código de seguridad o PIN de la tarjeta.' },
-  '78': { code: '78', title: 'Cuenta Inexistente o Inactiva (Code 78 - No Account)', description: 'La cuenta bancaria asociada a la tarjeta se encuentra cancelada o inactiva.' },
-  '82': { code: '82', title: 'Código CVV/CVC Incorrecto (Code 82 - Invalid / Negative CVV)', description: 'El código de seguridad (CVV/CVC físico, iCVV de chip o dCVV dinámico) no coincide con los registros del banco. Las pasarelas de pago suelen estandarizar respuestas de red (como N7) a este código 82.' },
-  '85': { code: '85', title: 'Rechazo General por Validación de Cuenta (Code 85)', description: 'El banco emisor declinó la verificación de los datos de la cuenta.' },
-  'N7': { code: 'N7', title: 'Falla en CVV2 (Code N7 - Decline for CVV2 Failure)', description: 'Código de respuesta de bajo nivel originado en redes de procesamiento (VisaNet/ISO 8583) por falla específica en la verificación del CVV2 impreso en el reverso o frente de la tarjeta.' },
+  '75': { code: '75', title: 'Intentos de Código CVV/PIN Excedidos (Code 75)', description: 'Se excedió el número de intentos fallidos al ingresar el código de seguridad o PIN de la tarjeta.', sacRecommendation: 'Esperar 24 horas para desbloquear el intento de CVV o probar con otra tarjeta.' },
+  '78': { code: '78', title: 'Cuenta Inexistente o Inactiva (Code 78 - No Account)', description: 'La cuenta bancaria asociada a la tarjeta se encuentra cancelada o inactiva.', sacRecommendation: 'Sugerir al cliente verificar el estado de su cuenta bancaria.' },
+  '82': { code: '82', title: 'Código CVV/CVC Incorrecto (Code 82 - Invalid / Negative CVV)', description: 'El código de seguridad (CVV/CVC de 3 o 4 dígitos) no coincide con los registros del banco.', sacRecommendation: 'Revisar los 3 dígitos impresos al reverso de la tarjeta (o CVV dinámico en App bancaria) e ingresarlos correctamente.' },
+  '83': { code: '83', title: 'Falla en Verificación de Firma / Token (Code 83)', description: 'Falla de autenticación en la firma de seguridad o token enviado a la pasarela.', sacRecommendation: 'Reintentar el pago en una nueva ventana de navegación privada.' },
+  '85': { code: '85', title: 'Rechazo General por Validación de Cuenta (Code 85)', description: 'El banco emisor declinó la verificación de los datos de la cuenta.', sacRecommendation: 'Solicitar al cliente confirmar con su banco la validez de su cuenta.' },
+  'N7': { code: 'N7', title: 'Falla en CVV2 (Code N7 - Decline for CVV2 Failure)', description: 'Código de respuesta de bajo nivel originado en redes de procesamiento (VisaNet/ISO 8583) por falla específica en la verificación del CVV2.', sacRecommendation: 'Revisar minuciosamente los 3 dígitos de seguridad impresos en la tarjeta al reverso.' },
 
-  // Errores de Red y Sistema (91 - 96)
-  '91': { code: '91', title: 'Banco Emisor Fuera de Línea (Code 91 - Timeout)', description: 'El banco emisor no respondió la solicitud de autorización a tiempo (Tiempo de espera agotado).' },
-  '93': { code: '93', title: 'Transacción No Autorizada por Ley (Code 93)', description: 'Restricción legal o bancaria impuesta sobre la cuenta del titular.' },
-  '96': { code: '96', title: 'Error de Sistema del Banco Emisor (Code 96 - System Malfunction)', description: 'Falla técnica o de comunicación temporal en la plataforma del banco emisor.' },
+  // Errores de Red y Sistema (91 - 99)
+  '91': { code: '91', title: 'Banco Emisor Fuera de Línea (Code 91 - Timeout)', description: 'El banco emisor no respondió la solicitud de autorización a tiempo (Tiempo de espera agotado).', sacRecommendation: 'Reintentar en 5 minutos. El servidor del banco emisor tuvo un tiempo de espera agotado.' },
+  '92': { code: '92', title: 'Enrutamiento Financiero Imposible (Code 92 - Unable to Route)', description: 'No fue posible enrutar la transacción hacia la red del banco emisor.', sacRecommendation: 'Probar con otra tarjeta de crédito emitida por un banco diferente.' },
+  '93': { code: '93', title: 'Transacción No Autorizada por Ley (Code 93)', description: 'Restricción legal o bancaria impuesta sobre la cuenta del titular.', sacRecommendation: 'El cliente debe solventar la retención con su entidad financiera.' },
+  '94': { code: '94', title: 'Transacción Duplicada Detectada (Code 94 - Duplicate Transaction)', description: 'Se detectó una solicitud idéntica enviada recientemente en menos de 60 segundos.', sacRecommendation: 'Verificar si el primer intento fue autorizado antes de reintentar el pago.' },
+  '96': { code: '96', title: 'Error de Sistema del Banco Emisor (Code 96 - System Malfunction)', description: 'Falla técnica o de comunicación temporal en la plataforma del banco emisor.', sacRecommendation: 'Error técnico temporal en el banco emisor. Sugerir reintentar en breve.' },
+  '99': { code: '99', title: 'Error de Conexión de Red (Code 99 - Network Error)', description: 'Falla de comunicación entre la pasarela y la red de procesamiento bancario.', sacRecommendation: 'Solicitar al cliente intentar la transacción nuevamente.' },
 };
 
 function translateError(rawCode, rawMsg, interactions = []) {
@@ -114,6 +123,7 @@ function translateError(rawCode, rawMsg, interactions = []) {
       code: 'GATEWAY_CONFIG',
       title: 'Error de Configuración de Pasarela (Account Not Found)',
       description: 'La cuenta de afiliación o conector de pagos asignado en VTEX Checkout no existe o fue deshabilitada en la plataforma.',
+      sacRecommendation: 'Notificar al equipo de Sistemas/IT para revisar la credencial de afiliación de Tilopay en VTEX Admin.',
     };
   }
 
@@ -122,6 +132,7 @@ function translateError(rawCode, rawMsg, interactions = []) {
       code: 'INVALID_RESPONSE',
       title: 'Respuesta Inválida de Pasarela',
       description: 'La pasarela de pago devolvió una respuesta malformada o no compatible con la pasarela de VTEX.',
+      sacRecommendation: 'Reintentar el pago. Si el problema persiste, contactar a soporte técnico de Tilopay.',
     };
   }
 
@@ -130,6 +141,7 @@ function translateError(rawCode, rawMsg, interactions = []) {
       code: 'GATEWAY_TIMEOUT',
       title: 'Tiempo de Espera Agotado en Pasarela (Timeout)',
       description: 'La conexión entre VTEX y la pasarela de pago expiró sin recibir respuesta.',
+      sacRecommendation: 'Sugerir al cliente intentar nuevamente en 3 minutos.',
     };
   }
 
@@ -139,6 +151,7 @@ function translateError(rawCode, rawMsg, interactions = []) {
       code: 'PENDING_CHECKOUT',
       title: 'Pago No Completado en Checkout',
       description: 'El cliente no completó el formulario de pago o cerró la ventana emergente de Tilopay antes de autorizar la transacción.',
+      sacRecommendation: 'Contactar al cliente para ayudarle a completar su orden en el checkout de SINSA.',
     };
   }
 
@@ -150,6 +163,7 @@ function translateError(rawCode, rawMsg, interactions = []) {
       description: cleanCode
         ? `El banco emisor o la pasarela denegó el cobro con el código de retorno ${cleanCode}.`
         : 'La pasarela de pago (Tilopay) agotó los reintentos de autorización sin obtener aprobación del banco emisor.',
+      sacRecommendation: 'Solicitar al cliente intentar con otra tarjeta de crédito o débito.',
     };
   }
 
@@ -158,6 +172,7 @@ function translateError(rawCode, rawMsg, interactions = []) {
       code: 'USER_CANCELED',
       title: 'Transacción Cancelada en Checkout',
       description: 'La transacción fue cancelada por expiración de sesión o por acción del usuario antes del pago.',
+      sacRecommendation: 'Ofrecer asistencia telefónica al cliente para finalizar su compra.',
     };
   }
 
@@ -165,6 +180,7 @@ function translateError(rawCode, rawMsg, interactions = []) {
     code: cleanCode || 'REJECTED',
     title: cleanCode ? `Transacción Rechazada (Code ${cleanCode})` : 'Transacción Rechazada',
     description: 'La transacción fue rechazada o cancelada en el checkout antes de completarse el cobro.',
+    sacRecommendation: 'Sugerir al cliente probar con otro método de pago o consultar con su banco.',
   };
 }
 
@@ -398,8 +414,8 @@ export async function GET(request) {
         if (statusFilter === 'canceled' || statusFilter === 'cancelled' || statusFilter === 'refused') {
           return st === 'canceled' || st === 'refused' || st === 'payment-denied' || item.errorDiagnostics?.isRefund;
         }
-        if (statusFilter === 'refunded' || statusFilter === 'devolucion') {
-          return item.errorDiagnostics?.isRefund;
+        if (statusFilter === 'refunded' || statusFilter === 'devolucion' || statusFilter === 'refund') {
+          return item.errorDiagnostics?.isRefund || (item.status || '').toLowerCase() === 'refunded';
         }
         if (statusFilter === 'pending') return st.includes('pending') || st.includes('authoriz');
         return st === statusFilter;
@@ -615,6 +631,155 @@ function extractCardLastDigits(txDetail, paymentObj, orderDetail, interactions =
   return null;
 }
 
+function extractCardBin(txDetail, paymentObj, orderDetail, interactions = []) {
+  const sanitizeBin = (val) => {
+    if (!val) return null;
+    const str = String(val).trim().replace(/\D/g, '');
+    if (str.length >= 6) return str.slice(0, 6);
+    return null;
+  };
+
+  let bin = sanitizeBin(paymentObj?.firstDigits) || sanitizeBin(paymentObj?.bin) || sanitizeBin(txDetail?.firstDigits) || sanitizeBin(txDetail?.bin);
+  if (bin) return bin;
+
+  const checkFields = (arr) => {
+    if (!Array.isArray(arr)) return null;
+    for (const f of arr) {
+      if (!f || !f.name) continue;
+      const fn = String(f.name).toLowerCase();
+      if (fn === 'firstdigits' || fn === 'bin' || fn === 'first_digits') {
+        const val = sanitizeBin(f.value);
+        if (val) return val;
+      }
+    }
+    return null;
+  };
+
+  bin = checkFields(paymentObj?.fields) || checkFields(txDetail?.fields) || checkFields(orderDetail?.paymentData?.transactions?.[0]?.payments?.[0]?.fields);
+  if (bin) return bin;
+
+  if (Array.isArray(interactions) && interactions.length > 0) {
+    const fullLog = interactions.map((i) => (typeof i.Message === 'string' ? i.Message : JSON.stringify(i))).join(' ');
+    const match = fullLog.match(/"firstDigits"\s*:\s*"([^"]+)"/i) || fullLog.match(/"bin"\s*:\s*"([^"]+)"/i) || fullLog.match(/firstDigits=([0-9]+)/i);
+    if (match && match[1]) {
+      const val = sanitizeBin(match[1]);
+      if (val) return val;
+    }
+  }
+
+  return null;
+}
+
+function extractCardHolder(txDetail, paymentObj, orderDetail, interactions = [], fallbackName = 'N/A') {
+  const sanitizeName = (val) => {
+    if (!val || typeof val !== 'string') return null;
+    const str = val.trim();
+    if (str.length > 2 && str !== 'null' && str !== 'undefined' && str !== 'N/A') return str;
+    return null;
+  };
+
+  let holder = sanitizeName(paymentObj?.cardHolder) || sanitizeName(paymentObj?.cardHolderName) || sanitizeName(paymentObj?.holder);
+  if (holder) return { name: holder, isExtracted: true };
+
+  const checkFields = (arr) => {
+    if (!Array.isArray(arr)) return null;
+    for (const f of arr) {
+      if (!f || !f.name) continue;
+      const fn = String(f.name).toLowerCase();
+      if (fn === 'cardholder' || fn === 'cardholdername' || fn === 'holder' || fn === 'card_holder') {
+        const val = sanitizeName(f.value);
+        if (val) return val;
+      }
+    }
+    return null;
+  };
+
+  holder = checkFields(paymentObj?.fields) || checkFields(txDetail?.fields) || checkFields(orderDetail?.paymentData?.transactions?.[0]?.payments?.[0]?.fields);
+  if (holder) return { name: holder, isExtracted: true };
+
+  if (Array.isArray(interactions) && interactions.length > 0) {
+    const fullLog = interactions.map((i) => (typeof i.Message === 'string' ? i.Message : JSON.stringify(i))).join(' ');
+    const match = fullLog.match(/"cardHolder"\s*:\s*"([^"]+)"/i) || fullLog.match(/"cardHolderName"\s*:\s*"([^"]+)"/i) || fullLog.match(/"holder"\s*:\s*"([^"]+)"/i);
+    if (match && match[1]) {
+      const val = sanitizeName(match[1]);
+      if (val) return { name: val, isExtracted: true };
+    }
+  }
+
+  return { name: fallbackName || 'Cliente General', isExtracted: false };
+}
+
+function extractInstallmentsInfo(txDetail, paymentObj, orderDetail, interactions = [], totalAmount = 0) {
+  let count = 1;
+
+  if (typeof paymentObj?.installments === 'number' && paymentObj.installments > 0) {
+    count = paymentObj.installments;
+  } else if (typeof txDetail?.installments === 'number' && txDetail.installments > 0) {
+    count = txDetail.installments;
+  } else {
+    const checkFields = (arr) => {
+      if (!Array.isArray(arr)) return null;
+      for (const f of arr) {
+        if (f && f.name && String(f.name).toLowerCase() === 'installments') {
+          const num = parseInt(f.value, 10);
+          if (!isNaN(num) && num > 0) return num;
+        }
+      }
+      return null;
+    };
+
+    const fromFields = checkFields(paymentObj?.fields) || checkFields(txDetail?.fields) || checkFields(orderDetail?.paymentData?.transactions?.[0]?.payments?.[0]?.fields);
+    if (fromFields) count = fromFields;
+    else if (Array.isArray(interactions) && interactions.length > 0) {
+      const fullLog = interactions.map((i) => (typeof i.Message === 'string' ? i.Message : JSON.stringify(i))).join(' ');
+      const match = fullLog.match(/"installments"\s*:\s*([0-9]+)/i) || fullLog.match(/"installment"\s*:\s*([0-9]+)/i) || fullLog.match(/cuotas=([0-9]+)/i);
+      if (match && match[1]) {
+        const parsed = parseInt(match[1], 10);
+        if (!isNaN(parsed) && parsed > 0) count = parsed;
+      }
+    }
+  }
+
+  const isFinanced = count > 1;
+  const paymentMode = isFinanced ? 'Financiamiento (Cuotas / Minicuotas)' : 'Pago de Contado (1 Pago)';
+  const installmentValue = isFinanced && count > 0 && totalAmount > 0 ? (totalAmount / count).toFixed(2) : totalAmount;
+
+  return {
+    count,
+    isFinanced,
+    paymentMode,
+    installmentValue,
+    description: isFinanced ? `Financiamiento en ${count} cuotas / minicuotas` : 'Pago de Contado (1 cuota única)',
+  };
+}
+
+function extractCardTypeAndBrand(txDetail, paymentObj, orderDetail, interactions = [], systemName = '') {
+  let brand = systemName || paymentObj?.paymentSystemName || paymentObj?.paymentSystem || 'Tarjeta';
+  let group = paymentObj?.group || paymentObj?.paymentSystemGroup || '';
+
+  const fullText = (brand + ' ' + group + ' ' + JSON.stringify({ paymentObj, txDetail })).toLowerCase();
+
+  let cardType = 'Crédito';
+  if (fullText.includes('debit') || fullText.includes('debito')) {
+    cardType = 'Débito';
+  } else if (fullText.includes('credit') || fullText.includes('credito')) {
+    cardType = 'Crédito';
+  }
+
+  let normalizedBrand = 'Tarjeta';
+  if (fullText.includes('visa')) normalizedBrand = 'Visa';
+  else if (fullText.includes('mastercard') || fullText.includes('master')) normalizedBrand = 'Mastercard';
+  else if (fullText.includes('amex') || fullText.includes('american express')) normalizedBrand = 'American Express';
+  else if (fullText.includes('diners')) normalizedBrand = 'Diners Club';
+  else if (fullText.includes('discover')) normalizedBrand = 'Discover';
+
+  return {
+    brand: normalizedBrand !== 'Tarjeta' ? normalizedBrand : brand,
+    cardType,
+    fullDescription: `${normalizedBrand !== 'Tarjeta' ? normalizedBrand : brand} (${cardType})`,
+  };
+}
+
 /**
  * Función normalizadora que combina VTEX Payment Transaction + Payments Array + OMS Order Detail
  */
@@ -703,7 +868,13 @@ async function buildEnrichedTransaction(txDetail, orderDetail, interactions = []
 
   const lastDigits = extractCardLastDigits(txDetail, paymentObj, orderDetail, interactions);
   const cardNumberFormatted = lastDigits ? `**** ${lastDigits}` : 'N/A';
-  const cardHolder = paymentObj.cardHolder || getField('cardHolder') || clientName;
+  
+  // Extracción Avanzada de Datos de Tarjeta y Financiamiento
+  const cardBin = extractCardBin(txDetail, paymentObj, orderDetail, interactions);
+  const cardHolderInfo = extractCardHolder(txDetail, paymentObj, orderDetail, interactions, clientName);
+  const installmentsInfo = extractInstallmentsInfo(txDetail, paymentObj, orderDetail, interactions, amount);
+  const cardTypeBrand = extractCardTypeAndBrand(txDetail, paymentObj, orderDetail, interactions, paymentSystemName);
+  const cardHolder = cardHolderInfo.name;
 
   const acquirer = connectorResp.acquirer || connectorResp.Acquirer || 'Tilopay';
   const tid = paymentObj.tid || connectorResp.Tid || connectorResp.tid || getField('tid') || 'N/A';
@@ -746,6 +917,7 @@ async function buildEnrichedTransaction(txDetail, orderDetail, interactions = []
       code: '00',
       title: 'Transacción Aprobada Exitosamente',
       description: 'El pago fue procesado y autorizado correctamente por la pasarela de pago (Tilopay) y el banco emisor.',
+      sacRecommendation: 'Pago acreditado en pasarela y confirmado por el banco. La transacción está en estado nítido y lista para facturar/despachar.',
       cancelReason: null,
       returnMessage: 'OK / Exitoso',
     };
@@ -756,6 +928,7 @@ async function buildEnrichedTransaction(txDetail, orderDetail, interactions = []
       code: 'DEVOLUCION_POSTVENTA',
       title: '🔄 Devolución / Anulación Post-Venta',
       description: `Esta transacción fue autorizada exitosamente por el banco emisor (Código de Autorización: ${authId}), pero posteriormente fue anulada o reembolsada a través del sistema de post-venta / servicio al cliente de SINSA.`,
+      sacRecommendation: 'Verificar el estado del reembolso o nota de crédito emitida al cliente en el módulo OMS / Servicio al Cliente.',
       cancelReason: vtexCancelReason || 'Anulación por servicio al cliente / reembolso post-venta',
       returnMessage: `Devolución Procesada en Pasarela (AuthId: ${authId})`,
     };
@@ -767,6 +940,7 @@ async function buildEnrichedTransaction(txDetail, orderDetail, interactions = []
       code: returnCode || errorTranslation.code,
       title: errorTranslation.title,
       description: errorTranslation.description,
+      sacRecommendation: errorTranslation.sacRecommendation || 'Sugerir al cliente probar con otro medio de pago o comunicarse con su banco emisor.',
       cancelReason: vtexCancelReason || null,
       returnMessage: returnMessage || null,
     };
@@ -836,6 +1010,97 @@ async function buildEnrichedTransaction(txDetail, orderDetail, interactions = []
     }
   }
 
+  // 10. Garantizar que SIEMPRE exista una lista de interacciones/logs completa
+  let finalInteractions = Array.isArray(interactions) ? [...interactions] : [];
+
+  if (finalInteractions.length === 0) {
+    const logDate = startDate || new Date().toISOString();
+
+    const respTitle = isApproved
+      ? 'Aprobado (Code 00: Pago Autorizado)'
+      : isPostSaleRefund
+      ? 'Devolución / Anulación Post-Venta'
+      : `Rechazado (Código ${errorDiagnostics.code}: ${errorDiagnostics.title})`;
+
+    finalInteractions = [
+      {
+        Source: 'VTEX Payment Gateway',
+        Date: logDate,
+        Status: '1. Solicitud de Pago Iniciada en Checkout VTEX',
+        Message: JSON.stringify(
+          {
+            evento: 'Solicitud de Pago en Checkout',
+            secuenciaKey: key,
+            orderId: orderId !== 'N/A' ? orderId : undefined,
+            transactionId,
+            montoTotal: `${amount?.toLocaleString('es-NI', { minimumFractionDigits: 2 })} ${currency}`,
+            metodoPago: paymentSystemName,
+            tarjeta: cardNumberFormatted,
+            titular: cardHolder,
+            cliente: clientName,
+            email: clientEmail,
+            ipCliente: ipAddress,
+          },
+          null,
+          2
+        ),
+      },
+      {
+        Source: `${acquirer || 'Tilopay'} Conector`,
+        Date: logDate,
+        Status: `2. Envío de Solicitud de Cobro a Pasarela Adquirente (${acquirer || 'Tilopay'})`,
+        Message: JSON.stringify(
+          {
+            evento: 'Procesamiento en Pasarela Conector',
+            pasarelaAdquirente: acquirer || 'Tilopay',
+            metodoPago: paymentSystemName,
+            tarjeta: cardNumberFormatted,
+            titular: cardHolder,
+            tid: tid !== 'N/A' ? tid : undefined,
+            cuotas: paymentObj?.installments || 1,
+          },
+          null,
+          2
+        ),
+      },
+      {
+        Source: 'Banco Emisor / Pasarela Adquirente',
+        Date: logDate,
+        Status: `3. Respuesta del Banco Emisor / Pasarela: ${respTitle}`,
+        Message: JSON.stringify(
+          {
+            evento: 'Respuesta de Autorización Bancaria',
+            codigoRetorno: errorDiagnostics.code,
+            tituloRespuesta: errorDiagnostics.title,
+            explicacionDetallada: errorDiagnostics.description,
+            recomendacionSAC: errorDiagnostics.sacRecommendation,
+            codigoAutorizacionBancaria: authId !== 'N/A' ? authId : undefined,
+            tidPasarela: tid !== 'N/A' ? tid : undefined,
+            motivoCancelacionVTEX: errorDiagnostics.cancelReason || undefined,
+          },
+          null,
+          2
+        ),
+      },
+      {
+        Source: 'VTEX OMS (Order Management)',
+        Date: logDate,
+        Status: `4. Registro Final de Estado en OMS: ${isPostSaleRefund ? 'Refunded' : status}`,
+        Message: JSON.stringify(
+          {
+            evento: 'Actualización de Estado de la Orden',
+            estadoFinalOMS: isPostSaleRefund ? 'Refunded' : status,
+            rawStatusVTEX: rawStatus,
+            ordenAutorizada: isApproved,
+            motivoFinalizacion: vtexCancelReason || errorDiagnostics.cancelReason || (isApproved ? 'Aprobado y acreditado en pasarela' : errorDiagnostics.title),
+          },
+          null,
+          2
+        ),
+      },
+    ];
+  }
+
   return {
     key,
     orderId,
@@ -854,7 +1119,18 @@ async function buildEnrichedTransaction(txDetail, orderDetail, interactions = []
     payment: {
       systemName: paymentSystemName,
       cardNumber: cardNumberFormatted,
-      cardHolder,
+      bin: cardBin || 'N/A',
+      firstDigits: cardBin || 'N/A',
+      lastDigits: lastDigits || 'N/A',
+      cardHolder: cardHolderInfo.name,
+      isCardHolderExtracted: cardHolderInfo.isExtracted,
+      isFinanced: installmentsInfo.isFinanced,
+      paymentMode: installmentsInfo.paymentMode,
+      installments: installmentsInfo.count,
+      installmentValue: installmentsInfo.installmentValue,
+      installmentsDescription: installmentsInfo.description,
+      cardBrand: cardTypeBrand.brand,
+      cardType: cardTypeBrand.cardType,
       acquirer,
       tid,
       authId,
@@ -868,7 +1144,7 @@ async function buildEnrichedTransaction(txDetail, orderDetail, interactions = []
       ipAddress,
       userAgent,
     },
-    interactions,
+    interactions: finalInteractions,
   };
 }
 
