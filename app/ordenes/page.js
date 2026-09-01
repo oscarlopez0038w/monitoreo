@@ -7,6 +7,8 @@ import { getNicaraguaNow } from '@/lib/dateUtils';
 import * as XLSX from 'xlsx';
 import { ShoppingCart, Calendar, Filter, Search, RefreshCw, ChevronDown, ChevronUp, Package, DollarSign, CheckCircle2, Clock, AlertTriangle, FileText, Zap, Radio, X, MessageSquare, Info, Download, Truck, Store, MapPin, Megaphone, Tag, Gift, User, FileSpreadsheet } from 'lucide-react';
 
+const BCN_EXCHANGE_RATE = 36.6243;
+
 export default function OrdenesPage() {
   const nicNow = getNicaraguaNow();
 
@@ -90,6 +92,7 @@ export default function OrdenesPage() {
   };
 
   const [statusFilter, setStatusFilter] = useState('');
+  const [saleTypeFilter, setSaleTypeFilter] = useState('');
   const [search, setSearch] = useState('');
   const [sortBy, setSortBy] = useState('date_desc'); // 'date_desc' | 'date_asc' | 'amount_desc' | 'amount_asc'
   const [loading, setLoading] = useState(false);
@@ -103,7 +106,24 @@ export default function OrdenesPage() {
   const [showAllStores, setShowAllStores] = useState(false);
   const [syncingOrders, setSyncingOrders] = useState(false);
   const [exportingAll, setExportingAll] = useState(false);
-  const [globalStats, setGlobalStats] = useState({ total: 0, invoiced: 0, handling: 0, readyForHandling: 0, canceled: 0, pickupCount: 0, deliveryCount: 0, pickupPct: 0, deliveryPct: 0, pickupStores: [] });
+  const [currency, setCurrency] = useState('NIO');
+  const [globalStats, setGlobalStats] = useState({
+    total: 0,
+    invoiced: 0,
+    handling: 0,
+    readyForHandling: 0,
+    canceled: 0,
+    pickupCount: 0,
+    deliveryCount: 0,
+    pickupPct: 0,
+    deliveryPct: 0,
+    pickupStores: [],
+    invoicedRevenue: 0,
+    socialSellingRevenue: 0,
+    socialSellingCount: 0,
+    organicRevenue: 0,
+    organicCount: 0,
+  });
 
   const handleExportAllOrders = async () => {
     setExportingAll(true);
@@ -113,6 +133,7 @@ export default function OrdenesPage() {
         startDate,
         endDate,
         status: statusFilter,
+        saleType: saleTypeFilter,
         search,
         export: 'true',
       });
@@ -132,6 +153,9 @@ export default function OrdenesPage() {
         'Estado': o.statusDescription || o.status,
         'Cliente': o.clientName || 'N/A',
         'Total C$': o.totalValue ? (o.totalValue / 100).toFixed(2) : '0.00',
+        'Total $ USD': o.totalValue ? ((o.totalValue / 100) / BCN_EXCHANGE_RATE).toFixed(2) : '0.00',
+        'Código Vendedor': o.sellerCode || '',
+        'Tipo Venta': o.saleType === 'social' || o.sellerCode ? 'Social Selling' : 'Orgánica',
         'Tipo Entrega': o.fulfillmentType === 'pickup' ? 'Retiro en Tienda' : 'Entrega a Domicilio',
         'Tienda Retiro': o.pickupStore || 'N/A',
         'Cantidad Items': o.itemsCount || 1,
@@ -192,6 +216,7 @@ export default function OrdenesPage() {
         startDate,
         endDate,
         status: statusFilter,
+        saleType: saleTypeFilter,
         search,
         sortBy: currentSort,
         page: String(page),
@@ -256,11 +281,13 @@ export default function OrdenesPage() {
                 total: (prevPaging.total || 0) + 1,
               }));
               setGlobalStats((prevStats) => ({
+                ...prevStats,
                 total: (prevStats.total || 0) + 1,
                 invoiced: realtimeOrder.status === 'invoiced' ? (prevStats.invoiced || 0) + 1 : (prevStats.invoiced || 0),
                 handling: realtimeOrder.status === 'handling' ? (prevStats.handling || 0) + 1 : (prevStats.handling || 0),
                 readyForHandling: realtimeOrder.status === 'ready-for-handling' ? (prevStats.readyForHandling || 0) + 1 : (prevStats.readyForHandling || 0),
                 canceled: realtimeOrder.status === 'canceled' ? (prevStats.canceled || 0) + 1 : (prevStats.canceled || 0),
+                invoicedRevenue: realtimeOrder.status === 'invoiced' ? (prevStats.invoicedRevenue || 0) + ((realtimeOrder.totalValue || 0) / 100) : (prevStats.invoicedRevenue || 0),
               }));
               return [realtimeOrder, ...prev];
             });
@@ -341,6 +368,20 @@ export default function OrdenesPage() {
   const readyCount = globalStats.readyForHandling || 0;
   const handlingCount = globalStats.handling || 0;
   const canceledCount = globalStats.canceled || 0;
+  const invoicedRevenue = globalStats.invoicedRevenue || 0;
+  const socialSellingRevenue = globalStats.socialSellingRevenue || 0;
+  const socialSellingCount = globalStats.socialSellingCount || 0;
+  const organicRevenue = globalStats.organicRevenue || 0;
+  const organicCount = globalStats.organicCount || 0;
+  const socialSellingPct = invoicedRevenue > 0 ? Math.round((socialSellingRevenue / invoicedRevenue) * 100) : 0;
+  const organicPct = invoicedRevenue > 0 ? 100 - socialSellingPct : 0;
+  const formatMoney = (value) => {
+    const nioValue = Number(value || 0);
+    if (currency === 'USD') {
+      return `$ ${(nioValue / BCN_EXCHANGE_RATE).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    }
+    return `C$ ${nioValue.toLocaleString('es-NI', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  };
 
   const renderStatusBadge = (status, statusDescription) => {
     const s = String(status || '').toLowerCase();
@@ -688,7 +729,21 @@ export default function OrdenesPage() {
               </select>
             </div>
 
-            {/* 4. Ordenar Por */}
+            {/* 4. Filtro por Tipo de Venta */}
+            <div style={{ flex: '1 1 140px', minWidth: '130px' }}>
+              <select
+                className="glass-input"
+                style={{ width: '100%', fontSize: '0.82rem', height: '38px', padding: '0.35rem 0.75rem', lineHeight: '1.3', boxSizing: 'border-box' }}
+                value={saleTypeFilter}
+                onChange={(e) => setSaleTypeFilter(e.target.value)}
+              >
+                <option value="">Todas las Ventas</option>
+                <option value="social">Social Selling</option>
+                <option value="organic">Venta Orgánica</option>
+              </select>
+            </div>
+
+            {/* 5. Ordenar Por */}
             <div style={{ flex: '1 1 120px', minWidth: '120px' }}>
               <select
                 className="glass-input"
@@ -703,7 +758,7 @@ export default function OrdenesPage() {
               </select>
             </div>
 
-            {/* 5. Buscador Multi-campo (a la par del botón Buscar) */}
+            {/* 6. Buscador Multi-campo (a la par del botón Buscar) */}
             <div style={{ flex: '2 1 180px', minWidth: '160px', position: 'relative', display: 'flex', alignItems: 'center' }}>
               <input
                 type="text"
@@ -735,7 +790,7 @@ export default function OrdenesPage() {
               )}
             </div>
 
-            {/* 6. Botón Buscar */}
+            {/* 7. Botón Buscar */}
             <button
               type="submit"
               disabled={loading}
@@ -766,10 +821,10 @@ export default function OrdenesPage() {
         </div>
 
         {/* Metric Cards Summary - Alineación Uniforme & Z-Index Elevado */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(135px, 1fr))', gap: '0.75rem', marginBottom: '1.25rem', alignItems: 'stretch', position: 'relative', zIndex: 50 }}>
+        <div className="orders-metrics-grid" style={{ marginBottom: '1.25rem', position: 'relative', zIndex: 50 }}>
           
           {/* Card 1: Total Órdenes */}
-          <div className="glass-card" style={{ padding: '0.75rem 0.85rem', display: 'flex', flexDirection: 'column', justifyContent: 'center', textAlign: 'center', minHeight: '115px' }}>
+          <div className="glass-card orders-metric-simple" style={{ padding: '0.55rem 0.65rem', display: 'flex', flexDirection: 'column', justifyContent: 'center', textAlign: 'center', minHeight: '96px' }}>
             <span style={{ fontSize: '0.7rem', color: 'var(--text-dim)', textTransform: 'uppercase', fontWeight: 700, letterSpacing: '0.02em' }}>Total Órdenes</span>
             <div style={{ fontSize: '1.45rem', fontWeight: 800, color: 'var(--accent-primary)', marginTop: '0.25rem', lineHeight: 1.1 }}>
               {totalOrdersCount.toLocaleString()}
@@ -777,7 +832,7 @@ export default function OrdenesPage() {
           </div>
 
           {/* Card 2: Facturadas (Invoiced) */}
-          <div className="glass-card" style={{ padding: '0.75rem 0.85rem', display: 'flex', flexDirection: 'column', justifyContent: 'center', textAlign: 'center', minHeight: '115px' }}>
+          <div className="glass-card orders-metric-simple" style={{ padding: '0.55rem 0.65rem', display: 'flex', flexDirection: 'column', justifyContent: 'center', textAlign: 'center', minHeight: '96px' }}>
             <span style={{ fontSize: '0.7rem', color: 'var(--text-dim)', textTransform: 'uppercase', fontWeight: 700, letterSpacing: '0.02em' }}>Facturadas</span>
             <div style={{ fontSize: '1.45rem', fontWeight: 800, color: '#34d399', marginTop: '0.25rem', lineHeight: 1.1 }}>
               {invoicedCount.toLocaleString()}
@@ -785,7 +840,7 @@ export default function OrdenesPage() {
           </div>
 
           {/* Card 3: Lista para Preparar */}
-          <div className="glass-card" style={{ padding: '0.75rem 0.85rem', display: 'flex', flexDirection: 'column', justifyContent: 'center', textAlign: 'center', minHeight: '115px' }}>
+          <div className="glass-card orders-metric-simple" style={{ padding: '0.55rem 0.65rem', display: 'flex', flexDirection: 'column', justifyContent: 'center', textAlign: 'center', minHeight: '96px' }}>
             <span style={{ fontSize: '0.7rem', color: 'var(--text-dim)', textTransform: 'uppercase', fontWeight: 700, letterSpacing: '0.02em' }}>Lista p/ Preparar</span>
             <div style={{ fontSize: '1.45rem', fontWeight: 800, color: '#38bdf8', marginTop: '0.25rem', lineHeight: 1.1 }}>
               {readyCount.toLocaleString()}
@@ -793,7 +848,7 @@ export default function OrdenesPage() {
           </div>
 
           {/* Card 4: En Preparación */}
-          <div className="glass-card" style={{ padding: '0.75rem 0.85rem', display: 'flex', flexDirection: 'column', justifyContent: 'center', textAlign: 'center', minHeight: '115px' }}>
+          <div className="glass-card orders-metric-simple" style={{ padding: '0.55rem 0.65rem', display: 'flex', flexDirection: 'column', justifyContent: 'center', textAlign: 'center', minHeight: '96px' }}>
             <span style={{ fontSize: '0.7rem', color: 'var(--text-dim)', textTransform: 'uppercase', fontWeight: 700, letterSpacing: '0.02em' }}>En Preparación</span>
             <div style={{ fontSize: '1.45rem', fontWeight: 800, color: '#fbbf24', marginTop: '0.25rem', lineHeight: 1.1 }}>
               {handlingCount.toLocaleString()}
@@ -801,14 +856,73 @@ export default function OrdenesPage() {
           </div>
 
           {/* Card 5: Canceladas */}
-          <div className="glass-card" style={{ padding: '0.75rem 0.85rem', display: 'flex', flexDirection: 'column', justifyContent: 'center', textAlign: 'center', minHeight: '115px' }}>
+          <div className="glass-card orders-metric-simple" style={{ padding: '0.55rem 0.65rem', display: 'flex', flexDirection: 'column', justifyContent: 'center', textAlign: 'center', minHeight: '96px' }}>
             <span style={{ fontSize: '0.7rem', color: 'var(--text-dim)', textTransform: 'uppercase', fontWeight: 700, letterSpacing: '0.02em' }}>Canceladas</span>
             <div style={{ fontSize: '1.45rem', fontWeight: 800, color: '#fb7185', marginTop: '0.25rem', lineHeight: 1.1 }}>
               {canceledCount.toLocaleString()}
             </div>
           </div>
 
-          {/* Card 6: Tipo de Entrega (Pickup vs Delivery) */}
+          {/* Card 6: Ventas Facturadas */}
+          <div className="glass-card mobile-full-span" style={{ padding: '0.7rem 0.95rem', background: 'linear-gradient(135deg, rgba(15, 23, 42, 0.9), rgba(30, 41, 59, 0.95))', border: '1px solid rgba(52, 211, 153, 0.3)', display: 'flex', flexDirection: 'column', justifyContent: 'center', minHeight: '132px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.5rem', marginBottom: '0.35rem' }}>
+              <span style={{ fontSize: '0.7rem', color: 'var(--text-dim)', textTransform: 'uppercase', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+                <DollarSign size={12} color="#34d399" /> Venta Facturada
+              </span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', flexShrink: 0 }}>
+                <span style={{ fontSize: '0.65rem', color: '#34d399', fontWeight: 600 }}>
+                  {invoicedCount.toLocaleString()} ord.
+                </span>
+                <div style={{ display: 'inline-flex', padding: '2px', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '8px', background: 'rgba(15, 23, 42, 0.85)' }}>
+                  {['NIO', 'USD'].map((mode) => (
+                    <button
+                      key={mode}
+                      type="button"
+                      onClick={() => setCurrency(mode)}
+                      title={mode === 'NIO' ? 'Ver montos en córdobas' : `Ver montos en dólares a tasa BCN ${BCN_EXCHANGE_RATE}`}
+                      style={{
+                        border: 'none',
+                        borderRadius: '6px',
+                        padding: '0.12rem 0.35rem',
+                        fontSize: '0.62rem',
+                        fontWeight: 800,
+                        cursor: 'pointer',
+                        color: currency === mode ? '#ffffff' : '#94a3b8',
+                        background: currency === mode ? (mode === 'NIO' ? '#059669' : '#2563eb') : 'transparent',
+                        lineHeight: 1.2,
+                      }}
+                    >
+                      {mode === 'NIO' ? 'C$' : '$'}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div style={{ fontSize: '1.08rem', fontWeight: 800, color: '#e2e8f0', marginBottom: '0.4rem', lineHeight: 1.1, whiteSpace: 'nowrap' }}>
+              {formatMoney(invoicedRevenue)}
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', marginBottom: '0.35rem' }}>
+              <div>
+                <div style={{ fontSize: '0.68rem', color: '#94a3b8', fontWeight: 700 }}>Social Selling</div>
+                <div style={{ fontSize: '0.78rem', color: '#34d399', fontWeight: 800 }}>{formatMoney(socialSellingRevenue)}</div>
+                <div style={{ fontSize: '0.65rem', color: '#94a3b8' }}>{socialSellingCount} ord. | {socialSellingPct}%</div>
+              </div>
+              <div>
+                <div style={{ fontSize: '0.68rem', color: '#94a3b8', fontWeight: 700 }}>Orgánica</div>
+                <div style={{ fontSize: '0.78rem', color: '#38bdf8', fontWeight: 800 }}>{formatMoney(organicRevenue)}</div>
+                <div style={{ fontSize: '0.65rem', color: '#94a3b8' }}>{organicCount} ord. | {organicPct}%</div>
+              </div>
+            </div>
+
+            <div style={{ width: '100%', height: '5px', borderRadius: '3px', background: 'rgba(255, 255, 255, 0.1)', overflow: 'hidden', display: 'flex' }}>
+              <div style={{ width: `${socialSellingPct}%`, height: '100%', background: '#34d399', transition: 'width 0.5s ease' }} title={`Social Selling: ${socialSellingPct}%`} />
+              <div style={{ width: `${organicPct}%`, height: '100%', background: '#38bdf8', transition: 'width 0.5s ease' }} title={`Orgánica: ${organicPct}%`} />
+            </div>
+          </div>
+
+          {/* Card 7: Tipo de Entrega (Pickup vs Delivery) */}
           <div className="glass-card mobile-full-span" style={{ padding: '0.65rem 0.85rem', background: 'linear-gradient(135deg, rgba(15, 23, 42, 0.9), rgba(30, 41, 59, 0.95))', border: '1px solid rgba(56, 189, 248, 0.3)', display: 'flex', flexDirection: 'column', justifyContent: 'center', minHeight: '115px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.3rem' }}>
               <span style={{ fontSize: '0.7rem', color: 'var(--text-dim)', textTransform: 'uppercase', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
@@ -845,7 +959,7 @@ export default function OrdenesPage() {
             </div>
           </div>
 
-          {/* Card 7: Top Tiendas Pickup (Superpuesta con Z-Index Máximo) */}
+          {/* Card 8: Top Tiendas Pickup (Superpuesta con Z-Index Máximo) */}
           <div className="glass-card mobile-full-span" style={{ padding: '0.65rem 0.85rem', background: 'linear-gradient(135deg, rgba(15, 23, 42, 0.95), rgba(30, 41, 59, 0.98))', border: '1px solid rgba(129, 140, 248, 0.35)', position: 'relative', zIndex: 100, minHeight: '115px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
             <div>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.3rem' }}>

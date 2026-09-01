@@ -73,6 +73,35 @@ function extractTasaCeroInfo(orderDetail) {
   };
 }
 
+function extractSellerCode(orderDetail) {
+  const marketing = orderDetail?.marketingData || orderDetail?.marketing_json || {};
+  return (
+    marketing?.utmiCampaign ||
+    marketing?.utmi_campaign ||
+    orderDetail?.utmiCampaign ||
+    orderDetail?.utmi_campaign ||
+    ''
+  );
+}
+
+function isSocialSellingOrder(orderDetail) {
+  const marketing = orderDetail?.marketingData || orderDetail?.marketing_json || {};
+  const tags = orderDetail?.marketingTags || marketing?.marketingTags || [];
+  const sellerCode = extractSellerCode(orderDetail);
+  return (
+    Boolean(sellerCode && String(sellerCode).trim()) ||
+    (Array.isArray(tags) && tags.includes('vtexSocialSelling'))
+  );
+}
+
+function matchesSaleType(orderLike, saleType) {
+  if (!saleType) return true;
+  const isSocial = isSocialSellingOrder(orderLike);
+  if (saleType === 'social') return isSocial;
+  if (saleType === 'organic') return !isSocial;
+  return true;
+}
+
 function parseIsoStartEnd(startDateParam, endDateParam) {
   const nicNow = getNicaraguaNow();
   let startStr = (startDateParam || nicNow.firstDayStr).trim();
@@ -159,6 +188,7 @@ export async function GET(request) {
     const startDateParam = searchParams.get('startDate');
     const endDateParam = searchParams.get('endDate');
     const statusParam = (searchParams.get('status') || '').trim();
+    const saleTypeParam = (searchParams.get('saleType') || '').trim();
     const searchParam = (searchParams.get('search') || '').trim();
     const sortByParam = (searchParams.get('sortBy') || 'date_desc').trim();
     const pageParam = parseInt(searchParams.get('page') || '1', 10);
@@ -199,7 +229,7 @@ export async function GET(request) {
           query = query.order('creation_date', { ascending: false });
         }
 
-        if (!isExport) {
+        if (!isExport && !saleTypeParam) {
           const from = (pageParam - 1) * pageSize;
           const to = from + pageSize - 1;
           query = query.range(from, to);
@@ -230,7 +260,7 @@ export async function GET(request) {
           // Conteos y Estadísticas globales en Supabase para el período (< 10ms)
           const { data: periodRows } = await supabaseAdmin
             .from('vtex_orders')
-            .select('status, fulfillment_type, pickup_store, items, detail_json')
+            .select('status, fulfillment_type, pickup_store, items, detail_json, marketing_json, total_value')
             .gte('creation_date', startIso)
             .lte('creation_date', endIso);
 
@@ -240,11 +270,31 @@ export async function GET(request) {
           let canceledCount = 0;
           let pickupCount = 0;
           let deliveryCount = 0;
+          let invoicedRevenue = 0;
+          let socialSellingRevenue = 0;
+          let socialSellingCount = 0;
+          let organicRevenue = 0;
+          let organicCount = 0;
           const storeCounts = {};
 
           (periodRows || []).forEach((r) => {
+            const orderForMarketing = { ...(r.detail_json || {}), marketingData: r.marketing_json || r.detail_json?.marketingData };
+            if (!matchesSaleType(orderForMarketing, saleTypeParam)) return;
+
             const st = String(r.status || '').toLowerCase();
-            if (st === 'invoiced') invoicedCount++;
+            if (st === 'invoiced') {
+              const value = Number(r.total_value || 0);
+              const isSocial = isSocialSellingOrder(orderForMarketing);
+              invoicedCount++;
+              invoicedRevenue += value;
+              if (isSocial) {
+                socialSellingCount++;
+                socialSellingRevenue += value;
+              } else {
+                organicCount++;
+                organicRevenue += value;
+              }
+            }
             if (st === 'handling') handlingCount++;
             if (st === 'ready-for-handling') readyCount++;
             if (st === 'canceled') canceledCount++;
@@ -290,7 +340,9 @@ export async function GET(request) {
             .sort((a, b) => b.count - a.count);
 
           dbStats = {
-            total: periodRows?.length || totalDbCount,
+            total: saleTypeParam
+              ? (periodRows || []).filter((r) => matchesSaleType({ ...(r.detail_json || {}), marketingData: r.marketing_json || r.detail_json?.marketingData }, saleTypeParam)).length
+              : (periodRows?.length || totalDbCount),
             invoiced: invoicedCount,
             handling: handlingCount,
             readyForHandling: readyCount,
@@ -300,6 +352,11 @@ export async function GET(request) {
             pickupPct,
             deliveryPct,
             pickupStores,
+            invoicedRevenue,
+            socialSellingRevenue,
+            socialSellingCount,
+            organicRevenue,
+            organicCount,
           };
 
           dbOrders = rows.map((r) => {
@@ -344,6 +401,9 @@ export async function GET(request) {
               cancelReason = 'Sin motivo registrado por el sistema';
             }
 
+            const orderForMarketing = { ...(r.detail_json || {}), marketingData: r.marketing_json || r.detail_json?.marketingData };
+            const isSocialSale = isSocialSellingOrder(orderForMarketing);
+
             return {
               orderId: r.order_id,
               sequence: r.sequence,
@@ -359,9 +419,20 @@ export async function GET(request) {
               cancelReason: cancelReason,
               comments: comments,
               tasaCero: extractTasaCeroInfo(r.detail_json),
+              sellerCode: extractSellerCode(orderForMarketing),
+              saleType: isSocialSale ? 'social' : 'organic',
               isFromDb: true,
             };
           });
+
+          if (saleTypeParam) {
+            dbOrders = dbOrders.filter((o) => o.saleType === saleTypeParam);
+            totalDbCount = dbOrders.length;
+            if (!isExport) {
+              const from = (pageParam - 1) * pageSize;
+              dbOrders = dbOrders.slice(from, from + pageSize);
+            }
+          }
 
           if (isExport && isVtexConfigured()) {
             const missingCanceled = dbOrders.filter(
@@ -412,6 +483,7 @@ export async function GET(request) {
 
     if (isVtexConfigured()) {
       let rawList = [];
+      let statsRawList = [];
       let pagingInfo = { total: 0, pages: 1, currentPage: pageParam };
 
       if (isExport) {
@@ -426,23 +498,70 @@ export async function GET(request) {
           p++;
         }
         pagingInfo = { total: rawList.length, pages: 1, currentPage: 1 };
+        statsRawList = rawList;
       } else {
         const ordersData = await fetchVtexOrders(startIso, endIso, statusParam, searchParam, pageParam, pageSize);
         rawList = ordersData.list || [];
         pagingInfo = ordersData.paging || { total: 0, pages: 0, currentPage: pageParam };
+
+        let p = 1;
+        let maxP = 50;
+        while (p <= maxP) {
+          const resData = await fetchVtexOrders(startIso, endIso, statusParam, searchParam, p, 100).catch(() => null);
+          if (!resData || !resData.list || resData.list.length === 0) break;
+          statsRawList.push(...resData.list);
+          const totalPages = resData.paging?.pages || 1;
+          if (p >= totalPages) break;
+          p++;
+        }
+        if (statsRawList.length === 0) {
+          statsRawList = rawList;
+        }
       }
 
       // Enriquecer la lista de órdenes leyendo sus detalles para determinar con precisión el tipo de entrega (Pickup vs Delivery)
-      const details = await Promise.all(
+      let details = await Promise.all(
         rawList.map((o) => fetchVtexOrderDetail(o.orderId).catch(() => null))
       );
+      let statsDetails = statsRawList === rawList
+        ? details
+        : await Promise.all(statsRawList.map((o) => fetchVtexOrderDetail(o.orderId).catch(() => null)));
+
+      if (saleTypeParam) {
+        const filteredStats = statsRawList
+          .map((order, idx) => ({ order, detail: statsDetails[idx] }))
+          .filter(({ order, detail }) => matchesSaleType(detail || order, saleTypeParam));
+
+        statsRawList = filteredStats.map(({ order }) => order);
+        statsDetails = filteredStats.map(({ detail }) => detail);
+
+        if (isExport) {
+          rawList = statsRawList;
+          details = statsDetails;
+          pagingInfo = { total: rawList.length, pages: 1, currentPage: 1 };
+        } else {
+          const from = (pageParam - 1) * pageSize;
+          rawList = statsRawList.slice(from, from + pageSize);
+          details = statsDetails.slice(from, from + pageSize);
+          pagingInfo = {
+            total: statsRawList.length,
+            pages: Math.ceil(statsRawList.length / pageSize) || 1,
+            currentPage: pageParam,
+          };
+        }
+      }
 
       let pickupCount = 0;
       let deliveryCount = 0;
+      let invoicedRevenue = 0;
+      let socialSellingRevenue = 0;
+      let socialSellingCount = 0;
+      let organicRevenue = 0;
+      let organicCount = 0;
       const storeCounts = {};
 
-      const enrichedList = rawList.map((o, idx) => {
-        const d = details[idx];
+      statsRawList.forEach((o, idx) => {
+        const d = statsDetails[idx];
         let fulfillmentType = 'delivery';
         let pickupStore = '';
 
@@ -464,6 +583,36 @@ export async function GET(request) {
           deliveryCount++;
         }
 
+        const orderValue = Number(o.totalValue || d?.value || 0) / 100;
+        const socialSelling = isSocialSellingOrder(d || o);
+
+        if (String(o.status || '').toLowerCase() === 'invoiced') {
+          invoicedRevenue += orderValue;
+          if (socialSelling) {
+            socialSellingCount++;
+            socialSellingRevenue += orderValue;
+          } else {
+            organicCount++;
+            organicRevenue += orderValue;
+          }
+        }
+      });
+
+      const enrichedList = rawList.map((o, idx) => {
+        const d = details[idx];
+        let fulfillmentType = 'delivery';
+        let pickupStore = '';
+
+        if (d?.shippingData) {
+          const logInfo = d.shippingData.logisticsInfo?.[0];
+          const channel = logInfo?.selectedDeliveryChannel || d.shippingData.selectedAddresses?.[0]?.addressType || '';
+          const isPickup = channel === 'pickup-in-point' || channel === 'pickup' || Boolean(logInfo?.pickupStoreInfo?.friendlyName);
+          if (isPickup) {
+            fulfillmentType = 'pickup';
+            pickupStore = logInfo?.pickupStoreInfo?.friendlyName || logInfo?.deliveryCompany || 'Retiro en Tienda';
+          }
+        }
+
         const cancelReason = d ? (
           d.cancelReason ||
           (typeof d.cancellationData === 'object' ? d.cancellationData?.reason : d.cancellationData) ||
@@ -472,6 +621,7 @@ export async function GET(request) {
         ) : (o.status === 'canceled' ? 'Sin motivo registrado por el sistema' : null);
 
         const comments = d ? (typeof d.openTextField === 'object' ? d.openTextField?.value : (d.openTextField || null)) : null;
+        const isSocialSale = isSocialSellingOrder(d || o);
 
         return {
           ...o,
@@ -483,6 +633,8 @@ export async function GET(request) {
           cancelReason,
           comments,
           tasaCero: extractTasaCeroInfo(d),
+          sellerCode: extractSellerCode(d || o),
+          saleType: isSocialSale ? 'social' : 'organic',
         };
       });
 
@@ -500,15 +652,20 @@ export async function GET(request) {
 
       const stats = {
         total: pagingInfo.total || 0,
-        invoiced: enrichedList.filter((o) => o.status === 'invoiced').length,
-        handling: enrichedList.filter((o) => o.status === 'handling').length,
-        readyForHandling: enrichedList.filter((o) => o.status === 'ready-for-handling').length,
-        canceled: enrichedList.filter((o) => o.status === 'canceled').length,
+        invoiced: statsRawList.filter((o) => String(o.status || '').toLowerCase() === 'invoiced').length,
+        handling: statsRawList.filter((o) => String(o.status || '').toLowerCase() === 'handling').length,
+        readyForHandling: statsRawList.filter((o) => String(o.status || '').toLowerCase() === 'ready-for-handling').length,
+        canceled: statsRawList.filter((o) => String(o.status || '').toLowerCase() === 'canceled').length,
         pickupCount,
         deliveryCount,
         pickupPct,
         deliveryPct,
         pickupStores,
+        invoicedRevenue,
+        socialSellingRevenue,
+        socialSellingCount,
+        organicRevenue,
+        organicCount,
       };
 
       return NextResponse.json({
