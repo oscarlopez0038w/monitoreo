@@ -23,6 +23,8 @@ import {
   Tag,
   Check,
   Power,
+  Eye,
+  EyeOff,
 } from 'lucide-react';
 
 export default function MiniSplitKitsPanel() {
@@ -63,6 +65,7 @@ export default function MiniSplitKitsPanel() {
 
   // Estado de activación/desactivación en progreso
   const [togglingSkuId, setTogglingSkuId] = useState(null);
+  const [togglingDisplaySkuId, setTogglingDisplaySkuId] = useState(null);
 
   // Modal de Importación Excel
   const [isExcelModalOpen, setIsExcelModalOpen] = useState(false);
@@ -278,6 +281,43 @@ export default function MiniSplitKitsPanel() {
       alert(`Error al cambiar estado del SKU ${skuId}: ${err.message}`);
     } finally {
       setTogglingSkuId(null);
+    }
+  };
+
+  // Mostrar u ocultar SKU componente en website VTEX
+  const handleToggleDisplayOnSite = async (e, skuId, displayOnSite) => {
+    e.stopPropagation();
+    setTogglingDisplaySkuId(skuId);
+
+    try {
+      const res = await fetch('/api/minisplits', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'toggle_display_on_site',
+          skuId,
+          displayOnSite: Boolean(displayOnSite),
+        }),
+      });
+
+      const data = await res.json();
+      if (!data.success) throw new Error(data.error);
+
+      setKits((prevKits) =>
+        prevKits.map((kit) => ({
+          ...kit,
+          components: kit.components.map((comp) =>
+            comp.skuId === skuId
+              ? { ...comp, displayOnSite: Boolean(displayOnSite), productId: data.productId || comp.productId }
+              : comp
+          ),
+        }))
+      );
+      fetchKits(true);
+    } catch (err) {
+      alert(`Error al cambiar visibilidad web del SKU ${skuId}: ${err.message}`);
+    } finally {
+      setTogglingDisplaySkuId(null);
     }
   };
 
@@ -1335,6 +1375,7 @@ export default function MiniSplitKitsPanel() {
                               >
                                 {kit.components.map((comp) => {
                                   const isCompToggling = togglingSkuId === comp.skuId;
+                                  const isDisplayToggling = togglingDisplaySkuId === comp.skuId;
 
                                   return (
                                     <div
@@ -1408,6 +1449,40 @@ export default function MiniSplitKitsPanel() {
                                             >
                                               <Power size={10} />
                                               {isCompToggling ? '...' : comp.isActive ? 'Desactivar' : 'Activar'}
+                                            </button>
+
+                                            <span
+                                              style={{
+                                                fontSize: '0.7rem',
+                                                color: comp.displayOnSite ? '#38bdf8' : '#94a3b8',
+                                                background: comp.displayOnSite ? 'rgba(56, 189, 248, 0.12)' : 'rgba(148, 163, 184, 0.1)',
+                                                padding: '0.1rem 0.4rem',
+                                                borderRadius: '4px',
+                                              }}
+                                            >
+                                              {comp.displayOnSite ? 'Visible web' : 'Oculto web'}
+                                            </span>
+
+                                            <button
+                                              onClick={(e) => handleToggleDisplayOnSite(e, comp.skuId, !comp.displayOnSite)}
+                                              disabled={isDisplayToggling}
+                                              style={{
+                                                padding: '0.15rem 0.4rem',
+                                                borderRadius: '4px',
+                                                border: comp.displayOnSite ? '1px solid rgba(251, 191, 36, 0.35)' : '1px solid rgba(56, 189, 248, 0.35)',
+                                                background: comp.displayOnSite ? 'rgba(251, 191, 36, 0.12)' : 'rgba(56, 189, 248, 0.12)',
+                                                color: comp.displayOnSite ? '#fbbf24' : '#38bdf8',
+                                                fontSize: '0.68rem',
+                                                fontWeight: 600,
+                                                cursor: isDisplayToggling ? 'wait' : 'pointer',
+                                                display: 'inline-flex',
+                                                alignItems: 'center',
+                                                gap: '0.2rem',
+                                              }}
+                                              title={comp.displayOnSite ? 'Ocultar componente en website VTEX' : 'Mostrar componente en website VTEX'}
+                                            >
+                                              {comp.displayOnSite ? <EyeOff size={10} /> : <Eye size={10} />}
+                                              {isDisplayToggling ? '...' : comp.displayOnSite ? 'Ocultar web' : 'Mostrar web'}
                                             </button>
                                           </div>
                                         </div>

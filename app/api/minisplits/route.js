@@ -4,6 +4,7 @@ import {
   fetchMiniSplitKitsData,
   updateSkuBasePrice,
   toggleSkuActiveStatus,
+  toggleSkuDisplayOnSite,
   discoverVtexKitSkus,
   DEFAULT_MINI_SPLIT_SKUS,
 } from '@/lib/vtex';
@@ -116,7 +117,7 @@ export async function POST(request) {
     }
 
     const body = await request.json();
-    const { action, skuId, description, newBasePrice, activate } = body;
+    const { action, skuId, description, newBasePrice, activate, displayOnSite } = body;
 
     // ACCIÓN 1: MODIFICAR PRECIO BASE DE SKU (KIT O COMPONENTE)
     if (action === 'update_price') {
@@ -188,7 +189,40 @@ export async function POST(request) {
       });
     }
 
-    // ACCIÓN 3: REGISTRAR UN NUEVO SKU KIT EN MONITOR
+    // ACCIÓN 3: MOSTRAR U OCULTAR UN SKU EN WEBSITE VTEX
+    if (action === 'toggle_display_on_site') {
+      if (!skuId || displayOnSite === undefined || displayOnSite === null) {
+        return NextResponse.json(
+          { success: false, error: 'Se requieren skuId y displayOnSite (true/false) para cambiar la visibilidad web.' },
+          { status: 400 }
+        );
+      }
+
+      const cleanSkuId = String(skuId).trim();
+      const result = await toggleSkuDisplayOnSite(cleanSkuId, Boolean(displayOnSite));
+
+      if (isSupabaseConfigured()) {
+        try {
+          await supabaseAdmin
+            .from('vtex_skus')
+            .upsert({
+              id: parseInt(cleanSkuId, 10),
+              display_on_site: Boolean(displayOnSite),
+              updated_at: new Date().toISOString(),
+            }, { onConflict: 'id' });
+        } catch (dbErr) {}
+      }
+
+      return NextResponse.json({
+        success: true,
+        message: result.message,
+        skuId: cleanSkuId,
+        productId: result.productId,
+        displayOnSite: Boolean(displayOnSite),
+      });
+    }
+
+    // ACCIÓN 4: REGISTRAR UN NUEVO SKU KIT EN MONITOR
     if (action === 'add') {
       if (!skuId) {
         return NextResponse.json(
@@ -233,7 +267,7 @@ export async function POST(request) {
       });
     }
 
-    // ACCIÓN 4: IMPORTACIÓN MASIVA DESDE EXCEL / CONSOLA (DETECCION DE DUPLICADOS)
+    // ACCIÓN 5: IMPORTACIÓN MASIVA DESDE EXCEL / CONSOLA (DETECCION DE DUPLICADOS)
     if (action === 'import_excel' || action === 'bulk_add') {
       const { skus } = body;
       if (!Array.isArray(skus) || skus.length === 0) {
