@@ -159,6 +159,7 @@ export default function OrdenesPage() {
         'Tipo Entrega': o.fulfillmentType === 'pickup' ? 'Retiro en Tienda' : 'Entrega a Domicilio',
         'Tienda Retiro': o.pickupStore || 'N/A',
         'Cantidad Items': o.itemsCount || 1,
+        'Ticket Factura Física': o.invoiceTicket || '',
         'Motivo de Cancelación': o.status === 'canceled' ? (o.cancelReason || 'Sin motivo registrado por el sistema') : 'N/A',
         'Comentarios': o.comments || '',
       }));
@@ -381,6 +382,20 @@ export default function OrdenesPage() {
       return `$ ${(nioValue / BCN_EXCHANGE_RATE).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
     }
     return `C$ ${nioValue.toLocaleString('es-NI', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  };
+  const getInvoiceTicketFromDetail = (detail) => {
+    if (!detail) return '';
+    const packages = detail.packageAttachment?.packages || [];
+    return (
+      detail.invoiceNumber ||
+      detail.invoiceData?.invoiceNumber ||
+      detail.invoiceData?.number ||
+      detail.invoices?.[0]?.invoiceNumber ||
+      detail.invoices?.[0]?.number ||
+      packages[0]?.invoiceNumber ||
+      packages[0]?.invoiceKey ||
+      ''
+    );
   };
 
   const renderStatusBadge = (status, statusDescription) => {
@@ -1269,6 +1284,7 @@ export default function OrdenesPage() {
                                     const utmMedium = mkt.utmMedium;
                                     const utmiCampaign = mkt.utmiCampaign;
                                     const coupon = mkt.coupon;
+                                    const invoiceTicket = order.invoiceTicket || getInvoiceTicketFromDetail(detail);
 
                                     return (
                                       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '0.85rem' }}>
@@ -1309,7 +1325,23 @@ export default function OrdenesPage() {
                                           </span>
                                         </div>
 
-                                        {/* Card 3: Campaña Marketing / UTM & Cupones */}
+                                        {/* Card 3: Ticket de factura física */}
+                                        <div style={{ background: 'rgba(15, 23, 42, 0.85)', padding: '0.85rem', borderRadius: '10px', border: '1px solid rgba(251, 191, 36, 0.25)', display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+                                          <span style={{ fontSize: '0.7rem', color: '#fbbf24', textTransform: 'uppercase', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                                            <FileText size={13} color="#fbbf24" /> Ticket Factura Física
+                                          </span>
+                                          {invoiceTicket ? (
+                                            <div style={{ fontSize: '1.15rem', fontWeight: 800, color: '#ffffff', marginTop: '0.1rem', fontFamily: 'var(--font-mono)' }}>
+                                              Factura #{invoiceTicket}
+                                            </div>
+                                          ) : (
+                                            <div style={{ fontSize: '0.76rem', color: 'var(--text-dim)', fontStyle: 'italic' }}>
+                                              Sin ticket registrado en OMS
+                                            </div>
+                                          )}
+                                        </div>
+
+                                        {/* Card 4: Campaña Marketing / UTM & Cupones */}
                                         <div style={{ background: 'rgba(15, 23, 42, 0.85)', padding: '0.85rem', borderRadius: '10px', border: '1px solid rgba(165, 180, 252, 0.25)', display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
                                           <span style={{ fontSize: '0.7rem', color: '#a5b4fc', textTransform: 'uppercase', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
                                             <Megaphone size={13} color="#a5b4fc" /> Campaña & Origen (UTM)

@@ -73,6 +73,49 @@ function extractTasaCeroInfo(orderDetail) {
   };
 }
 
+function extractInvoiceTicket(orderDetail) {
+  if (!orderDetail || typeof orderDetail !== 'object') return '';
+
+  const directCandidates = [
+    orderDetail.invoiceNumber,
+    orderDetail.invoice,
+    orderDetail.invoiceId,
+    orderDetail.fiscalDocument,
+    orderDetail.fiscalDocumentNumber,
+    orderDetail.packageAttachment?.packages?.[0]?.invoiceNumber,
+    orderDetail.packageAttachment?.packages?.[0]?.invoiceKey,
+    orderDetail.packageAttachment?.packages?.[0]?.invoiceUrl,
+    orderDetail.invoiceData?.invoiceNumber,
+    orderDetail.invoiceData?.number,
+    orderDetail.invoices?.[0]?.invoiceNumber,
+    orderDetail.invoices?.[0]?.number,
+  ];
+
+  const direct = directCandidates
+    .map((value) => (value === undefined || value === null ? '' : String(value).trim()))
+    .find(Boolean);
+
+  if (direct) return direct;
+
+  const packages = orderDetail.packageAttachment?.packages;
+  if (Array.isArray(packages)) {
+    const fromPackage = packages
+      .flatMap((pkg) => [pkg?.invoiceNumber, pkg?.invoiceKey, pkg?.invoiceUrl, pkg?.trackingNumber])
+      .map((value) => (value === undefined || value === null ? '' : String(value).trim()))
+      .find(Boolean);
+    if (fromPackage) return fromPackage;
+  }
+
+  const searchableText = JSON.stringify({
+    packageAttachment: orderDetail.packageAttachment,
+    invoiceData: orderDetail.invoiceData,
+    invoices: orderDetail.invoices,
+    changesAttachment: orderDetail.changesAttachment,
+  });
+  const match = searchableText.match(/factura\s*#?\s*([A-Za-z0-9-]+)/i);
+  return match?.[1] || '';
+}
+
 function extractSellerCode(orderDetail) {
   const marketing = orderDetail?.marketingData || orderDetail?.marketing_json || {};
   return (
@@ -418,6 +461,7 @@ export async function GET(request) {
               itemsCount: itemsList.length || 1,
               cancelReason: cancelReason,
               comments: comments,
+              invoiceTicket: extractInvoiceTicket(r.detail_json),
               tasaCero: extractTasaCeroInfo(r.detail_json),
               sellerCode: extractSellerCode(orderForMarketing),
               saleType: isSocialSale ? 'social' : 'organic',
@@ -457,6 +501,7 @@ export async function GET(request) {
                     if (d.openTextField) {
                       target.comments = typeof d.openTextField === 'object' ? d.openTextField?.value : d.openTextField;
                     }
+                    target.invoiceTicket = extractInvoiceTicket(d);
                   }
                 });
               }
@@ -632,6 +677,7 @@ export async function GET(request) {
           itemsCount: d?.items?.length || 1,
           cancelReason,
           comments,
+          invoiceTicket: extractInvoiceTicket(d),
           tasaCero: extractTasaCeroInfo(d),
           sellerCode: extractSellerCode(d || o),
           saleType: isSocialSale ? 'social' : 'organic',
