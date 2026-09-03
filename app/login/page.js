@@ -12,7 +12,6 @@ function LoginFormContent() {
 
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
-  const [rememberMe, setRememberMe] = useState(true);
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -130,10 +129,12 @@ function LoginFormContent() {
       const res = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        cache: 'no-store',
+        credentials: 'same-origin',
+        referrerPolicy: 'no-referrer',
         body: JSON.stringify({
           username: username.trim(),
           password,
-          rememberMe,
         }),
       });
 
@@ -419,41 +420,15 @@ function LoginFormContent() {
             </div>
           </div>
 
-          {/* Options Row */}
+          {/* Security Row */}
           <div
             style={{
               display: 'flex',
               alignItems: 'center',
-              justifyContent: 'space-between',
+              justifyContent: 'flex-end',
               margin: '0.2rem 0',
             }}
           >
-            <label
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '0.55rem',
-                fontSize: '0.82rem',
-                color: '#94a3b8',
-                cursor: 'pointer',
-                userSelect: 'none',
-              }}
-            >
-              <input
-                type="checkbox"
-                checked={rememberMe}
-                onChange={(e) => setRememberMe(e.target.checked)}
-                style={{
-                  width: '16px',
-                  height: '16px',
-                  accentColor: '#38bdf8',
-                  borderRadius: '4px',
-                  cursor: 'pointer',
-                }}
-              />
-              Recordar mi sesión (7 días)
-            </label>
-
             <span style={{ fontSize: '0.78rem', color: '#64748b', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
               <ShieldCheck size={14} color="#38bdf8" /> SSL Seguro
             </span>

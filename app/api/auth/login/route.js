@@ -1,12 +1,12 @@
 import { NextResponse } from 'next/server';
-import { loginWithSupabase, AUTH_COOKIE_NAME } from '@/lib/auth';
+import { createAppSessionToken, loginWithSupabase, AUTH_COOKIE_NAME } from '@/lib/auth';
 
 export const dynamic = 'force-dynamic';
 
 export async function POST(request) {
   try {
     const body = await request.json();
-    const { username, password, rememberMe } = body || {};
+    const { username, password } = body || {};
 
     if (!username || !password) {
       return NextResponse.json(
@@ -24,19 +24,22 @@ export async function POST(request) {
       );
     }
 
-    const accessToken = result.session.access_token;
     const SEVEN_DAYS_SECONDS = 60 * 60 * 24 * 7;
     const maxAgeSeconds = SEVEN_DAYS_SECONDS; // 7 días de sesión activa por defecto
+    const sessionToken = await createAppSessionToken(result.user, maxAgeSeconds);
 
     const response = NextResponse.json({
       success: true,
       message: 'Inicio de sesión exitoso',
       user: result.user,
     });
+    response.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+    response.headers.set('Pragma', 'no-cache');
+    response.headers.set('Expires', '0');
 
     response.cookies.set({
       name: AUTH_COOKIE_NAME,
-      value: accessToken,
+      value: sessionToken,
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',

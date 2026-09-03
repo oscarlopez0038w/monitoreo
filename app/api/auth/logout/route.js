@@ -17,6 +17,9 @@ export async function POST() {
       success: true,
       message: 'Sesión cerrada exitosamente en Supabase Auth',
     });
+    response.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+    response.headers.set('Pragma', 'no-cache');
+    response.headers.set('Expires', '0');
 
     response.cookies.set({
       name: AUTH_COOKIE_NAME,
