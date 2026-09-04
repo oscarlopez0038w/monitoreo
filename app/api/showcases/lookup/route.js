@@ -35,26 +35,18 @@ export async function POST(request) {
     if (isSupabaseConfigured()) {
       const batchSize = 1000;
       const skuBatches = [];
-      const safetyBatches = [];
 
       for (let i = 0; i < uniqueSkuIds.length; i += batchSize) {
         const chunk = uniqueSkuIds.slice(i, i + batchSize);
         skuBatches.push(supabaseAdmin.from('vtex_skus').select('*').in('id', chunk));
-        safetyBatches.push(supabaseAdmin.from('vtex_safety_stock').select('*').in('sku_id', chunk));
       }
 
       const skuResults = await Promise.all(skuBatches);
-      const safetyResults = await Promise.all(safetyBatches);
-
       dbSkus = skuResults.flatMap((r) => r.data || []);
-      dbSafety = safetyResults.flatMap((r) => r.data || []);
     }
 
     const skuMap = new Map();
     dbSkus.forEach((s) => skuMap.set(s.id, s));
-
-    const safetyMap = new Map();
-    dbSafety.forEach((s) => safetyMap.set(s.sku_id, s));
 
     // 2. Para SKUs que requieran información adicional (categoría o fotos), consultar VTEX API en lotes controlados
     const config = getVtexConfig();
@@ -69,11 +61,11 @@ export async function POST(request) {
       const chunkResults = await Promise.all(
         chunk.map(async (skuId) => {
           const localSku = skuMap.get(skuId) || {};
-          const localSafety = safetyMap.get(skuId) || {};
 
-          let description = localSafety.description || localSku.description || `SKU ${skuId}`;
-          let category = 'General';
-          let brand = 'SINSA';
+          let description = localSku.name || localSku.description || `SKU ${skuId}`;
+          let category = localSku.category || 'General';
+          let brand = localSku.brand || 'SINSA';
+          let safetyStock = localSku.safety_stock ?? 0;
           let imageUrl = null;
           let isActive = localSku.is_active ?? true;
 

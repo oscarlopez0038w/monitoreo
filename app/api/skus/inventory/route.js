@@ -2,6 +2,9 @@ import { NextResponse } from 'next/server';
 import { fetchSkuInventory, fetchSkuDetails, isVtexConfigured } from '@/lib/vtex';
 import { supabaseAdmin, isSupabaseConfigured } from '@/lib/supabase';
 
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
 export async function POST(request) {
   try {
     if (!isVtexConfigured() || !isSupabaseConfigured()) {
@@ -44,22 +47,32 @@ export async function POST(request) {
       });
     }
 
-    // Consultar inventario y estado IsActive real en VTEX para cada SKU en paralelo
+    // Solo consultar fetchSkuDetails si es un SKU individual bajo demanda (ej. botón refrescar en la tabla)
+    const isSingleSku = targetSkuIds.length === 1;
+    const checkDetails = body.checkDetails === true || isSingleSku;
+
+    // Consultar inventario en VTEX Logistics API en lotes paralelos (1 llamada por SKU en masivo)
     const results = [];
     const chunkSize = 25;
 
     for (let i = 0; i < targetSkuIds.length; i += chunkSize) {
       const chunk = targetSkuIds.slice(i, i + chunkSize);
       const promises = chunk.map(async (skuId) => {
-        const [inv, details] = await Promise.all([
-          fetchSkuInventory(skuId),
-          fetchSkuDetails(skuId),
-        ]);
-        if (!inv) return null;
-        return {
-          ...inv,
-          isActive: details ? details.isActive : true,
-        };
+        if (checkDetails) {
+          const [inv, details] = await Promise.all([
+            fetchSkuInventory(skuId),
+            fetchSkuDetails(skuId).catch(() => null),
+          ]);
+          if (!inv) return null;
+          return {
+            ...inv,
+            isActive: details ? details.isActive : undefined,
+          };
+        }
+
+        // Sincronización masiva de inventario: Solo 1 llamada a Logistics API
+        const inv = await fetchSkuInventory(skuId);
+        return inv || null;
       });
 
       const chunkResults = await Promise.all(promises);
@@ -72,29 +85,41 @@ export async function POST(request) {
     }
 
     // Actualizar los registros en Supabase (marcando inventory_updated_at con la fecha actual)
-    const rowsToUpdate = results.map((item) => ({
-      id: typeof item.skuId === 'number' ? item.skuId : parseInt(item.skuId, 10),
-      is_active: item.isActive,
-      wh1_total: item.wh1Total ?? 0,
-      wh1_reserved: item.wh1Reserved ?? 0,
-      stock_wh1: item.stockWh1 ?? 0,
-      wh2_total: item.wh2Total ?? 0,
-      wh2_reserved: item.wh2Reserved ?? 0,
-      stock_wh2: item.stockWh2 ?? 0,
-      total_quantity: item.totalQuantity ?? 0,
-      total_reserved: item.totalReserved ?? 0,
-      total_stock: item.totalStock ?? 0,
-      inventory_detail: item.balance,
-      inventory_updated_at: new Date().toISOString(),
-    }));
+    const nowIso = new Date().toISOString();
+    const rowsToUpdate = results.map((item) => {
+      const row = {
+        id: typeof item.skuId === 'number' ? item.skuId : parseInt(item.skuId, 10),
+        wh1_total: item.wh1Total ?? 0,
+        wh1_reserved: item.wh1Reserved ?? 0,
+        stock_wh1: item.stockWh1 ?? 0,
+        wh2_total: item.wh2Total ?? 0,
+        wh2_reserved: item.wh2Reserved ?? 0,
+        stock_wh2: item.stockWh2 ?? 0,
+        total_quantity: item.totalQuantity ?? 0,
+        total_reserved: item.totalReserved ?? 0,
+        total_stock: item.totalStock ?? 0,
+        inventory_detail: item.balance,
+        inventory_updated_at: nowIso,
+      };
+
+      if (item.isActive !== undefined) {
+        row.is_active = item.isActive;
+      }
+
+      return row;
+    });
 
     if (rowsToUpdate.length > 0) {
-      const { error: upsertError } = await supabaseAdmin
-        .from('vtex_skus')
-        .upsert(rowsToUpdate, { onConflict: 'id' });
+      const DB_BATCH = 200;
+      for (let i = 0; i < rowsToUpdate.length; i += DB_BATCH) {
+        const batch = rowsToUpdate.slice(i, i + DB_BATCH);
+        const { error: upsertError } = await supabaseAdmin
+          .from('vtex_skus')
+          .upsert(batch, { onConflict: 'id' });
 
-      if (upsertError) {
-        throw new Error(`Error guardando inventario en Supabase: ${upsertError.message}`);
+        if (upsertError) {
+          throw new Error(`Error guardando inventario en Supabase: ${upsertError.message}`);
+        }
       }
     }
 

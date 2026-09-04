@@ -113,27 +113,6 @@ export async function GET(request) {
       }
     }
 
-    // Cargar mapa de descripciones desde vtex_safety_stock en fragmentos
-    let safetyMap = {};
-    const skuIds = (skuRows || []).map((r) => r.id);
-
-    if (skuIds.length > 0) {
-      const CHUNK_SIZE = 500;
-      for (let i = 0; i < skuIds.length; i += CHUNK_SIZE) {
-        const chunkIds = skuIds.slice(i, i + CHUNK_SIZE);
-        const { data: safetyRows } = await supabaseAdmin
-          .from('vtex_safety_stock')
-          .select('sku_id, description')
-          .in('sku_id', chunkIds);
-
-        if (safetyRows) {
-          safetyRows.forEach((s) => {
-            safetyMap[s.sku_id] = s.description;
-          });
-        }
-      }
-    }
-
     // Procesar y mapear campos exactos para la especificación de Publitas
     const isLargeExport = isExport && skuRows.length > 300;
     const CONCURRENCY = isLargeExport ? 35 : 15;
@@ -146,7 +125,7 @@ export async function GET(request) {
           const shouldFetchVtexDetail = !isExport || skuRows.length <= 250 || i < 250;
           const detail = shouldFetchVtexDetail ? await fetchFullProductCatalogDetail(row.id) : null;
 
-          const fallbackDesc = safetyMap[row.id] || null;
+          const fallbackDesc = row.name || null;
           const title = detail?.name || detail?.productName || fallbackDesc || `SKU ${row.id}`;
           const bcnRate = 36.6243;
 

@@ -18,13 +18,16 @@ async function fetchAllSkus(sortColumn, isAscending, search = '') {
     let query = supabaseAdmin
       .from('vtex_skus')
       .select(
-        'id, is_active, wh1_total, wh1_reserved, stock_wh1, wh2_total, wh2_reserved, stock_wh2, total_quantity, total_reserved, total_stock, inventory_detail, inventory_updated_at, created_at, updated_at'
+        'id, name, ref_id, brand, category, is_active, safety_stock, wh1_total, wh1_reserved, stock_wh1, wh2_total, wh2_reserved, stock_wh2, total_quantity, total_reserved, total_stock, inventory_detail, inventory_updated_at, created_at, updated_at'
       );
 
     if (search.trim()) {
-      const searchNum = parseInt(search.trim(), 10);
+      const term = search.trim();
+      const searchNum = parseInt(term, 10);
       if (!isNaN(searchNum)) {
-        query = query.eq('id', searchNum);
+        query = query.or(`id.eq.${searchNum},ref_id.ilike.%${term}%,name.ilike.%${term}%`);
+      } else {
+        query = query.or(`name.ilike.%${term}%,brand.ilike.%${term}%,category.ilike.%${term}%,ref_id.ilike.%${term}%`);
       }
     }
 
@@ -46,39 +49,10 @@ async function fetchAllSkus(sortColumn, isAscending, search = '') {
     }
   }
 
-  // Enriquecer todos los SKUs con el stock de seguridad guardado (paginando vtex_safety_stock completamente)
-  let safetyMap = {};
-  let safetyPage = 0;
-  const safetyPageSize = 1000;
-  let hasMoreSafety = true;
-
-  while (hasMoreSafety) {
-    const fromSafety = safetyPage * safetyPageSize;
-    const toSafety = fromSafety + safetyPageSize - 1;
-
-    const { data: safetyData } = await supabaseAdmin
-      .from('vtex_safety_stock')
-      .select('sku_id, description, safety_stock')
-      .range(fromSafety, toSafety);
-
-    if (safetyData && safetyData.length > 0) {
-      safetyData.forEach((s) => {
-        safetyMap[s.sku_id] = {
-          description: s.description || null,
-          safetyStock: s.safety_stock || 0,
-        };
-      });
-      if (safetyData.length < safetyPageSize) hasMoreSafety = false;
-      else safetyPage++;
-    } else {
-      hasMoreSafety = false;
-    }
-  }
-
   return allRows.map((row) => ({
     ...row,
-    description: safetyMap[row.id]?.description || null,
-    safety_stock: safetyMap[row.id]?.safetyStock || 0,
+    description: row.name || null,
+    safety_stock: row.safety_stock || 0,
   }));
 }
 
@@ -97,6 +71,8 @@ export async function GET(request) {
     // Validar columna permitida para ordenar
     const allowedSortColumns = [
       'id',
+      'name',
+      'ref_id',
       'is_active',
       'wh1_total',
       'wh1_reserved',
@@ -134,7 +110,8 @@ export async function GET(request) {
       ];
       allSkus.forEach((row) => {
         const estado = row.is_active !== false ? 'Activo' : 'Inactivo';
-        const descEscaped = row.description ? `"${String(row.description).replace(/"/g, '""')}"` : '""';
+        const displayDesc = row.name || row.description || '';
+        const descEscaped = displayDesc ? `"${String(displayDesc).replace(/"/g, '""')}"` : '""';
         const invDetailEscaped = row.inventory_detail ? JSON.stringify(row.inventory_detail).replace(/"/g, '""') : '[]';
 
         const safetyStock = row.safety_stock ?? 0;
@@ -188,42 +165,18 @@ export async function GET(request) {
     let query = supabaseAdmin
       .from('vtex_skus')
       .select(
-        'id, is_active, wh1_total, wh1_reserved, stock_wh1, wh2_total, wh2_reserved, stock_wh2, total_quantity, total_reserved, total_stock, inventory_detail, inventory_updated_at, created_at, updated_at',
+        'id, name, ref_id, brand, category, is_active, safety_stock, wh1_total, wh1_reserved, stock_wh1, wh2_total, wh2_reserved, stock_wh2, total_quantity, total_reserved, total_stock, inventory_detail, inventory_updated_at, created_at, updated_at',
         { count: 'exact' }
       );
 
     if (search.trim()) {
-      const searchNum = parseInt(search.trim(), 10);
-      const searchIds = new Set();
+      const term = search.trim();
+      const searchNum = parseInt(term, 10);
+
       if (!isNaN(searchNum)) {
-        searchIds.add(searchNum);
-      }
-
-      try {
-        const { data: textMatches } = await supabaseAdmin
-          .from('vtex_safety_stock')
-          .select('sku_id')
-          .ilike('description', `%${search.trim()}%`)
-          .limit(500);
-
-        if (textMatches && textMatches.length > 0) {
-          textMatches.forEach((m) => searchIds.add(m.sku_id));
-        }
-      } catch (e) {}
-
-      if (searchIds.size > 0) {
-        query = query.in('id', Array.from(searchIds));
-      } else if (isNaN(searchNum)) {
-        return NextResponse.json({
-          success: true,
-          skus: [],
-          total: 0,
-          page,
-          limit,
-          totalPages: 0,
-          sortBy: validSortColumn,
-          sortOrder,
-        });
+        query = query.or(`id.eq.${searchNum},ref_id.ilike.%${term}%,name.ilike.%${term}%`);
+      } else {
+        query = query.or(`name.ilike.%${term}%,brand.ilike.%${term}%,category.ilike.%${term}%,ref_id.ilike.%${term}%`);
       }
     }
 
@@ -235,29 +188,10 @@ export async function GET(request) {
       throw new Error(error.message);
     }
 
-    const skuIds = (data || []).map((r) => r.id);
-    let safetyMap = {};
-
-    if (skuIds.length > 0) {
-      const { data: safetyData } = await supabaseAdmin
-        .from('vtex_safety_stock')
-        .select('sku_id, description, safety_stock')
-        .in('sku_id', skuIds);
-
-      if (safetyData && safetyData.length > 0) {
-        safetyData.forEach((s) => {
-          safetyMap[s.sku_id] = {
-            description: s.description || null,
-            safetyStock: s.safety_stock || 0,
-          };
-        });
-      }
-    }
-
     const enrichedSkus = (data || []).map((row) => ({
       ...row,
-      description: safetyMap[row.id]?.description || null,
-      safety_stock: safetyMap[row.id]?.safetyStock || 0,
+      description: row.name || null,
+      safety_stock: row.safety_stock || 0,
     }));
 
     return NextResponse.json({
@@ -277,4 +211,3 @@ export async function GET(request) {
     );
   }
 }
-

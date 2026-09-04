@@ -14,6 +14,7 @@ const ROUTE_PERMISSIONS = {
   '/minisplits': { code: 'kits:manage', name: 'Kits VTEX & Combos' },
   '/stock-seguridad': { code: 'safety_stock:manage', name: 'Stock de Seguridad' },
   '/precios': { code: 'prices:manage', name: 'Precios VTEX' },
+  '/promociones': { code: 'prices:manage', name: 'Promociones & Precios Finales VTEX' },
   '/vitrinas': { code: 'showcases:manage', name: 'Vitrinas Destacadas Home' },
   '/simulador': { code: 'simulador:use', name: 'Simulador de Carrito' },
   '/ordenes': { code: 'orders:view', name: 'Órdenes VTEX OMS' },

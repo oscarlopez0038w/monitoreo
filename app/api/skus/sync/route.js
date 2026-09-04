@@ -1,6 +1,9 @@
 import { NextResponse } from 'next/server';
-import { fetchSkuPage, isVtexConfigured } from '@/lib/vtex';
+import { fetchSkuPage, fetchSkuDetails, isVtexConfigured } from '@/lib/vtex';
 import { supabaseAdmin, isSupabaseConfigured } from '@/lib/supabase';
+
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
 
 export async function POST(request) {
   try {
@@ -29,8 +32,9 @@ export async function POST(request) {
     const body = await request.json().catch(() => ({}));
     const page = parseInt(body.page || '1', 10);
     const pageSize = parseInt(body.pageSize || '1000', 10);
+    const includeDetails = body.includeDetails !== false; // Por defecto extrae nombres y metadatos
 
-    // 1. Obtener los IDs de SKU de la página desde VTEX
+    // 1. Obtener los IDs de SKU de la página desde VTEX Catalog API
     const skuIds = await fetchSkuPage(page, pageSize);
 
     if (!skuIds || skuIds.length === 0) {
@@ -44,20 +48,57 @@ export async function POST(request) {
       });
     }
 
-    // 2. Preparar los objetos a insertar en Supabase (id, is_active y timestamps)
-    const rowsToUpsert = skuIds.map((id) => ({
-      id: typeof id === 'number' ? id : parseInt(id, 10),
-      is_active: true,
-      updated_at: new Date().toISOString(),
-    }));
+    // 2. Extraer detalles de catálogo (nombre, refId, brand, category, isActive real)
+    const detailsMap = new Map();
+    if (includeDetails) {
+      const CHUNK_SIZE = 25;
+      for (let i = 0; i < skuIds.length; i += CHUNK_SIZE) {
+        const chunk = skuIds.slice(i, i + CHUNK_SIZE);
+        const chunkResults = await Promise.all(
+          chunk.map((id) => fetchSkuDetails(id).catch(() => null))
+        );
+        chunkResults.forEach((det, idx) => {
+          if (det) {
+            detailsMap.set(String(chunk[idx]), det);
+          }
+        });
+      }
+    }
 
-    // 3. Upsert masivo en Supabase
-    const { error: upsertError } = await supabaseAdmin
-      .from('vtex_skus')
-      .upsert(rowsToUpsert, { onConflict: 'id' });
+    // 3. Preparar filas para upsert en Supabase
+    const nowIso = new Date().toISOString();
+    const rowsToUpsert = skuIds.map((id) => {
+      const numId = typeof id === 'number' ? id : parseInt(id, 10);
+      const det = detailsMap.get(String(numId));
 
-    if (upsertError) {
-      throw new Error(`Error insertando en Supabase: ${upsertError.message}`);
+      const row = {
+        id: numId,
+        is_active: det ? det.isActive : true,
+        updated_at: nowIso,
+      };
+
+      if (det) {
+        row.name = det.name || null;
+        row.ref_id = det.refId || null;
+        row.brand = det.brand || null;
+        row.category = det.category || null;
+        row.catalog_updated_at = nowIso;
+      }
+
+      return row;
+    });
+
+    // 4. Upsert en lotes controlados a Supabase
+    const DB_BATCH = 200;
+    for (let i = 0; i < rowsToUpsert.length; i += DB_BATCH) {
+      const batch = rowsToUpsert.slice(i, i + DB_BATCH);
+      const { error: upsertError } = await supabaseAdmin
+        .from('vtex_skus')
+        .upsert(batch, { onConflict: 'id' });
+
+      if (upsertError) {
+        throw new Error(`Error insertando en Supabase: ${upsertError.message}`);
+      }
     }
 
     const isFinished = skuIds.length < pageSize;
@@ -67,6 +108,7 @@ export async function POST(request) {
       page,
       fetchedSkus: skuIds.length,
       insertedCount: rowsToUpsert.length,
+      enrichedWithDetails: includeDetails,
       isFinished,
       sampleSkuIds: skuIds.slice(0, 5),
     });

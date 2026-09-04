@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { supabaseAdmin, isSupabaseConfigured } from '@/lib/supabase';
-import { isVtexConfigured, fetchSkuPrice } from '@/lib/vtex';
+import { isVtexConfigured, fetchSkuPrice, fetchSkuPriceRaw } from '@/lib/vtex';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -91,7 +91,7 @@ export async function POST(request) {
     for (let i = 0; i < skuIds.length; i += BATCH_CONCURRENCY) {
       const batchIds = skuIds.slice(i, i + BATCH_CONCURRENCY);
       const results = await Promise.all(
-        batchIds.map((id) => fetchSkuPrice(id).catch(() => null))
+        batchIds.map((id) => fetchSkuPriceRaw(id).catch(() => null))
       );
 
       const upsertRows = [];

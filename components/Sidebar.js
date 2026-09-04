@@ -25,6 +25,7 @@ import {
   Truck,
   Sparkles,
   Package,
+  Percent,
 } from 'lucide-react';
 
 export default function Sidebar({ vtexStatus, supabaseStatus, mobileOpen, onCloseMobile, newTxCount = 0 }) {
@@ -106,6 +107,13 @@ export default function Sidebar({ vtexStatus, supabaseStatus, mobileOpen, onClos
       href: '/precios',
       icon: Tag,
       color: '#a5b4fc',
+      permission: 'prices:manage',
+    },
+    {
+      label: 'Promociones VTEX',
+      href: '/promociones',
+      icon: Percent,
+      color: '#ec4899',
       permission: 'prices:manage',
     },
     {

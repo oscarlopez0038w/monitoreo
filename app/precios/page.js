@@ -4,10 +4,11 @@ import { useState } from 'react';
 import AppLayout from '@/components/AppLayout';
 import PricesTable from '@/components/PricesTable';
 import PriceComparator from '@/components/PriceComparator';
-import { Tag, Scale, Layers } from 'lucide-react';
+import PromotionsPanel from '@/components/PromotionsPanel';
+import { Tag, Scale, Layers, Percent } from 'lucide-react';
 
 export default function PreciosPage() {
-  const [activeTab, setActiveTab] = useState('catalog'); // 'catalog' | 'comparator'
+  const [activeTab, setActiveTab] = useState('catalog'); // 'catalog' | 'promotions' | 'comparator'
 
   return (
     <AppLayout>
@@ -17,10 +18,10 @@ export default function PreciosPage() {
           <div>
             <h1 style={{ fontSize: '1.35rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.5rem', background: 'linear-gradient(to right, #ffffff, #94a3b8)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', margin: '0 0 0.25rem 0' }}>
               <Tag size={24} color="#a5b4fc" />
-              Gestión de Precios & Auditoría Xstore
+              Gestión de Precios, Promociones & Auditoría Xstore
             </h1>
             <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', margin: 0 }}>
-              Consulta precios de lista y base, o compara el archivo de facturación Xstore contra la tienda Web.
+              Consulta precios de lista y base, audita promociones Rates & Benefits, o compara el archivo de facturación Xstore contra la tienda Web.
             </p>
           </div>
 
@@ -44,6 +45,27 @@ export default function PreciosPage() {
               }}
             >
               <Layers size={16} /> Catálogo de Precios
+            </button>
+
+            <button
+              onClick={() => setActiveTab('promotions')}
+              style={{
+                padding: '0.5rem 1.1rem',
+                borderRadius: '9px',
+                border: 'none',
+                fontSize: '0.85rem',
+                fontWeight: 600,
+                cursor: 'pointer',
+                background: activeTab === 'promotions' ? 'linear-gradient(135deg, #ec4899, #be185d)' : 'transparent',
+                color: activeTab === 'promotions' ? '#ffffff' : 'var(--text-muted)',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.45rem',
+                transition: 'all 0.2s ease',
+                boxShadow: activeTab === 'promotions' ? '0 4px 15px rgba(236, 72, 153, 0.3)' : 'none',
+              }}
+            >
+              <Percent size={16} /> Promociones VTEX
             </button>
 
             <button
@@ -72,7 +94,10 @@ export default function PreciosPage() {
         {/* Tab 1: Catálogo de Precios Original e Intacto */}
         {activeTab === 'catalog' && <PricesTable />}
 
-        {/* Tab 2: Comparador Independiente de Precios Xstore vs Web */}
+        {/* Tab 2: Promociones & Precios Finales VTEX */}
+        {activeTab === 'promotions' && <PromotionsPanel />}
+
+        {/* Tab 3: Comparador Independiente de Precios Xstore vs Web */}
         {activeTab === 'comparator' && <PriceComparator />}
 
         {/* Pie de Página */}

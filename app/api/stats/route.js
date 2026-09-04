@@ -50,9 +50,8 @@ export async function GET() {
       // Conteo de SKUs con Stock de Seguridad configurado (> 0)
       const { count: safetyCount } = await supabaseAdmin
         .from('vtex_skus')
-        .select('id', { count: 'exact' })
-        .gt('safety_stock', 0)
-        .limit(1);
+        .select('id', { count: 'exact', head: true })
+        .gt('safety_stock', 0);
 
       safetySkusInDb = safetyCount || 0;
 

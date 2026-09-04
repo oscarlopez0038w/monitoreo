@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { supabaseAdmin, isSupabaseConfigured } from '@/lib/supabase';
-import { isVtexConfigured, fetchSkuPrice } from '@/lib/vtex';
+import { isVtexConfigured, fetchSkuPrice, fetchSkuPriceRaw } from '@/lib/vtex';
 import {
   getBackgroundSyncState,
   startBackgroundSyncState,
@@ -50,7 +50,7 @@ async function runBackgroundWorker(startOffset = 0) {
 
         const batchIds = skuIds.slice(i, i + BATCH_SIZE);
         const results = await Promise.all(
-          batchIds.map((skuId) => fetchSkuPrice(skuId).catch(() => null))
+          batchIds.map((skuId) => fetchSkuPriceRaw(skuId).catch(() => null))
         );
 
         const upsertRows = [];

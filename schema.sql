@@ -20,7 +20,12 @@ CREATE POLICY "Permitir acceso total vtex_safety_stock" ON public.vtex_safety_st
 -- 2. TABLA DE SKUS, INVENTARIOS Y PRECIOS VTEX
 CREATE TABLE IF NOT EXISTS public.vtex_skus (
     id BIGINT PRIMARY KEY,
+    name TEXT NULL,
+    ref_id TEXT NULL,
+    brand TEXT NULL,
+    category TEXT NULL,
     is_active BOOLEAN DEFAULT true,
+    catalog_updated_at TIMESTAMPTZ NULL,
     wh1_total INT DEFAULT 0,
     wh1_reserved INT DEFAULT 0,
     stock_wh1 INT DEFAULT 0,
@@ -35,14 +40,46 @@ CREATE TABLE IF NOT EXISTS public.vtex_skus (
     list_price NUMERIC(12,2) DEFAULT NULL,
     base_price NUMERIC(12,2) DEFAULT NULL,
     cost_price NUMERIC(12,2) DEFAULT NULL,
+    final_price NUMERIC(12,2) DEFAULT NULL,
+    discount_pct NUMERIC(5,2) DEFAULT NULL,
+    promo_name TEXT NULL,
+    promo_id TEXT NULL,
+    promotions_updated_at TIMESTAMPTZ NULL,
     price_updated_at TIMESTAMPTZ NULL,
+    safety_stock INT NOT NULL DEFAULT 0,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- Migración para bases de datos existentes:
+ALTER TABLE public.vtex_skus ADD COLUMN IF NOT EXISTS name TEXT NULL;
+ALTER TABLE public.vtex_skus ADD COLUMN IF NOT EXISTS ref_id TEXT NULL;
+ALTER TABLE public.vtex_skus ADD COLUMN IF NOT EXISTS brand TEXT NULL;
+ALTER TABLE public.vtex_skus ADD COLUMN IF NOT EXISTS category TEXT NULL;
+ALTER TABLE public.vtex_skus ADD COLUMN IF NOT EXISTS catalog_updated_at TIMESTAMPTZ NULL;
+ALTER TABLE public.vtex_skus ADD COLUMN IF NOT EXISTS final_price NUMERIC(12,2) DEFAULT NULL;
+ALTER TABLE public.vtex_skus ADD COLUMN IF NOT EXISTS discount_pct NUMERIC(5,2) DEFAULT NULL;
+ALTER TABLE public.vtex_skus ADD COLUMN IF NOT EXISTS promo_name TEXT NULL;
+ALTER TABLE public.vtex_skus ADD COLUMN IF NOT EXISTS promo_id TEXT NULL;
+ALTER TABLE public.vtex_skus ADD COLUMN IF NOT EXISTS promotions_updated_at TIMESTAMPTZ NULL;
+ALTER TABLE public.vtex_skus ADD COLUMN IF NOT EXISTS safety_stock INT NOT NULL DEFAULT 0;
+
+-- Índices de búsqueda y rendimiento:
+CREATE EXTENSION IF NOT EXISTS pg_trgm;
 CREATE INDEX IF NOT EXISTS idx_vtex_skus_id ON public.vtex_skus(id);
+CREATE INDEX IF NOT EXISTS idx_vtex_skus_name_trgm ON public.vtex_skus USING gin (name gin_trgm_ops);
+CREATE INDEX IF NOT EXISTS idx_vtex_skus_ref_id ON public.vtex_skus(ref_id);
 CREATE INDEX IF NOT EXISTS idx_vtex_skus_is_active ON public.vtex_skus(is_active);
 CREATE INDEX IF NOT EXISTS idx_vtex_skus_base_price ON public.vtex_skus(base_price);
+CREATE INDEX IF NOT EXISTS idx_vtex_skus_final_price ON public.vtex_skus(final_price);
+CREATE INDEX IF NOT EXISTS idx_vtex_skus_discount_pct ON public.vtex_skus(discount_pct);
+CREATE INDEX IF NOT EXISTS idx_vtex_skus_promo_name ON public.vtex_skus(promo_name);
+CREATE INDEX IF NOT EXISTS idx_vtex_skus_safety_stock ON public.vtex_skus(safety_stock);
+CREATE INDEX IF NOT EXISTS idx_vtex_skus_brand ON public.vtex_skus(brand);
+CREATE INDEX IF NOT EXISTS idx_vtex_skus_category ON public.vtex_skus(category);
+CREATE INDEX IF NOT EXISTS idx_vtex_skus_inventory_updated ON public.vtex_skus(inventory_updated_at);
+CREATE INDEX IF NOT EXISTS idx_vtex_skus_catalog_updated ON public.vtex_skus(catalog_updated_at);
+CREATE INDEX IF NOT EXISTS idx_vtex_skus_pricing_active ON public.vtex_skus(id) WHERE list_price IS NOT NULL AND base_price IS NOT NULL;
 ALTER TABLE public.vtex_skus ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Permitir acceso total vtex_skus" ON public.vtex_skus;
 CREATE POLICY "Permitir acceso total vtex_skus" ON public.vtex_skus FOR ALL USING (true) WITH CHECK (true);

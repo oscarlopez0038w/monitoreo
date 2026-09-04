@@ -56,21 +56,7 @@ export async function POST(request) {
       );
     }
 
-    // 2. Obtener descripciones desde vtex_safety_stock para complementar nombres
-    const { data: safetyRows } = await supabaseAdmin
-      .from('vtex_safety_stock')
-      .select('sku_id, description');
-
-    const descMap = new Map();
-    if (safetyRows) {
-      safetyRows.forEach((r) => {
-        if (r.sku_id && r.description) {
-          descMap.set(r.sku_id, r.description);
-        }
-      });
-    }
-
-    // 3. Consultar por lotes de 1000 en Supabase los registros existentes de vtex_skus
+    // 2. Consultar por lotes de 1000 en Supabase los registros existentes de vtex_skus
     const skuIdList = Array.from(skuIdsToFetch);
     const BATCH_SIZE = 1000;
     const dbSkuMap = new Map();
@@ -79,7 +65,7 @@ export async function POST(request) {
       const chunk = skuIdList.slice(i, i + BATCH_SIZE);
       const { data, error } = await supabaseAdmin
         .from('vtex_skus')
-        .select('id, base_price, list_price, is_active')
+        .select('id, name, base_price, list_price, is_active')
         .in('id', chunk);
 
       if (error) {
@@ -91,7 +77,7 @@ export async function POST(request) {
       }
     }
 
-    // 4. Comparar Precio Xstore Facturación vs. Precio Final Web (base_price)
+    // 3. Comparar Precio Xstore Facturación vs. Precio Final Web (base_price)
     const comparisonResults = [];
     let matchCount = 0;
     let mismatchCount = 0;
@@ -101,7 +87,7 @@ export async function POST(request) {
 
     for (const item of validItems) {
       const dbRow = dbSkuMap.get(item.skuId);
-      const productName = item.description || descMap.get(item.skuId) || 'Producto SINSA';
+      const productName = item.description || dbRow?.name || 'Producto SINSA';
 
       if (!dbRow) {
         notFoundCount++;

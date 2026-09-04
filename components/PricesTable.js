@@ -407,6 +407,8 @@ export default function PricesTable() {
         'Estado SKU': s.isActive ? 'Activo' : 'Inactivo',
         'Precio Lista MSRP (C$)': s.listPrice !== null ? s.listPrice : 0,
         'Precio Base Venta (C$)': s.basePrice !== null ? s.basePrice : 0,
+        'Precio Final Simulado (C$)': s.finalPrice !== null ? s.finalPrice : (s.basePrice ?? 0),
+        'Promoción Aplicada': s.promoName || 'Ninguna',
         'Costo (C$)': s.costPrice !== null ? s.costPrice : 0,
         'Monto Descuento (C$)': s.discountAmount || 0,
         'Porcentaje Descuento (%)': s.discountPct ? `${s.discountPct}%` : '0%',
@@ -424,6 +426,8 @@ export default function PricesTable() {
         { wch: 15 },
         { wch: 22 },
         { wch: 22 },
+        { wch: 24 },
+        { wch: 32 },
         { wch: 15 },
         { wch: 24 },
         { wch: 22 },
@@ -511,8 +515,8 @@ export default function PricesTable() {
           </div>
         </div>
 
-        {/* 4 Stat Boxes en el Panel Principal (Sin duplicados abajo) */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '1rem', marginBottom: syncActive || logs.length > 0 ? '1.25rem' : '0' }}>
+        {/* 5 Stat Boxes en el Panel Principal */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '1rem', marginBottom: syncActive || logs.length > 0 ? '1.25rem' : '0' }}>
           
           <div style={{ background: 'rgba(15, 23, 42, 0.6)', border: '1px solid var(--border-subtle)', borderRadius: '12px', padding: '1rem' }}>
             <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 600, marginBottom: '0.3rem' }}>
@@ -535,12 +539,22 @@ export default function PricesTable() {
 
           <div style={{ background: 'rgba(15, 23, 42, 0.6)', border: '1px solid var(--border-subtle)', borderRadius: '12px', padding: '1rem' }}>
             <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 600, marginBottom: '0.3rem' }}>
-              SKUS CON DESCUENTO %
+              CON DESCUENTO %
             </div>
             <div style={{ fontSize: '1.4rem', fontWeight: 700, color: '#34d399', fontFamily: 'var(--font-mono)' }}>
               {stats.discountedSkusCount.toLocaleString('es-NI')}
             </div>
-            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Con Oferta o Precio Fijo</span>
+            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>MSRP vs Venta</span>
+          </div>
+
+          <div style={{ background: 'rgba(15, 23, 42, 0.6)', border: '1px solid var(--border-subtle)', borderRadius: '12px', padding: '1rem' }}>
+            <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 600, marginBottom: '0.3rem' }}>
+              CON PROMOCIÓN VTEX
+            </div>
+            <div style={{ fontSize: '1.4rem', fontWeight: 700, color: '#ec4899', fontFamily: 'var(--font-mono)' }}>
+              {(stats.promotionsSkusCount || 0).toLocaleString('es-NI')}
+            </div>
+            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Rates & Benefits</span>
           </div>
 
           <div style={{ background: 'rgba(15, 23, 42, 0.6)', border: '1px solid var(--border-subtle)', borderRadius: '12px', padding: '1rem' }}>
@@ -664,7 +678,8 @@ export default function PricesTable() {
               }}
             >
               <option value="all">Todos los Precios</option>
-              <option value="with_discount">Solo con Descuento %</option>
+              <option value="with_discount">Solo con Descuento % o Promoción</option>
+              <option value="with_promo">Solo con Promoción VTEX (Rates & Benefits)</option>
               <option value="no_discount">Sin Descuento</option>
             </select>
           </div>
@@ -700,7 +715,16 @@ export default function PricesTable() {
                   style={{ padding: '0.6rem 0.75rem', textAlign: 'right', cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap' }}
                 >
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', justifyContent: 'flex-end' }}>
-                    Precio Base (Venta) {renderSortIcon('base_price')}
+                    Precio Base {renderSortIcon('base_price')}
+                  </div>
+                </th>
+
+                <th
+                  onClick={() => handleSort('final_price')}
+                  style={{ padding: '0.6rem 0.75rem', textAlign: 'right', cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap' }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', justifyContent: 'flex-end', color: '#34d399' }}>
+                    Precio Final (Venta) {renderSortIcon('final_price')}
                   </div>
                 </th>
 
@@ -709,7 +733,7 @@ export default function PricesTable() {
                   style={{ padding: '0.6rem 0.75rem', textAlign: 'center', cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap' }}
                 >
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', justifyContent: 'center' }}>
-                    Descuento % {renderSortIcon('discount_pct')}
+                    Promoción / Descuento {renderSortIcon('discount_pct')}
                   </div>
                 </th>
 
@@ -729,20 +753,22 @@ export default function PricesTable() {
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={7} style={{ padding: '2.5rem', textAlign: 'center', color: 'var(--text-muted)' }}>
+                  <td colSpan={8} style={{ padding: '2.5rem', textAlign: 'center', color: 'var(--text-muted)' }}>
                     <RefreshCw size={22} className="animate-spin" color="var(--accent-primary)" style={{ margin: '0 auto 0.5rem auto' }} />
                     Cargando catálogo de precios optimizado...
                   </td>
                 </tr>
               ) : skus.length === 0 ? (
                 <tr>
-                  <td colSpan={7} style={{ padding: '2.5rem', textAlign: 'center', color: 'var(--text-muted)' }}>
+                  <td colSpan={8} style={{ padding: '2.5rem', textAlign: 'center', color: 'var(--text-muted)' }}>
                     No hay registros de precios en Supabase con los filtros seleccionados. Presiona <strong>"⚡ 1. Sincronizar Precios Masivos"</strong> para cargar los precios.
                   </td>
                 </tr>
               ) : (
                 skus.map((sku) => {
                   const isUpdatingThis = updatingSkuId === sku.id;
+                  const effectiveFinalPrice = sku.finalPrice !== null && sku.finalPrice !== undefined ? sku.finalPrice : sku.basePrice;
+                  const hasExtraPromoDiscount = sku.basePrice !== null && effectiveFinalPrice !== null && effectiveFinalPrice < sku.basePrice;
 
                   return (
                     <tr
@@ -757,7 +783,7 @@ export default function PricesTable() {
                         {sku.id}
                       </td>
 
-                      <td style={{ padding: '0.6rem 0.75rem', color: '#ffffff', fontWeight: 500, maxWidth: '300px' }}>
+                      <td style={{ padding: '0.6rem 0.75rem', color: '#ffffff', fontWeight: 500, maxWidth: '280px' }}>
                         {sku.description}
                       </td>
 
@@ -765,12 +791,48 @@ export default function PricesTable() {
                         {sku.listPrice !== null ? `C$ ${sku.listPrice.toLocaleString('es-NI', { minimumFractionDigits: 2 })}` : '—'}
                       </td>
 
-                      <td style={{ padding: '0.6rem 0.75rem', textAlign: 'right', fontFamily: 'var(--font-mono)', fontWeight: 700, color: sku.basePrice !== null ? '#34d399' : 'var(--text-dim)', fontSize: '0.88rem' }}>
+                      <td style={{ padding: '0.6rem 0.75rem', textAlign: 'right', fontFamily: 'var(--font-mono)', color: hasExtraPromoDiscount ? 'var(--text-dim)' : '#ffffff', textDecoration: hasExtraPromoDiscount ? 'line-through' : 'none' }}>
                         {sku.basePrice !== null ? `C$ ${sku.basePrice.toLocaleString('es-NI', { minimumFractionDigits: 2 })}` : '—'}
                       </td>
 
+                      <td style={{ padding: '0.6rem 0.75rem', textAlign: 'right', fontFamily: 'var(--font-mono)', fontWeight: 700, color: '#34d399', fontSize: '0.88rem' }}>
+                        {effectiveFinalPrice !== null ? `C$ ${effectiveFinalPrice.toLocaleString('es-NI', { minimumFractionDigits: 2 })}` : '—'}
+                        {hasExtraPromoDiscount && (
+                          <span style={{ display: 'block', fontSize: '0.68rem', color: '#ec4899', fontWeight: 600 }}>
+                            ↓ Descuento Checkout
+                          </span>
+                        )}
+                      </td>
+
                       <td style={{ padding: '0.6rem 0.75rem', textAlign: 'center' }}>
-                        {sku.discountPct > 0 ? (
+                        {sku.promoName ? (
+                          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.2rem' }}>
+                            <span
+                              style={{
+                                background: 'rgba(236, 72, 153, 0.15)',
+                                color: '#f472b6',
+                                border: '1px solid rgba(236, 72, 153, 0.35)',
+                                padding: '0.2rem 0.45rem',
+                                borderRadius: '6px',
+                                fontSize: '0.7rem',
+                                fontWeight: 700,
+                                maxWidth: '170px',
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                                whiteSpace: 'nowrap',
+                                display: 'inline-block',
+                              }}
+                              title={sku.promoName}
+                            >
+                              🏷️ {sku.promoName}
+                            </span>
+                            {sku.discountPct > 0 && (
+                              <span className="badge badge-emerald" style={{ padding: '0.12rem 0.4rem', fontSize: '0.68rem', fontWeight: 700 }}>
+                                -{sku.discountPct}% OFF
+                              </span>
+                            )}
+                          </div>
+                        ) : sku.discountPct > 0 ? (
                           <span
                             className="badge badge-emerald"
                             style={{ padding: '0.2rem 0.55rem', fontSize: '0.74rem', fontWeight: 700 }}
@@ -831,6 +893,7 @@ export default function PricesTable() {
           ) : (
             skus.map((sku) => {
               const isUpdatingThis = updatingSkuId === sku.id;
+              const effectiveFinalPrice = sku.finalPrice !== null && sku.finalPrice !== undefined ? sku.finalPrice : sku.basePrice;
 
               return (
                 <div
@@ -852,7 +915,21 @@ export default function PricesTable() {
                       SKU #{sku.id}
                     </span>
 
-                    {sku.discountPct > 0 ? (
+                    {sku.promoName ? (
+                      <span
+                        style={{
+                          background: 'rgba(236, 72, 153, 0.15)',
+                          color: '#f472b6',
+                          border: '1px solid rgba(236, 72, 153, 0.35)',
+                          padding: '0.2rem 0.55rem',
+                          borderRadius: '8px',
+                          fontSize: '0.74rem',
+                          fontWeight: 800,
+                        }}
+                      >
+                        🏷️ {sku.promoName}
+                      </span>
+                    ) : sku.discountPct > 0 ? (
                       <span className="badge badge-emerald" style={{ padding: '0.25rem 0.6rem', fontSize: '0.76rem', fontWeight: 800 }}>
                         -{sku.discountPct}% OFF
                       </span>
@@ -866,19 +943,19 @@ export default function PricesTable() {
                     {sku.description || 'Sin descripción'}
                   </p>
 
-                  {/* Desglose de Precios (MSRP vs Base Venta) */}
+                  {/* Desglose de Precios (MSRP vs Final) */}
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'rgba(0,0,0,0.3)', padding: '0.65rem 0.85rem', borderRadius: '10px' }}>
                     <div>
-                      <span style={{ fontSize: '0.68rem', color: 'var(--text-dim)', display: 'block' }}>MSRP (Precio Lista)</span>
+                      <span style={{ fontSize: '0.68rem', color: 'var(--text-dim)', display: 'block' }}>MSRP (Lista)</span>
                       <span style={{ fontSize: '0.84rem', color: sku.discountPct > 0 ? '#94a3b8' : '#ffffff', textDecoration: sku.discountPct > 0 ? 'line-through' : 'none', fontFamily: 'var(--font-mono)' }}>
                         {sku.listPrice !== null ? `C$ ${sku.listPrice.toLocaleString('es-NI', { minimumFractionDigits: 2 })}` : '—'}
                       </span>
                     </div>
 
                     <div style={{ textAlign: 'right' }}>
-                      <span style={{ fontSize: '0.68rem', color: '#34d399', display: 'block', fontWeight: 700 }}>PRECIO BASE (VENTA)</span>
+                      <span style={{ fontSize: '0.68rem', color: '#34d399', display: 'block', fontWeight: 700 }}>PRECIO FINAL (VENTA)</span>
                       <strong style={{ fontSize: '1.05rem', color: '#34d399', fontFamily: 'var(--font-mono)', fontWeight: 800 }}>
-                        {sku.basePrice !== null ? `C$ ${sku.basePrice.toLocaleString('es-NI', { minimumFractionDigits: 2 })}` : '—'}
+                        {effectiveFinalPrice !== null ? `C$ ${effectiveFinalPrice.toLocaleString('es-NI', { minimumFractionDigits: 2 })}` : '—'}
                       </strong>
                     </div>
                   </div>
