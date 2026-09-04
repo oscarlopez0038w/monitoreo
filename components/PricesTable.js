@@ -54,7 +54,7 @@ export default function PricesTable() {
   const [totalCount, setTotalCount] = useState(0);
   const [sortBy, setSortBy] = useState('id');
   const [sortOrder, setSortOrder] = useState('asc');
-  const [stats, setStats] = useState({ totalPricedSkus: 0, totalCatalogCount: 82234, discountedSkusCount: 0 });
+  const [stats, setStats] = useState({ totalPricedSkus: 0, totalCatalogCount: 82234, discountedSkusCount: 0, promotionsSkusCount: 0, fixedPriceSkusCount: 0 });
   const [banner, setBanner] = useState(null);
   const [logs, setLogs] = useState([]);
 
@@ -408,7 +408,8 @@ export default function PricesTable() {
         'Precio Lista MSRP (C$)': s.listPrice !== null ? s.listPrice : 0,
         'Precio Base Venta (C$)': s.basePrice !== null ? s.basePrice : 0,
         'Precio Final Simulado (C$)': s.finalPrice !== null ? s.finalPrice : (s.basePrice ?? 0),
-        'Promoción Aplicada': s.promoName || 'Ninguna',
+        'Tipo de Descuento': s.discountType || (s.promoName ? 'Promoción VTEX (Rates & Benefits)' : (s.isFixedPrice || (s.listPrice && s.basePrice && s.listPrice > s.basePrice) ? 'Fixed Price (ERP)' : 'Ninguno')),
+        'Promoción / Regla Aplicada': s.promoName || (s.isFixedPrice || (s.listPrice && s.basePrice && s.listPrice > s.basePrice) ? 'Fixed Price (ERP)' : 'Ninguna'),
         'Costo (C$)': s.costPrice !== null ? s.costPrice : 0,
         'Monto Descuento (C$)': s.discountAmount || 0,
         'Porcentaje Descuento (%)': s.discountPct ? `${s.discountPct}%` : '0%',
@@ -427,6 +428,7 @@ export default function PricesTable() {
         { wch: 22 },
         { wch: 22 },
         { wch: 24 },
+        { wch: 34 },
         { wch: 32 },
         { wch: 15 },
         { wch: 24 },
@@ -559,6 +561,16 @@ export default function PricesTable() {
 
           <div style={{ background: 'rgba(15, 23, 42, 0.6)', border: '1px solid var(--border-subtle)', borderRadius: '12px', padding: '1rem' }}>
             <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 600, marginBottom: '0.3rem' }}>
+              CON FIXED PRICE ERP
+            </div>
+            <div style={{ fontSize: '1.4rem', fontWeight: 700, color: '#38bdf8', fontFamily: 'var(--font-mono)' }}>
+              {(stats.fixedPriceSkusCount || 0).toLocaleString('es-NI')}
+            </div>
+            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Ofertas ERP</span>
+          </div>
+
+          <div style={{ background: 'rgba(15, 23, 42, 0.6)', border: '1px solid var(--border-subtle)', borderRadius: '12px', padding: '1rem' }}>
+            <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 600, marginBottom: '0.3rem' }}>
               ESTADO DE AVANCE
             </div>
             <div style={{ fontSize: '0.9rem', fontWeight: 700, color: syncActive ? '#38bdf8' : '#fbbf24', display: 'flex', alignItems: 'center', gap: '0.4rem', marginTop: '0.3rem' }}>
@@ -677,10 +689,10 @@ export default function PricesTable() {
                 setPage(1);
               }}
             >
-              <option value="all">Todos los Precios</option>
-              <option value="with_discount">Solo con Descuento % o Promoción</option>
-              <option value="with_promo">Solo con Promoción VTEX (Rates & Benefits)</option>
-              <option value="no_discount">Sin Descuento</option>
+              <option value="all">Ver todos</option>
+              <option value="with_promo">Solo con descuento de promoción en VTEX</option>
+              <option value="with_fixed_price">Solo precios fijados</option>
+              <option value="no_discount">Sin descuento</option>
             </select>
           </div>
         </div>
@@ -822,9 +834,36 @@ export default function PricesTable() {
                                 whiteSpace: 'nowrap',
                                 display: 'inline-block',
                               }}
-                              title={sku.promoName}
+                              title={`Campaña VTEX Rates & Benefits: ${sku.promoName}`}
                             >
                               🏷️ {sku.promoName}
+                            </span>
+                            {sku.discountPct > 0 && (
+                              <span className="badge badge-emerald" style={{ padding: '0.12rem 0.4rem', fontSize: '0.68rem', fontWeight: 700 }}>
+                                -{sku.discountPct}% OFF
+                              </span>
+                            )}
+                          </div>
+                        ) : (sku.isFixedPrice || (sku.discountPct > 0 && sku.listPrice && sku.basePrice && sku.listPrice > sku.basePrice)) ? (
+                          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.2rem' }}>
+                            <span
+                              style={{
+                                background: 'rgba(56, 189, 248, 0.15)',
+                                color: '#38bdf8',
+                                border: '1px solid rgba(56, 189, 248, 0.35)',
+                                padding: '0.2rem 0.45rem',
+                                borderRadius: '6px',
+                                fontSize: '0.7rem',
+                                fontWeight: 700,
+                                maxWidth: '170px',
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                                whiteSpace: 'nowrap',
+                                display: 'inline-block',
+                              }}
+                              title="Precio fijo de oferta calculado e integrado por el ERP a VTEX Pricing"
+                            >
+                              ⚡ Fixed Price (ERP)
                             </span>
                             {sku.discountPct > 0 && (
                               <span className="badge badge-emerald" style={{ padding: '0.12rem 0.4rem', fontSize: '0.68rem', fontWeight: 700 }}>
@@ -916,19 +955,47 @@ export default function PricesTable() {
                     </span>
 
                     {sku.promoName ? (
-                      <span
-                        style={{
-                          background: 'rgba(236, 72, 153, 0.15)',
-                          color: '#f472b6',
-                          border: '1px solid rgba(236, 72, 153, 0.35)',
-                          padding: '0.2rem 0.55rem',
-                          borderRadius: '8px',
-                          fontSize: '0.74rem',
-                          fontWeight: 800,
-                        }}
-                      >
-                        🏷️ {sku.promoName}
-                      </span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                        <span
+                          style={{
+                            background: 'rgba(236, 72, 153, 0.15)',
+                            color: '#f472b6',
+                            border: '1px solid rgba(236, 72, 153, 0.35)',
+                            padding: '0.2rem 0.55rem',
+                            borderRadius: '8px',
+                            fontSize: '0.74rem',
+                            fontWeight: 800,
+                          }}
+                        >
+                          🏷️ {sku.promoName}
+                        </span>
+                        {sku.discountPct > 0 && (
+                          <span className="badge badge-emerald" style={{ padding: '0.2rem 0.5rem', fontSize: '0.74rem', fontWeight: 800 }}>
+                            -{sku.discountPct}% OFF
+                          </span>
+                        )}
+                      </div>
+                    ) : (sku.isFixedPrice || (sku.discountPct > 0 && sku.listPrice && sku.basePrice && sku.listPrice > sku.basePrice)) ? (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                        <span
+                          style={{
+                            background: 'rgba(56, 189, 248, 0.15)',
+                            color: '#38bdf8',
+                            border: '1px solid rgba(56, 189, 248, 0.35)',
+                            padding: '0.2rem 0.55rem',
+                            borderRadius: '8px',
+                            fontSize: '0.74rem',
+                            fontWeight: 800,
+                          }}
+                        >
+                          ⚡ Fixed Price ERP
+                        </span>
+                        {sku.discountPct > 0 && (
+                          <span className="badge badge-emerald" style={{ padding: '0.2rem 0.5rem', fontSize: '0.74rem', fontWeight: 800 }}>
+                            -{sku.discountPct}% OFF
+                          </span>
+                        )}
+                      </div>
                     ) : sku.discountPct > 0 ? (
                       <span className="badge badge-emerald" style={{ padding: '0.25rem 0.6rem', fontSize: '0.76rem', fontWeight: 800 }}>
                         -{sku.discountPct}% OFF

@@ -8,8 +8,7 @@ async function fetchCandidateSkus(search, matchingIdsFromSafety = []) {
   let countQuery = supabaseAdmin
     .from('vtex_skus')
     .select('id', { count: 'exact', head: true })
-    .not('list_price', 'is', null)
-    .not('base_price', 'is', null);
+    .or('discount_pct.gt.0,promo_name.not.is.null,and(list_price.not.is.null,base_price.not.is.null)');
 
   if (search) {
     if (!isNaN(search)) {
@@ -36,8 +35,7 @@ async function fetchCandidateSkus(search, matchingIdsFromSafety = []) {
     let pageQuery = supabaseAdmin
       .from('vtex_skus')
       .select('id, name, ref_id, list_price, base_price, cost_price, final_price, discount_pct, promo_name, promo_id, promotions_updated_at, price_updated_at, updated_at, is_active')
-      .not('list_price', 'is', null)
-      .not('base_price', 'is', null)
+      .or('discount_pct.gt.0,promo_name.not.is.null,and(list_price.not.is.null,base_price.not.is.null)')
       .order('id', { ascending: true })
       .range(from, to);
 
@@ -116,7 +114,7 @@ export async function GET(request) {
     let discountedSkusCountGlobal = 0;
 
     // Caso A: Filtrar por descuento o calcular descuento % para ordenar por descuento %
-    if (sortBy === 'discount_pct' || filterDiscount === 'with_discount' || filterDiscount === 'with_promo') {
+    if ((sortBy === 'discount_pct' && filterDiscount !== 'with_promo') || filterDiscount === 'with_discount' || filterDiscount === 'with_fixed_price') {
       const candidateSkus = search ? await fetchCandidateSkus(search, matchingIdsFromSafety) : await getGlobalCandidates();
 
       let formattedCandidates = candidateSkus.map((s) => {
@@ -136,6 +134,9 @@ export async function GET(request) {
           discountPct = parseFloat((((listPrice - basePrice) / listPrice) * 100).toFixed(1));
         }
 
+        const isFixedPrice = !promoName && listPrice !== null && basePrice !== null && listPrice > basePrice;
+        const isVtexPromo = Boolean(promoName || promoId);
+
         return {
           id: s.id,
           description: s.name || s.description || 'Producto SINSA',
@@ -148,6 +149,9 @@ export async function GET(request) {
           discountPct,
           promoName,
           promoId,
+          isFixedPrice,
+          isVtexPromo,
+          discountType: isVtexPromo ? 'vtex_promo' : (isFixedPrice ? 'fixed_price' : 'none'),
           promotionsUpdatedAt: s.promotions_updated_at || null,
           priceUpdatedAt: s.price_updated_at || s.updated_at,
           isActive: s.is_active ?? true,
@@ -161,6 +165,8 @@ export async function GET(request) {
         );
       } else if (filterDiscount === 'with_promo') {
         filteredSkus = formattedCandidates.filter((s) => s.promoName !== null || s.promoId !== null);
+      } else if (filterDiscount === 'with_fixed_price') {
+        filteredSkus = formattedCandidates.filter((s) => s.isFixedPrice);
       }
 
       // Ordenar resultados
@@ -184,7 +190,7 @@ export async function GET(request) {
         });
       }
 
-      const realCount = (filterDiscount === 'with_discount' || filterDiscount === 'with_promo')
+      const realCount = (filterDiscount === 'with_discount' || filterDiscount === 'with_promo' || filterDiscount === 'with_fixed_price')
         ? filteredSkus.length
         : (search ? filteredSkus.length : (totalCatalogCount || 82234));
       const totalPages = Math.ceil(filteredSkus.length / pageSize) || 1;
@@ -220,6 +226,10 @@ export async function GET(request) {
           (s.discount_pct !== null && parseFloat(s.discount_pct) > 0)
       ).length;
 
+      const fixedPriceSkusCountGlobal = candidatesAll.filter(
+        (s) => !s.promo_name && s.list_price !== null && s.base_price !== null && parseFloat(s.list_price) > parseFloat(s.base_price)
+      ).length;
+
       return NextResponse.json({
         success: true,
         skus: paginatedSkus,
@@ -235,6 +245,7 @@ export async function GET(request) {
           totalCatalogCount: totalCatalogCount || 82234,
           discountedSkusCount: discountedSkusCountGlobal || 0,
           promotionsSkusCount: totalPromosInDb || 0,
+          fixedPriceSkusCount: fixedPriceSkusCountGlobal || 0,
         },
       });
     }
@@ -259,7 +270,7 @@ export async function GET(request) {
       query = query.not('promo_name', 'is', null);
     }
 
-    if (['base_price', 'list_price', 'final_price', 'price_updated_at', 'id'].includes(sortBy)) {
+    if (['base_price', 'list_price', 'final_price', 'price_updated_at', 'id', 'discount_pct'].includes(sortBy)) {
       query = query.order(sortBy, { ascending: isAsc, nullsFirst: false });
     } else {
       query = query.order('id', { ascending: isAsc });
@@ -310,6 +321,9 @@ export async function GET(request) {
         discountPct = parseFloat((((listPrice - basePrice) / listPrice) * 100).toFixed(1));
       }
 
+      const isFixedPrice = !promoName && listPrice !== null && basePrice !== null && listPrice > basePrice;
+      const isVtexPromo = Boolean(promoName || promoId);
+
       return {
         id: s.id,
         description,
@@ -322,6 +336,9 @@ export async function GET(request) {
         discountPct,
         promoName,
         promoId,
+        isFixedPrice,
+        isVtexPromo,
+        discountType: isVtexPromo ? 'vtex_promo' : (isFixedPrice ? 'fixed_price' : 'none'),
         promotionsUpdatedAt: s.promotions_updated_at || null,
         priceUpdatedAt: s.price_updated_at || s.updated_at,
         isActive: s.is_active ?? true,
@@ -336,7 +353,14 @@ export async function GET(request) {
         (s.discount_pct !== null && parseFloat(s.discount_pct) > 0)
     ).length;
 
-    const realTotalCount = search ? (count || 0) : (filterDiscount === 'no_discount' ? (count || 0) : (totalCatalogCount || count || 0));
+    const fixedPriceSkusCountGlobal = candidatesAll.filter(
+      (s) => !s.promo_name && s.list_price !== null && s.base_price !== null && parseFloat(s.list_price) > parseFloat(s.base_price)
+    ).length;
+
+    const realTotalCount =
+      search || filterDiscount === 'no_discount' || filterDiscount === 'with_promo'
+        ? (count || 0)
+        : (totalCatalogCount || count || 0);
     const totalPages = Math.ceil(realTotalCount / pageSize) || 1;
 
     return NextResponse.json({
@@ -354,6 +378,7 @@ export async function GET(request) {
         totalCatalogCount: totalCatalogCount || 82234,
         discountedSkusCount: discountedSkusCountGlobal || 0,
         promotionsSkusCount: totalPromosInDb || 0,
+        fixedPriceSkusCount: fixedPriceSkusCountGlobal || 0,
       },
     });
   } catch (err) {

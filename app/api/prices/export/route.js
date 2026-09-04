@@ -73,6 +73,9 @@ export async function GET(request) {
         discountPct = parseFloat((((listPrice - basePrice) / listPrice) * 100).toFixed(1));
       }
 
+      const isFixedPrice = !promoName && listPrice !== null && basePrice !== null && listPrice > basePrice;
+      const isVtexPromo = Boolean(promoName);
+
       return {
         id: s.id,
         description,
@@ -83,7 +86,10 @@ export async function GET(request) {
         discountAmount,
         discountPct,
         promoName,
-        hasDiscount: discountAmount > 0 || promoName !== null,
+        isFixedPrice,
+        isVtexPromo,
+        discountType: isVtexPromo ? 'Promoción VTEX (Rates & Benefits)' : (isFixedPrice ? 'Fixed Price (ERP)' : 'Ninguno'),
+        hasDiscount: discountAmount > 0 || promoName !== null || isFixedPrice,
         isActive: s.is_active ?? true,
         priceUpdatedAt: s.price_updated_at || s.updated_at || null,
       };

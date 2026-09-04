@@ -103,17 +103,10 @@ export default function Sidebar({ vtexStatus, supabaseStatus, mobileOpen, onClos
     },
 
     {
-      label: 'Precios VTEX',
+      label: 'Precios & Promociones',
       href: '/precios',
       icon: Tag,
       color: '#a5b4fc',
-      permission: 'prices:manage',
-    },
-    {
-      label: 'Promociones VTEX',
-      href: '/promociones',
-      icon: Percent,
-      color: '#ec4899',
       permission: 'prices:manage',
     },
     {

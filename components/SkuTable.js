@@ -1,8 +1,9 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Search, ChevronLeft, ChevronRight, Hash, Database, RefreshCw, Warehouse, Layers, ArrowUpDown, ArrowUp, ArrowDown, CheckCircle2, XCircle, Power, ToggleRight, ToggleLeft } from 'lucide-react';
+import { Search, ChevronLeft, ChevronRight, Hash, Database, RefreshCw, Warehouse, Layers, ArrowUpDown, ArrowUp, ArrowDown, CheckCircle2, XCircle, Power, ToggleRight, ToggleLeft, FileSpreadsheet } from 'lucide-react';
 import ExportButton from './ExportButton';
+import BulkInventoryLookupModal from './BulkInventoryLookupModal';
 
 export default function SkuTable({ onRefreshNeeded, refreshTrigger }) {
   const [skus, setSkus] = useState([]);
@@ -11,6 +12,7 @@ export default function SkuTable({ onRefreshNeeded, refreshTrigger }) {
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [totalSkus, setTotalSkus] = useState(0);
+  const [isLookupModalOpen, setIsLookupModalOpen] = useState(false);
 
   // Ordenamiento
   const [sortBy, setSortBy] = useState('id');
@@ -185,6 +187,27 @@ export default function SkuTable({ onRefreshNeeded, refreshTrigger }) {
           </div>
 
           <ExportButton totalSkus={totalSkus} />
+
+          <button
+            onClick={() => setIsLookupModalOpen(true)}
+            className="btn-primary"
+            style={{
+              fontSize: '0.84rem',
+              padding: '0.48rem 0.95rem',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '0.45rem',
+              background: 'linear-gradient(135deg, #0284c7, #0ea5e9)',
+              boxShadow: '0 4px 14px rgba(14, 165, 233, 0.3)',
+              border: 'none',
+              cursor: 'pointer',
+              whiteSpace: 'nowrap',
+            }}
+            title="Consultar inventarios por tienda subiendo un archivo Excel o pegando SKUs"
+          >
+            <FileSpreadsheet size={16} />
+            <span>Consulta Masiva Excel</span>
+          </button>
 
           {/* Controles de Paginación Superior */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
@@ -631,6 +654,12 @@ export default function SkuTable({ onRefreshNeeded, refreshTrigger }) {
           </button>
         </div>
       </div>
+
+      {/* Modal de Consulta Masiva de Inventarios */}
+      <BulkInventoryLookupModal
+        isOpen={isLookupModalOpen}
+        onClose={() => setIsLookupModalOpen(false)}
+      />
 
     </div>
   );
