@@ -4,6 +4,7 @@ import { supabaseAdmin, isSupabaseConfigured } from '@/lib/supabase';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
+export const maxDuration = 60;
 
 export async function POST(request) {
   try {
@@ -88,16 +89,26 @@ export async function POST(request) {
       return row;
     });
 
-    // 4. Upsert en lotes controlados a Supabase
-    const DB_BATCH = 200;
+    // 4. Upsert en lotes controlados a Supabase con reintento
+    const DB_BATCH = 50;
     for (let i = 0; i < rowsToUpsert.length; i += DB_BATCH) {
       const batch = rowsToUpsert.slice(i, i + DB_BATCH);
-      const { error: upsertError } = await supabaseAdmin
-        .from('vtex_skus')
-        .upsert(batch, { onConflict: 'id' });
+      let success = false;
+      let attempts = 0;
+      while (!success && attempts < 3) {
+        attempts++;
+        const { error: upsertError } = await supabaseAdmin
+          .from('vtex_skus')
+          .upsert(batch, { onConflict: 'id' });
 
-      if (upsertError) {
-        throw new Error(`Error insertando en Supabase: ${upsertError.message}`);
+        if (!upsertError) {
+          success = true;
+        } else {
+          if (attempts >= 3) {
+            throw new Error(`Error insertando en Supabase: ${upsertError.message}`);
+          }
+          await new Promise((r) => setTimeout(r, 500 * attempts));
+        }
       }
     }
 

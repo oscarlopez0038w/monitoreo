@@ -38,6 +38,7 @@ export default function SyncPanel({ onSyncCompleted, vtexReady, supabaseReady, i
     let page = 1;
     let accumulatedSkus = 0;
     let finished = false;
+    let batchCounter = 0;
 
     addLog('🚀 Iniciando extracción masiva de SKUs desde VTEX Catalog API...', 'info');
     addLog('🔗 Endpoint: /api/catalog_system/pvt/sku/stockkeepingunitids', 'info');
@@ -54,39 +55,70 @@ export default function SyncPanel({ onSyncCompleted, vtexReady, supabaseReady, i
       setStatusMessage(`Procesando Página ${page} en VTEX...`);
       addLog(`📄 Solicitando página ${page} a VTEX...`, 'info');
 
-      try {
-        const res = await fetch('/api/skus/sync', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ page, pageSize: 1000 }),
-        });
+      let success = false;
+      let attempts = 0;
+      const MAX_RETRIES = 3;
+      let data = null;
 
-        const data = await res.json();
+      while (!success && attempts < MAX_RETRIES) {
+        if (isPausedRef.current) break;
+        try {
+          const res = await fetch('/api/skus/sync', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ page, pageSize: 1000 }),
+          });
 
-        if (!data.success) {
-          addLog(`❌ Error en Página ${page}: ${data.error}`, 'error');
-          setStatusMessage(`Fallo en página ${page}: ${data.error}`);
-          setSyncingCatalog(false);
-          return;
+          data = await res.json();
+
+          if (!data.success) {
+            attempts++;
+            if (attempts < MAX_RETRIES) {
+              addLog(`⚠️ Advertencia en Página ${page}: ${data.error}. Reintentando en 3s (${attempts}/${MAX_RETRIES})...`, 'warning');
+              await new Promise((r) => setTimeout(r, 3000));
+            } else {
+              addLog(`❌ Error persistente en Página ${page}: ${data.error}`, 'error');
+              setStatusMessage(`Fallo en página ${page}: ${data.error}`);
+              setSyncingCatalog(false);
+              return;
+            }
+          } else {
+            success = true;
+          }
+        } catch (err) {
+          attempts++;
+          if (attempts < MAX_RETRIES) {
+            addLog(`⚠️ Error de red o timeout en Página ${page} (${err.message}). Reintentando en 3s (${attempts}/${MAX_RETRIES})...`, 'warning');
+            await new Promise((r) => setTimeout(r, 3000));
+          } else {
+            addLog(`💥 Error crítico de conexión en Página ${page}: ${err.message}`, 'error');
+            setStatusMessage('Error de red o timeout.');
+            setSyncingCatalog(false);
+            return;
+          }
+        }
+      }
+
+      if (!success) return;
+
+      if (data.isFinished || data.fetchedSkus === 0) {
+        finished = true;
+        addLog(`✅ Extracción de SKUs finalizada. Total: ${(accumulatedSkus + data.fetchedSkus).toLocaleString()} SKUs.`, 'success');
+        setStatusMessage('¡Extracción de Catálogo completada!');
+      } else {
+        accumulatedSkus += data.fetchedSkus;
+        setTotalFetched(accumulatedSkus);
+        addLog(`✨ Página ${page}: ${data.fetchedSkus} SKUs insertados en Supabase.`, 'success');
+        page++;
+        batchCounter++;
+
+        // Actualizar estadísticas cada 5 páginas (~5,000 SKUs) para no saturar Supabase con COUNT(*)
+        if (batchCounter % 5 === 0 && onSyncCompleted) {
+          onSyncCompleted();
         }
 
-        if (data.isFinished || data.fetchedSkus === 0) {
-          finished = true;
-          addLog(`✅ Extracción de SKUs finalizada. Total: ${(accumulatedSkus + data.fetchedSkus).toLocaleString()} SKUs.`, 'success');
-          setStatusMessage('¡Extracción de Catálogo completada!');
-        } else {
-          accumulatedSkus += data.fetchedSkus;
-          setTotalFetched(accumulatedSkus);
-          addLog(`✨ Página ${page}: ${data.fetchedSkus} SKUs insertados en Supabase.`, 'success');
-          page++;
-
-          if (onSyncCompleted) onSyncCompleted();
-        }
-      } catch (err) {
-        addLog(`💥 Error de conexión: ${err.message}`, 'error');
-        setStatusMessage('Error de red o timeout.');
-        setSyncingCatalog(false);
-        return;
+        // Breve pausa preventiva (150ms) entre páginas
+        await new Promise((resolve) => setTimeout(resolve, 150));
       }
     }
 
@@ -108,6 +140,7 @@ export default function SyncPanel({ onSyncCompleted, vtexReady, supabaseReady, i
 
     let finished = false;
     let totalUpdated = 0;
+    let batchCounter = 0;
 
     while (!finished) {
       if (isPausedRef.current) {
@@ -116,38 +149,69 @@ export default function SyncPanel({ onSyncCompleted, vtexReady, supabaseReady, i
         continue;
       }
 
-      setStatusMessage(`Consultando inventarios en lotes de 500 bodegas...`);
+      setStatusMessage(`Consultando inventarios en lotes de 250 SKUs...`);
 
-      try {
-        const res = await fetch('/api/skus/inventory', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ limit: 500, syncStartTime }),
-        });
+      let success = false;
+      let attempts = 0;
+      const MAX_RETRIES = 4;
+      let data = null;
 
-        const data = await res.json();
+      while (!success && attempts < MAX_RETRIES) {
+        if (isPausedRef.current) break;
+        try {
+          const res = await fetch('/api/skus/inventory', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ limit: 250, syncStartTime }),
+          });
 
-        if (!data.success) {
-          addLog(`❌ Error en inventario: ${data.error}`, 'error');
-          setSyncingInventory(false);
-          return;
+          data = await res.json();
+
+          if (!data.success) {
+            attempts++;
+            if (attempts < MAX_RETRIES) {
+              addLog(`⚠️ Advertencia en lote: ${data.error}. Reintentando en 3s (${attempts}/${MAX_RETRIES})...`, 'warning');
+              await new Promise((r) => setTimeout(r, 3000));
+            } else {
+              addLog(`❌ Error persistente tras ${MAX_RETRIES} intentos: ${data.error}`, 'error');
+              setSyncingInventory(false);
+              return;
+            }
+          } else {
+            success = true;
+          }
+        } catch (err) {
+          attempts++;
+          if (attempts < MAX_RETRIES) {
+            addLog(`⚠️ Error de red o timeout (${err.message}). Reintentando en 3s (${attempts}/${MAX_RETRIES})...`, 'warning');
+            await new Promise((r) => setTimeout(r, 3000));
+          } else {
+            addLog(`💥 Fallo de conexión tras ${MAX_RETRIES} intentos: ${err.message}`, 'error');
+            setSyncingInventory(false);
+            return;
+          }
+        }
+      }
+
+      if (!success) return;
+
+      if (data.processedCount === 0) {
+        finished = true;
+        addLog(`🎉 ¡Inventarios de bodegas sincronizados al 100%! Total de SKUs procesados: ${totalUpdated.toLocaleString()}.`, 'success');
+        setStatusMessage('¡Inventarios completados al 100%!');
+      } else {
+        totalUpdated += data.processedCount;
+        setInventoryProcessed(totalUpdated);
+        batchCounter++;
+        addLog(`📦 Lote actualizado: ${data.processedCount} SKUs procesados con stock (Avance: ${totalUpdated.toLocaleString()}).`, 'success');
+
+        // Throttle: refrescar estadísticas en pantalla cada 10 lotes (~2,500 SKUs) para no saturar Supabase con COUNT(*)
+        if (batchCounter % 10 === 0 && onSyncCompleted) {
+          onSyncCompleted();
         }
 
-        if (data.processedCount === 0) {
-          finished = true;
-          addLog(`🎉 ¡Inventarios de bodegas sincronizados al 100%! Total de SKUs procesados: ${totalUpdated.toLocaleString()}.`, 'success');
-          setStatusMessage('¡Inventarios completados al 100%!');
-        } else {
-          totalUpdated += data.processedCount;
-          setInventoryProcessed(totalUpdated);
-          addLog(`📦 Lote actualizado: ${data.processedCount} SKUs procesados con stock (Avance: ${totalUpdated.toLocaleString()}).`, 'success');
-
-          if (onSyncCompleted) onSyncCompleted();
-        }
-      } catch (err) {
-        addLog(`💥 Error consultando inventarios: ${err.message}`, 'error');
-        setSyncingInventory(false);
-        return;
+        // Breve pausa preventiva (200ms) entre lotes para dar respiro a conexiones de base de datos
+        await new Promise((resolve) => setTimeout(resolve, 200));
       }
     }
 

@@ -78,6 +78,7 @@ CREATE INDEX IF NOT EXISTS idx_vtex_skus_safety_stock ON public.vtex_skus(safety
 CREATE INDEX IF NOT EXISTS idx_vtex_skus_brand ON public.vtex_skus(brand);
 CREATE INDEX IF NOT EXISTS idx_vtex_skus_category ON public.vtex_skus(category);
 CREATE INDEX IF NOT EXISTS idx_vtex_skus_inventory_updated ON public.vtex_skus(inventory_updated_at);
+CREATE INDEX IF NOT EXISTS idx_vtex_skus_inventory_sync ON public.vtex_skus(inventory_updated_at ASC NULLS FIRST);
 CREATE INDEX IF NOT EXISTS idx_vtex_skus_catalog_updated ON public.vtex_skus(catalog_updated_at);
 CREATE INDEX IF NOT EXISTS idx_vtex_skus_pricing_active ON public.vtex_skus(id) WHERE list_price IS NOT NULL AND base_price IS NOT NULL;
 ALTER TABLE public.vtex_skus ENABLE ROW LEVEL SECURITY;

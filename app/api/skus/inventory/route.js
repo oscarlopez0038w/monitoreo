@@ -4,6 +4,65 @@ import { supabaseAdmin, isSupabaseConfigured } from '@/lib/supabase';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
+export const maxDuration = 60;
+
+/**
+ * Función auxiliar para realizar upserts en Supabase de forma resiliente ante timeouts.
+ * Si un lote de 50 filas falla por statement timeout, se reintenta y subdivide en micro-lotes de 25.
+ */
+async function safeUpsertRows(rows, baseBatchSize = 50) {
+  for (let i = 0; i < rows.length; i += baseBatchSize) {
+    const batch = rows.slice(i, i + baseBatchSize);
+    let success = false;
+    let attempts = 0;
+    const maxAttempts = 3;
+
+    while (!success && attempts < maxAttempts) {
+      attempts++;
+      const { error: upsertError } = await supabaseAdmin
+        .from('vtex_skus')
+        .upsert(batch, { onConflict: 'id' });
+
+      if (!upsertError) {
+        success = true;
+      } else {
+        console.warn(`[safeUpsertRows] Intento ${attempts}/${maxAttempts} falló para lote de ${batch.length} filas: ${upsertError.message}`);
+
+        // Si el lote falló y es mayor a 25 filas, subdividirlo en micro-lotes inmediatamente
+        if (batch.length > 25) {
+          console.log(`[safeUpsertRows] Subdividiendo lote de ${batch.length} en micro-lotes de 25 filas...`);
+          const microBatchSize = 25;
+          for (let m = 0; m < batch.length; m += microBatchSize) {
+            const microBatch = batch.slice(m, m + microBatchSize);
+            let microSuccess = false;
+            let microAttempts = 0;
+            while (!microSuccess && microAttempts < 3) {
+              microAttempts++;
+              const { error: microError } = await supabaseAdmin
+                .from('vtex_skus')
+                .upsert(microBatch, { onConflict: 'id' });
+              if (!microError) {
+                microSuccess = true;
+              } else {
+                if (microAttempts >= 3) {
+                  throw new Error(`Error guardando inventario en Supabase (micro-lote): ${microError.message}`);
+                }
+                await new Promise((r) => setTimeout(r, 600 * microAttempts));
+              }
+            }
+          }
+          success = true;
+          break;
+        }
+
+        if (attempts >= maxAttempts) {
+          throw new Error(`Error guardando inventario en Supabase: ${upsertError.message}`);
+        }
+        await new Promise((r) => setTimeout(r, attempts * 500));
+      }
+    }
+  }
+}
 
 export async function POST(request) {
   try {
@@ -19,7 +78,7 @@ export async function POST(request) {
 
     // Si no se envían skuIds específicos, obtenemos los SKUs pendientes de este ciclo de sincronización
     if (targetSkuIds.length === 0) {
-      const limit = parseInt(body.limit || '500', 10);
+      const limit = Math.min(parseInt(body.limit || '250', 10), 300);
       const syncStartTime = body.syncStartTime || null;
 
       let query = supabaseAdmin
@@ -63,16 +122,40 @@ export async function POST(request) {
             fetchSkuInventory(skuId),
             fetchSkuDetails(skuId).catch(() => null),
           ]);
-          if (!inv) return null;
+          const baseInv = inv || {
+            skuId,
+            wh1Total: 0,
+            wh1Reserved: 0,
+            stockWh1: 0,
+            wh2Total: 0,
+            wh2Reserved: 0,
+            stockWh2: 0,
+            totalQuantity: 0,
+            totalReserved: 0,
+            totalStock: 0,
+            balance: [],
+          };
           return {
-            ...inv,
+            ...baseInv,
             isActive: details ? details.isActive : undefined,
           };
         }
 
         // Sincronización masiva de inventario: Solo 1 llamada a Logistics API
         const inv = await fetchSkuInventory(skuId);
-        return inv || null;
+        return inv || {
+          skuId,
+          wh1Total: 0,
+          wh1Reserved: 0,
+          stockWh1: 0,
+          wh2Total: 0,
+          wh2Reserved: 0,
+          stockWh2: 0,
+          totalQuantity: 0,
+          totalReserved: 0,
+          totalStock: 0,
+          balance: [],
+        };
       });
 
       const chunkResults = await Promise.all(promises);
@@ -110,17 +193,7 @@ export async function POST(request) {
     });
 
     if (rowsToUpdate.length > 0) {
-      const DB_BATCH = 200;
-      for (let i = 0; i < rowsToUpdate.length; i += DB_BATCH) {
-        const batch = rowsToUpdate.slice(i, i + DB_BATCH);
-        const { error: upsertError } = await supabaseAdmin
-          .from('vtex_skus')
-          .upsert(batch, { onConflict: 'id' });
-
-        if (upsertError) {
-          throw new Error(`Error guardando inventario en Supabase: ${upsertError.message}`);
-        }
-      }
+      await safeUpsertRows(rowsToUpdate, 50);
     }
 
     return NextResponse.json({
@@ -129,6 +202,7 @@ export async function POST(request) {
       updatedSkus: rowsToUpdate.map((r) => r.id),
     });
   } catch (error) {
+    console.error('Error en POST /api/skus/inventory:', error);
     return NextResponse.json(
       { success: false, error: error.message },
       { status: 500 }
