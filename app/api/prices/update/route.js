@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getVtexConfig, isVtexConfigured } from '@/lib/vtex';
+import { getVtexConfig, isVtexConfigured, fetchSkuPrice } from '@/lib/vtex';
 import { supabaseAdmin, isSupabaseConfigured } from '@/lib/supabase';
 
 export const dynamic = 'force-dynamic';
@@ -113,29 +113,71 @@ export async function POST(request) {
 
     // 2. Actualizar precios en Supabase (vtex_skus)
     let dbUpdated = false;
+    let finalUpdatedPrice = null;
+
     if (isSupabaseConfigured()) {
       try {
         const skuIdNum = parseInt(cleanSkuId, 10);
         const fValNum = hasFixedPrice && fixedPriceValue !== null && fixedPriceValue !== undefined && fixedPriceValue !== '' ? Number(fixedPriceValue) : null;
         const fListNum = hasFixedPrice && fixedPriceListPrice !== null && fixedPriceListPrice !== undefined && fixedPriceListPrice !== '' ? Number(fixedPriceListPrice) : null;
         
-        const effectiveBasePrice = fValNum !== null && !isNaN(fValNum) ? fValNum : baseP;
-        const effectiveListPrice = fListNum !== null && !isNaN(fListNum) ? fListNum : (listP || (fValNum !== null ? baseP : null));
+        const fallbackBasePrice = fValNum !== null && !isNaN(fValNum) ? fValNum : baseP;
+        const fallbackListPrice = fListNum !== null && !isNaN(fListNum) ? fListNum : (listP || (fValNum !== null ? baseP : null));
+        const fallbackFinalPrice = fallbackBasePrice;
+        let fallbackDiscountPct = 0;
+        if (fallbackListPrice && fallbackFinalPrice && fallbackListPrice > fallbackFinalPrice) {
+          fallbackDiscountPct = parseFloat((((fallbackListPrice - fallbackFinalPrice) / fallbackListPrice) * 100).toFixed(1));
+        }
+
+        // Consultar VTEX para obtener el estado completo y verificado
+        let priceData = null;
+        try {
+          priceData = await fetchSkuPrice(cleanSkuId);
+        } catch (fetchErr) {
+          console.warn('No se pudo simular inmediatamente tras actualizar precio:', fetchErr.message);
+        }
+
+        const nowIso = new Date().toISOString();
+        const upsertRow = {
+          id: skuIdNum,
+          cost_price: priceData?.costPrice !== undefined && priceData?.costPrice !== null ? priceData.costPrice : costP,
+          base_price: priceData?.basePrice !== undefined && priceData?.basePrice !== null ? priceData.basePrice : fallbackBasePrice,
+          list_price: priceData?.listPrice !== undefined && priceData?.listPrice !== null ? priceData.listPrice : fallbackListPrice,
+          final_price: priceData?.finalPrice !== undefined && priceData?.finalPrice !== null ? priceData.finalPrice : fallbackFinalPrice,
+          price_updated_at: nowIso,
+          updated_at: nowIso,
+        };
+
+        if (priceData?.simPromoName) {
+          upsertRow.promo_name = priceData.simPromoName;
+          upsertRow.discount_pct = priceData.simDiscountPct || 0;
+          upsertRow.promotions_updated_at = nowIso;
+        } else {
+          upsertRow.promo_name = null;
+          upsertRow.promo_id = null;
+          const refFinal = upsertRow.final_price;
+          const refList = upsertRow.list_price;
+          upsertRow.discount_pct = refList && refFinal && refList > refFinal
+            ? parseFloat((((refList - refFinal) / refList) * 100).toFixed(1))
+            : fallbackDiscountPct;
+        }
 
         await supabaseAdmin
           .from('vtex_skus')
-          .upsert(
-            {
-              id: skuIdNum,
-              cost_price: costP,
-              base_price: effectiveBasePrice,
-              list_price: effectiveListPrice,
-              price_updated_at: new Date().toISOString(),
-              updated_at: new Date().toISOString(),
-            },
-            { onConflict: 'id' }
-          );
+          .upsert(upsertRow, { onConflict: 'id' });
+
         dbUpdated = true;
+        finalUpdatedPrice = {
+          costPrice: upsertRow.cost_price,
+          basePrice: upsertRow.base_price,
+          listPrice: upsertRow.list_price,
+          finalPrice: upsertRow.final_price,
+          discountPct: upsertRow.discount_pct,
+          promoName: upsertRow.promo_name,
+          promoId: upsertRow.promo_id,
+          isFixedPrice: Boolean(hasFixedPrice && fValNum !== null),
+          priceUpdatedAt: nowIso,
+        };
       } catch (dbErr) {
         console.error('Error actualizando Supabase:', dbErr);
       }
@@ -148,6 +190,7 @@ export async function POST(request) {
       basePrice: baseP,
       listPrice: listP,
       fixedPrices,
+      price: finalUpdatedPrice,
       vtexSuccess,
       vtexError,
       dbUpdated,

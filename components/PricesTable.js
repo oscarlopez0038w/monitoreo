@@ -151,28 +151,46 @@ export default function PricesTable() {
 
       const data = await res.json();
       if (data.success) {
-        const baseP = parseFloat(priceForm.basePrice || 0);
+        const fresh = data.price;
+        const baseP = fresh?.basePrice !== undefined && fresh?.basePrice !== null ? parseFloat(fresh.basePrice) : parseFloat(priceForm.basePrice || 0);
         const fValP = priceForm.hasFixedPrice && priceForm.fixedPriceValue ? parseFloat(priceForm.fixedPriceValue) : null;
         const fListP = priceForm.hasFixedPrice && priceForm.fixedPriceListPrice ? parseFloat(priceForm.fixedPriceListPrice) : null;
 
-        const effectiveSellingPrice = fValP !== null && !isNaN(fValP) ? fValP : baseP;
-        const effectiveListPrice = fListP !== null && !isNaN(fListP) ? fListP : (priceForm.listPrice ? parseFloat(priceForm.listPrice) : null);
+        const effectiveSellingPrice = fresh?.finalPrice !== undefined && fresh?.finalPrice !== null
+          ? parseFloat(fresh.finalPrice)
+          : (fValP !== null && !isNaN(fValP) ? fValP : baseP);
 
-        let discPct = 0;
-        if (effectiveListPrice && effectiveSellingPrice && effectiveListPrice > effectiveSellingPrice) {
+        const effectiveListPrice = fresh?.listPrice !== undefined && fresh?.listPrice !== null
+          ? parseFloat(fresh.listPrice)
+          : (fListP !== null && !isNaN(fListP) ? fListP : (priceForm.listPrice ? parseFloat(priceForm.listPrice) : null));
+
+        const effectiveCostPrice = fresh?.costPrice !== undefined && fresh?.costPrice !== null
+          ? parseFloat(fresh.costPrice)
+          : parseFloat(priceForm.costPrice || 0);
+
+        let discPct = fresh?.discountPct !== undefined && fresh?.discountPct !== null ? parseFloat(fresh.discountPct) : 0;
+        if (!discPct && effectiveListPrice && effectiveSellingPrice && effectiveListPrice > effectiveSellingPrice) {
           discPct = parseFloat((((effectiveListPrice - effectiveSellingPrice) / effectiveListPrice) * 100).toFixed(1));
         }
+
+        const isFixedP = fresh?.isFixedPrice !== undefined
+          ? fresh.isFixedPrice
+          : Boolean(priceForm.hasFixedPrice && fValP !== null && !isNaN(fValP));
 
         setSkus((prev) =>
           prev.map((item) => {
             if (item.id === editingSku.id) {
               return {
                 ...item,
-                costPrice: parseFloat(priceForm.costPrice || 0),
-                basePrice: effectiveSellingPrice,
+                costPrice: effectiveCostPrice,
+                basePrice: baseP,
                 listPrice: effectiveListPrice,
+                finalPrice: effectiveSellingPrice,
                 discountPct: discPct,
-                priceUpdatedAt: new Date().toISOString(),
+                promoName: fresh?.promoName || null,
+                promoId: fresh?.promoId || null,
+                isFixedPrice: isFixedP,
+                priceUpdatedAt: fresh?.priceUpdatedAt || new Date().toISOString(),
               };
             }
             return item;
@@ -347,6 +365,8 @@ export default function PricesTable() {
           discPct = parseFloat((((listP - baseP) / listP) * 100).toFixed(1));
         }
 
+        const isFixedP = !fresh.simPromoName && listP !== null && baseP !== null && listP > baseP;
+
         setSkus((prevSkus) =>
           prevSkus.map((item) => {
             if (item.id === skuId) {
@@ -357,7 +377,9 @@ export default function PricesTable() {
                 finalPrice: finalP,
                 costPrice: fresh.costPrice !== null && fresh.costPrice !== undefined ? parseFloat(fresh.costPrice) : null,
                 discountPct: fresh.simDiscountPct > 0 ? fresh.simDiscountPct : discPct,
-                promoName: fresh.simPromoName || item.promoName,
+                promoName: fresh.simPromoName || null,
+                promoId: null,
+                isFixedPrice: isFixedP,
                 priceUpdatedAt: new Date().toISOString(),
               };
             }
@@ -366,6 +388,8 @@ export default function PricesTable() {
         );
 
         fetchPrices(false);
+      } else {
+        setBanner({ type: 'error', text: `⚠️ Error al refrescar SKU ${skuId}: ${data.error || 'Respuesta inválida'}` });
       }
     } catch (err) {
       console.error(`Error actualizando precio de SKU ${skuId}:`, err);

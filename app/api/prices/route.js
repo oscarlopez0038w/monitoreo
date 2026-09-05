@@ -126,12 +126,12 @@ export async function GET(request) {
         const promoId = s.promo_id || null;
 
         let discountPct = 0;
-        if (s.discount_pct !== null && s.discount_pct !== undefined && parseFloat(s.discount_pct) > 0) {
-          discountPct = parseFloat(parseFloat(s.discount_pct).toFixed(1));
-        } else if (listPrice && finalPrice && listPrice > finalPrice) {
+        if (listPrice && finalPrice && listPrice > finalPrice) {
           discountPct = parseFloat((((listPrice - finalPrice) / listPrice) * 100).toFixed(1));
         } else if (listPrice && basePrice && listPrice > basePrice) {
           discountPct = parseFloat((((listPrice - basePrice) / listPrice) * 100).toFixed(1));
+        } else if (s.discount_pct !== null && s.discount_pct !== undefined && parseFloat(s.discount_pct) > 0) {
+          discountPct = parseFloat(parseFloat(s.discount_pct).toFixed(1));
         }
 
         const isFixedPrice = !promoName && listPrice !== null && basePrice !== null && listPrice > basePrice;
@@ -313,12 +313,12 @@ export async function GET(request) {
       const promoId = s.promo_id || null;
 
       let discountPct = 0;
-      if (s.discount_pct !== null && s.discount_pct !== undefined && parseFloat(s.discount_pct) > 0) {
-        discountPct = parseFloat(parseFloat(s.discount_pct).toFixed(1));
-      } else if (listPrice && finalPrice && listPrice > finalPrice) {
+      if (listPrice && finalPrice && listPrice > finalPrice) {
         discountPct = parseFloat((((listPrice - finalPrice) / listPrice) * 100).toFixed(1));
       } else if (listPrice && basePrice && listPrice > basePrice) {
         discountPct = parseFloat((((listPrice - basePrice) / listPrice) * 100).toFixed(1));
+      } else if (s.discount_pct !== null && s.discount_pct !== undefined && parseFloat(s.discount_pct) > 0) {
+        discountPct = parseFloat(parseFloat(s.discount_pct).toFixed(1));
       }
 
       const isFixedPrice = !promoName && listPrice !== null && basePrice !== null && listPrice > basePrice;

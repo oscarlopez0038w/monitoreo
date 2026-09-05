@@ -48,13 +48,17 @@ export async function POST(request) {
         payload.promo_name = priceData.simPromoName;
         payload.discount_pct = priceData.simDiscountPct || 0;
         payload.promotions_updated_at = nowIso;
-      } else if (priceData.finalPrice && priceData.finalPrice >= priceData.basePrice) {
+      } else {
         // Si no hay promo de checkout, limpiar datos de promo obsoletos
         payload.promo_name = null;
         payload.promo_id = null;
-        payload.discount_pct = priceData.listPrice && priceData.basePrice && priceData.listPrice > priceData.basePrice
-          ? parseFloat((((priceData.listPrice - priceData.basePrice) / priceData.listPrice) * 100).toFixed(1))
-          : 0;
+        const refFinal = payload.final_price;
+        const refList = payload.list_price;
+        payload.discount_pct = refList && refFinal && refList > refFinal
+          ? parseFloat((((refList - refFinal) / refList) * 100).toFixed(1))
+          : (refList && priceData.basePrice && refList > priceData.basePrice
+            ? parseFloat((((refList - priceData.basePrice) / refList) * 100).toFixed(1))
+            : 0);
       }
 
       const { error: upsertErr } = await supabaseAdmin
