@@ -54,9 +54,19 @@ export async function POST(request) {
         list_price: listPrice,
         base_price: basePrice,
         cost_price: costPrice,
+        final_price: priceData?.finalPrice !== undefined && priceData?.finalPrice !== null
+          ? priceData.finalPrice
+          : basePrice,
         price_updated_at: nowIso,
         updated_at: nowIso,
       };
+
+      // Si la simulación detectó una promo activa, guardar los datos
+      if (priceData?.simPromoName) {
+        payload.promo_name = priceData.simPromoName;
+        payload.discount_pct = priceData.simDiscountPct || 0;
+        payload.promotions_updated_at = nowIso;
+      }
 
       if (isSupabaseConfigured()) {
         await supabaseAdmin.from('vtex_skus').upsert([payload], { onConflict: 'id' });

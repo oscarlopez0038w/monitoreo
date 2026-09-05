@@ -62,6 +62,7 @@ async function runBackgroundWorker(startOffset = 0) {
               list_price: priceData.listPrice,
               base_price: priceData.basePrice,
               cost_price: priceData.costPrice,
+              final_price: priceData.basePrice,
               price_updated_at: nowIso,
               updated_at: nowIso,
             });

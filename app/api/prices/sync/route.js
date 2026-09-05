@@ -36,9 +36,26 @@ export async function POST(request) {
         list_price: priceData.listPrice,
         base_price: priceData.basePrice,
         cost_price: priceData.costPrice,
+        final_price: priceData.finalPrice !== undefined && priceData.finalPrice !== null
+          ? priceData.finalPrice
+          : priceData.basePrice,
         price_updated_at: nowIso,
         updated_at: nowIso,
       };
+
+      // Si la simulación de checkout detectó una promo activa, guardar los datos de promo
+      if (priceData.simPromoName) {
+        payload.promo_name = priceData.simPromoName;
+        payload.discount_pct = priceData.simDiscountPct || 0;
+        payload.promotions_updated_at = nowIso;
+      } else if (priceData.finalPrice && priceData.finalPrice >= priceData.basePrice) {
+        // Si no hay promo de checkout, limpiar datos de promo obsoletos
+        payload.promo_name = null;
+        payload.promo_id = null;
+        payload.discount_pct = priceData.listPrice && priceData.basePrice && priceData.listPrice > priceData.basePrice
+          ? parseFloat((((priceData.listPrice - priceData.basePrice) / priceData.listPrice) * 100).toFixed(1))
+          : 0;
+      }
 
       const { error: upsertErr } = await supabaseAdmin
         .from('vtex_skus')
@@ -103,6 +120,7 @@ export async function POST(request) {
             list_price: priceData.listPrice,
             base_price: priceData.basePrice,
             cost_price: priceData.costPrice,
+            final_price: priceData.basePrice,
             price_updated_at: nowIso,
             updated_at: nowIso,
           });

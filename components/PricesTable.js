@@ -337,8 +337,13 @@ export default function PricesTable() {
         const fresh = data.price;
         const listP = fresh.listPrice !== null && fresh.listPrice !== undefined ? parseFloat(fresh.listPrice) : null;
         const baseP = fresh.basePrice !== null && fresh.basePrice !== undefined ? parseFloat(fresh.basePrice) : null;
+        const finalP = fresh.finalPrice !== null && fresh.finalPrice !== undefined ? parseFloat(fresh.finalPrice) : baseP;
+
+        // Calcular descuento basado en el precio final real vs listPrice
         let discPct = 0;
-        if (listP && baseP && listP > baseP) {
+        if (listP && finalP && listP > finalP) {
+          discPct = parseFloat((((listP - finalP) / listP) * 100).toFixed(1));
+        } else if (listP && baseP && listP > baseP) {
           discPct = parseFloat((((listP - baseP) / listP) * 100).toFixed(1));
         }
 
@@ -349,8 +354,10 @@ export default function PricesTable() {
                 ...item,
                 listPrice: listP,
                 basePrice: baseP,
+                finalPrice: finalP,
                 costPrice: fresh.costPrice !== null && fresh.costPrice !== undefined ? parseFloat(fresh.costPrice) : null,
-                discountPct: discPct,
+                discountPct: fresh.simDiscountPct > 0 ? fresh.simDiscountPct : discPct,
+                promoName: fresh.simPromoName || item.promoName,
                 priceUpdatedAt: new Date().toISOString(),
               };
             }
