@@ -165,6 +165,7 @@ export default function PriceComparator() {
       'Descripción / Producto': r.description,
       'Precio Xstore Facturación (C$)': r.xstorePrice,
       'Precio Final Web (C$)': r.webFinalPrice !== null ? r.webFinalPrice : 'No Encontrado',
+      'Promoción Web Activa': r.promoName ? `${r.promoName}${r.discountPct ? ` (-${r.discountPct}%)` : ''}` : 'Sin promo',
       'Diferencia (C$)': r.diffAmount !== null ? r.diffAmount : 'N/A',
       'Diferencia (%)': r.diffPercent !== null ? `${r.diffPercent.toFixed(2)}%` : 'N/A',
       'Estado Comparación': r.statusText,
@@ -508,6 +509,20 @@ export default function PriceComparator() {
                           {r.webFinalPrice !== null
                             ? `C$ ${r.webFinalPrice.toLocaleString('es-NI', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
                             : 'No Encontrado'}
+                          {r.promoName && (
+                            <span
+                              style={{
+                                display: 'block',
+                                fontSize: '0.68rem',
+                                color: '#f472b6',
+                                fontWeight: 600,
+                                marginTop: '0.2rem',
+                              }}
+                              title={`Promoción activa en Web: ${r.promoName}`}
+                            >
+                              🏷️ {r.promoName}
+                            </span>
+                          )}
                         </td>
 
                         {/* Difference Amount & % */}

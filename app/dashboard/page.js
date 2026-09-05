@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import AppLayout from '@/components/AppLayout';
+import HistoricalTrendChart from '@/components/HistoricalTrendChart';
 import { getNicaraguaNow } from '@/lib/dateUtils';
 import * as XLSX from 'xlsx';
 import {
@@ -53,8 +54,19 @@ function buildSvgPath(points) {
 // Componente Ejecutivo de Gráfica de Tendencia Diaria con Puntos Interactivos (Multi-Período A vs B vs C)
 function DailyInteractiveTrendChart({ dailyBreakdown = [], formatCurrency, bcnRate = 36.6243, periodLabel = '', periods = null }) {
   const [hoveredIdx, setHoveredIdx] = useState(null);
+  const [includeSocialSelling, setIncludeSocialSelling] = useState(false);
 
   if (!dailyBreakdown || dailyBreakdown.length === 0) return null;
+
+  // Helpers para obtener valores según el checkbox de Social Selling vs Solo Web Orgánico
+  const getValA = (d) => (includeSocialSelling ? (d?.salesNio || 0) : (d?.webSalesNio ?? d?.salesNio ?? 0));
+  const getValUsdA = (d) => (includeSocialSelling ? (d?.salesUsd || 0) : (d?.webSalesUsd ?? d?.salesUsd ?? 0));
+
+  const getValB = (d) => (includeSocialSelling ? (d?.salesNioB || 0) : (d?.webSalesNioB ?? d?.salesNioB ?? 0));
+  const getValUsdB = (d) => (includeSocialSelling ? (d?.salesUsdB || 0) : (d?.webSalesUsdB ?? d?.salesUsdB ?? 0));
+
+  const getValC = (d) => (includeSocialSelling ? (d?.salesNioC || 0) : (d?.webSalesNioC ?? d?.salesNioC ?? 0));
+  const getValUsdC = (d) => (includeSocialSelling ? (d?.salesUsdC || 0) : (d?.webSalesUsdC ?? d?.salesUsdC ?? 0));
 
   // Dimensiones del canvas SVG (Modo Compacto Ejecutivo)
   const svgWidth = 1000;
@@ -68,26 +80,26 @@ function DailyInteractiveTrendChart({ dailyBreakdown = [], formatCurrency, bcnRa
   const chartH = svgHeight - paddingTop - paddingBottom;
 
   const maxVal = Math.max(
-    ...dailyBreakdown.map((d) => Math.max(d.salesNio || 0, d.salesNioB || 0, d.salesNioC || 0, d.refundsNio || 0)),
+    ...dailyBreakdown.map((d) => Math.max(getValA(d), getValB(d), getValC(d), d.refundsNio || 0)),
     1000
   );
 
   // Calcular puntos de coordenadas (X, Y) para Ventas (Período A, B y C) y Devoluciones
   const pointsSales = dailyBreakdown.map((d, i) => {
     const x = paddingLeft + (i / (dailyBreakdown.length - 1 || 1)) * chartW;
-    const y = paddingTop + chartH - ((d.salesNio || 0) / maxVal) * chartH;
+    const y = paddingTop + chartH - (getValA(d) / maxVal) * chartH;
     return { x, y, day: d, index: i };
   });
 
   const pointsSalesB = dailyBreakdown.map((d, i) => {
     const x = paddingLeft + (i / (dailyBreakdown.length - 1 || 1)) * chartW;
-    const y = paddingTop + chartH - ((d.salesNioB || 0) / maxVal) * chartH;
+    const y = paddingTop + chartH - (getValB(d) / maxVal) * chartH;
     return { x, y, day: d, index: i };
   });
 
   const pointsSalesC = dailyBreakdown.map((d, i) => {
     const x = paddingLeft + (i / (dailyBreakdown.length - 1 || 1)) * chartW;
-    const y = paddingTop + chartH - ((d.salesNioC || 0) / maxVal) * chartH;
+    const y = paddingTop + chartH - (getValC(d) / maxVal) * chartH;
     return { x, y, day: d, index: i };
   });
 
@@ -111,8 +123,17 @@ function DailyInteractiveTrendChart({ dailyBreakdown = [], formatCurrency, bcnRa
 
   // Días con órdenes válidas para determinar Ticket Promedio más alto y más bajo
   const daysWithTicket = dailyBreakdown
-    .map((d, idx) => ({ ...d, idx }))
-    .filter((d) => (d.approvedOrders || 0) > 0 && (d.avgTicketNio || 0) > 0);
+    .map((d, idx) => {
+      const orderCount = includeSocialSelling ? (d.approvedOrders || 0) : (d.webOrders ?? d.approvedOrders ?? 0);
+      const ticketNio = !includeSocialSelling && d.webOrders > 0
+        ? (d.webAvgTicketNio || (d.webSalesNio / d.webOrders))
+        : (d.avgTicketNio || 0);
+      const ticketUsd = !includeSocialSelling && d.webOrders > 0
+        ? (d.webAvgTicketUsd || (d.webSalesUsd / d.webOrders))
+        : (d.avgTicketUsd || 0);
+      return { ...d, idx, orderCount, ticketNio, ticketUsd };
+    })
+    .filter((d) => d.orderCount > 0 && d.ticketNio > 0);
 
   let highestTicketIdx = null;
   let highestTicketDay = null;
@@ -123,8 +144,8 @@ function DailyInteractiveTrendChart({ dailyBreakdown = [], formatCurrency, bcnRa
     let maxD = daysWithTicket[0];
     let minD = daysWithTicket[0];
     for (const d of daysWithTicket) {
-      if (d.avgTicketNio > maxD.avgTicketNio) maxD = d;
-      if (d.avgTicketNio < minD.avgTicketNio) minD = d;
+      if (d.ticketNio > maxD.ticketNio) maxD = d;
+      if (d.ticketNio < minD.ticketNio) minD = d;
     }
     highestTicketIdx = maxD.idx;
     highestTicketDay = maxD;
@@ -139,59 +160,105 @@ function DailyInteractiveTrendChart({ dailyBreakdown = [], formatCurrency, bcnRa
   return (
     <div style={{ background: 'rgba(15, 23, 42, 0.8)', borderRadius: '14px', border: '1px solid rgba(255, 255, 255, 0.1)', padding: '0.9rem 1.15rem', position: 'relative', marginBottom: '0.9rem', overflow: 'visible' }}>
       
-      {/* Encabezado y Leyenda de Gráfica */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem', marginBottom: '0.5rem' }}>
-        <div>
-          <h3 style={{ fontSize: '0.95rem', fontWeight: 700, color: '#ffffff', display: 'flex', alignItems: 'center', gap: '0.4rem', margin: 0 }}>
+      {/* Encabezado y Leyenda de Gráfica con Altura Fija Inmune a Saltos (Zero Layout Shift) */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.45rem', marginBottom: '0.45rem' }}>
+        {/* Fila 1: Título de la Gráfica y Botón/Checkbox en Extremos Opuestos */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.6rem' }}>
+          <h3 style={{ fontSize: '0.95rem', fontWeight: 700, color: '#ffffff', display: 'flex', alignItems: 'center', gap: '0.4rem', margin: 0, flexWrap: 'wrap' }}>
             <TrendingUp size={16} color="#10b981" />
             Tendencia Comparativa Diaria de Ventas ({periods?.current?.label || periodLabel || 'Período A'} vs. {periods?.previous?.label || 'B'} vs. {periods?.previous2?.label || 'C'})
+            {!includeSocialSelling && (
+              <span style={{ fontSize: '0.72rem', color: '#38bdf8', fontWeight: 700, background: 'rgba(56, 189, 248, 0.15)', padding: '0.12rem 0.45rem', borderRadius: '6px', border: '1px solid rgba(56, 189, 248, 0.3)' }}>
+                🌐 Solo Web Orgánico
+              </span>
+            )}
           </h3>
-          <p style={{ margin: '0.15rem 0 0 0', fontSize: '0.75rem', color: '#94a3b8' }}>
-            Pasa el cursor sobre los nodos/puntos para comparar las ventas diarias de los 3 períodos en tiempo real.
-          </p>
+
+          {/* Checkbox para alternar inclusión de Social Selling vs Solo Web Orgánico */}
+          <label
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '0.45rem',
+              cursor: 'pointer',
+              fontSize: '0.76rem',
+              fontWeight: 700,
+              padding: '0.28rem 0.65rem',
+              borderRadius: '8px',
+              background: includeSocialSelling ? 'rgba(52, 211, 153, 0.12)' : 'rgba(56, 189, 248, 0.14)',
+              border: includeSocialSelling ? '1px solid rgba(52, 211, 153, 0.35)' : '1px solid rgba(56, 189, 248, 0.35)',
+              color: includeSocialSelling ? '#34d399' : '#38bdf8',
+              userSelect: 'none',
+              transition: 'all 0.2s ease',
+              flexShrink: 0,
+            }}
+            title={includeSocialSelling ? 'Desmarcar para que la gráfica muestre únicamente ventas web orgánicas' : 'Marcar para incluir ventas de Social Selling en la gráfica'}
+          >
+            <input
+              type="checkbox"
+              checked={includeSocialSelling}
+              onChange={(e) => setIncludeSocialSelling(e.target.checked)}
+              style={{
+                accentColor: '#10b981',
+                cursor: 'pointer',
+                width: '14px',
+                height: '14px',
+              }}
+            />
+            <span>{includeSocialSelling ? '✓ Incluir Social Selling' : '🌐 Solo Ventas Web (Orgánicas)'}</span>
+          </label>
         </div>
 
-        {/* Leyenda interactiva multi-período */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
-          {activeDay ? (
-            <div
-              style={{
-                background: 'rgba(15, 23, 42, 0.95)',
-                border: '1px solid rgba(56, 189, 248, 0.4)',
-                borderRadius: '10px',
-                padding: '0.35rem 0.85rem',
-                fontSize: '0.8rem',
-                fontWeight: 700,
-                display: 'flex',
-                alignItems: 'center',
-                gap: '0.6rem',
-                flexWrap: 'wrap',
-                boxShadow: '0 4px 12px rgba(0,0,0,0.5)',
-              }}
-            >
-              <span style={{ color: '#ffffff' }}>📅 Día {activeDay.dayNum} ({activeDay.dayLabel}):</span>
-              <span style={{ color: '#34d399' }}>🔵 A: {formatCurrency(activeDay.salesNio, activeDay.salesUsd)}</span>
-              <span style={{ color: '#a5b4fc' }}>🟣 B: {formatCurrency(activeDay.salesNioB, activeDay.salesUsdB)}</span>
-              <span style={{ color: '#38bdf8' }}>🟢 C: {formatCurrency(activeDay.salesNioC, activeDay.salesUsdC)}</span>
-            </div>
-          ) : (
-            <div style={{ display: 'flex', gap: '0.9rem', alignItems: 'center', fontSize: '0.75rem', flexWrap: 'wrap' }}>
-              <span style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', color: '#34d399', fontWeight: 700 }}>
-                <span style={{ width: '12px', height: '3px', backgroundColor: '#34d399', borderRadius: '2px', boxShadow: '0 0 8px #34d399' }} /> Período A
-              </span>
-              <span style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', color: '#a5b4fc', fontWeight: 700 }}>
-                <span style={{ width: '12px', height: '2px', borderTop: '2px dashed #a5b4fc' }} /> Período B
-              </span>
-              <span style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', color: '#38bdf8', fontWeight: 700 }}>
-                <span style={{ width: '12px', height: '2px', borderTop: '2px dotted #38bdf8' }} /> Período C
-              </span>
-              {highestTicketDay && (
-                <span style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', color: '#34d399', fontWeight: 700, background: 'rgba(16, 185, 129, 0.15)', padding: '0.15rem 0.45rem', borderRadius: '6px', border: '1px solid rgba(16, 185, 129, 0.35)' }}>
-                  🏆 Ticket Máx: {highestTicketDay.dayLabel} ({formatCurrency(highestTicketDay.avgTicketNio, highestTicketDay.avgTicketUsd)})
+        {/* Fila 2: Subtítulo explicativo a la izquierda y Leyenda/Stats de Hover a la derecha con altura fija garantizada */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.6rem', minHeight: '30px' }}>
+          <p style={{ margin: 0, fontSize: '0.75rem', color: '#94a3b8' }}>
+            Pasa el cursor sobre los nodos/puntos para comparar las ventas diarias de los 3 períodos en tiempo real.
+          </p>
+
+          {/* Contenedor de Leyenda / Hover con altura fija para evitar saltos (Layout Shift 0) */}
+          <div style={{ display: 'flex', alignItems: 'center', height: '28px', flexShrink: 0 }}>
+            {activeDay ? (
+              <div
+                style={{
+                  background: 'rgba(15, 23, 42, 0.95)',
+                  border: '1px solid rgba(52, 211, 153, 0.4)',
+                  borderRadius: '8px',
+                  padding: '0.2rem 0.65rem',
+                  fontSize: '0.78rem',
+                  fontWeight: 700,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.6rem',
+                  flexWrap: 'wrap',
+                  boxShadow: '0 4px 12px rgba(0,0,0,0.5)',
+                  height: '28px',
+                  boxSizing: 'border-box',
+                }}
+              >
+                <span style={{ color: '#ffffff' }}>📅 Día {activeDay.dayNum} ({activeDay.dayLabel}):</span>
+                <span style={{ color: '#34d399' }}>🟢 A: {formatCurrency(getValA(activeDay), getValUsdA(activeDay))}</span>
+                <span style={{ color: '#a5b4fc' }}>🟣 B: {formatCurrency(getValB(activeDay), getValUsdB(activeDay))}</span>
+                <span style={{ color: '#38bdf8' }}>🔵 C: {formatCurrency(getValC(activeDay), getValUsdC(activeDay))}</span>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', gap: '0.85rem', alignItems: 'center', fontSize: '0.75rem', flexWrap: 'wrap', height: '28px', boxSizing: 'border-box' }}>
+                <span style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', color: '#34d399', fontWeight: 700 }}>
+                  <span style={{ width: '12px', height: '3px', backgroundColor: '#34d399', borderRadius: '2px', boxShadow: '0 0 8px #34d399' }} /> Período A
                 </span>
-              )}
-            </div>
-          )}
+                <span style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', color: '#a5b4fc', fontWeight: 700 }}>
+                  <span style={{ width: '12px', height: '2px', borderTop: '2px dashed #a5b4fc' }} /> Período B
+                </span>
+                <span style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', color: '#38bdf8', fontWeight: 700 }}>
+                  <span style={{ width: '12px', height: '2px', borderTop: '2px dotted #38bdf8' }} /> Período C
+                </span>
+                {highestTicketDay && (
+                  <span style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', color: '#34d399', fontWeight: 700, background: 'rgba(16, 185, 129, 0.15)', padding: '0.1rem 0.4rem', borderRadius: '6px', border: '1px solid rgba(16, 185, 129, 0.35)', fontSize: '0.72rem' }}>
+                    🏆 Ticket Máx: {highestTicketDay.dayLabel} ({formatCurrency(highestTicketDay.ticketNio || highestTicketDay.avgTicketNio, highestTicketDay.ticketUsd || highestTicketDay.avgTicketUsd)})
+                  </span>
+                )}
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
@@ -221,16 +288,16 @@ function DailyInteractiveTrendChart({ dailyBreakdown = [], formatCurrency, bcnRa
           })}
 
           {/* Degradado bajo curva Período A */}
-          {areaSales && <path d={areaSales} fill="url(#gradSalesArea)" />}
+          {areaSales && <path d={areaSales} fill="url(#gradSalesArea)" style={{ transition: 'd 0.5s cubic-bezier(0.4, 0, 0.2, 1)' }} />}
 
           {/* Curva Período C (Azul Cian Dotted) */}
-          <path d={pathSalesC} fill="none" stroke="#38bdf8" strokeWidth="1.6" strokeDasharray="3 3" opacity="0.8" />
+          <path d={pathSalesC} fill="none" stroke="#38bdf8" strokeWidth="1.6" strokeDasharray="3 3" opacity="0.8" style={{ transition: 'd 0.5s cubic-bezier(0.4, 0, 0.2, 1)' }} />
 
           {/* Curva Período B (Púrpura Dashed) */}
-          <path d={pathSalesB} fill="none" stroke="#a5b4fc" strokeWidth="1.8" strokeDasharray="5 5" opacity="0.85" />
+          <path d={pathSalesB} fill="none" stroke="#a5b4fc" strokeWidth="1.8" strokeDasharray="5 5" opacity="0.85" style={{ transition: 'd 0.5s cubic-bezier(0.4, 0, 0.2, 1)' }} />
 
           {/* Curva Período A (Verde Neón Solida Principal) */}
-          <path d={pathSales} fill="none" stroke="#10b981" strokeWidth="2.2" strokeLinecap="round" />
+          <path d={pathSales} fill="none" stroke="#10b981" strokeWidth="2.2" strokeLinecap="round" style={{ transition: 'd 0.5s cubic-bezier(0.4, 0, 0.2, 1)' }} />
 
           {/* Columna / Franja vertical interactiva al hacer Hover */}
           {hoveredIdx !== null && (
@@ -266,10 +333,10 @@ function DailyInteractiveTrendChart({ dailyBreakdown = [], formatCurrency, bcnRa
                 style={{ cursor: 'pointer' }}
               >
                 {/* Puntos Período C */}
-                <circle cx={ptC.x} cy={ptC.y} r={isHovered ? 4 : 2} fill="#38bdf8" opacity={isHovered ? 1 : 0.6} />
+                <circle cx={ptC.x} cy={ptC.y} r={isHovered ? 4 : 2} fill="#38bdf8" opacity={isHovered ? 1 : 0.6} style={{ transition: 'all 0.5s cubic-bezier(0.4, 0, 0.2, 1)' }} />
 
                 {/* Puntos Período B */}
-                <circle cx={ptB.x} cy={ptB.y} r={isHovered ? 4 : 2.5} fill="#a5b4fc" opacity={isHovered ? 1 : 0.7} />
+                <circle cx={ptB.x} cy={ptB.y} r={isHovered ? 4 : 2.5} fill="#a5b4fc" opacity={isHovered ? 1 : 0.7} style={{ transition: 'all 0.5s cubic-bezier(0.4, 0, 0.2, 1)' }} />
 
                 {/* Punto Principal Período A */}
                 <circle
@@ -279,7 +346,7 @@ function DailyInteractiveTrendChart({ dailyBreakdown = [], formatCurrency, bcnRa
                   fill={isHovered ? '#34d399' : '#10b981'}
                   stroke="#0f172a"
                   strokeWidth={isHovered ? 2 : 1}
-                  style={{ transition: 'all 0.15s ease' }}
+                  style={{ transition: 'all 0.5s cubic-bezier(0.4, 0, 0.2, 1)' }}
                 />
 
                 {/* Etiqueta Eje X */}
@@ -307,6 +374,7 @@ function DailyInteractiveTrendChart({ dailyBreakdown = [], formatCurrency, bcnRa
                       stroke="#10b981"
                       strokeWidth="1.4"
                       strokeDasharray="3 2"
+                      style={{ transition: 'all 0.5s cubic-bezier(0.4, 0, 0.2, 1)' }}
                     />
                     <text
                       x={ptS.x}
@@ -315,6 +383,7 @@ function DailyInteractiveTrendChart({ dailyBreakdown = [], formatCurrency, bcnRa
                       fill="#34d399"
                       fontSize="9"
                       fontWeight="800"
+                      style={{ transition: 'all 0.5s cubic-bezier(0.4, 0, 0.2, 1)' }}
                     >
                       🏆
                     </text>
@@ -332,6 +401,7 @@ function DailyInteractiveTrendChart({ dailyBreakdown = [], formatCurrency, bcnRa
                       stroke="#f59e0b"
                       strokeWidth="1.4"
                       strokeDasharray="2 2"
+                      style={{ transition: 'all 0.5s cubic-bezier(0.4, 0, 0.2, 1)' }}
                     />
                     <text
                       x={ptS.x}
@@ -340,6 +410,7 @@ function DailyInteractiveTrendChart({ dailyBreakdown = [], formatCurrency, bcnRa
                       fill="#f59e0b"
                       fontSize="9"
                       fontWeight="800"
+                      style={{ transition: 'all 0.5s cubic-bezier(0.4, 0, 0.2, 1)' }}
                     >
                       ⚠️
                     </text>
@@ -355,7 +426,7 @@ function DailyInteractiveTrendChart({ dailyBreakdown = [], formatCurrency, bcnRa
                     fill="#fb7185"
                     stroke="#0f172a"
                     strokeWidth={isHovered ? 2 : 1}
-                    style={{ transition: 'all 0.25s cubic-bezier(0.34, 1.56, 0.64, 1)' }}
+                    style={{ transition: 'all 0.5s cubic-bezier(0.4, 0, 0.2, 1)' }}
                   />
                 )}
 
@@ -366,6 +437,7 @@ function DailyInteractiveTrendChart({ dailyBreakdown = [], formatCurrency, bcnRa
                     cy={ptS.y}
                     r={12}
                     fill="rgba(16, 185, 129, 0.2)"
+                    style={{ transition: 'all 0.5s cubic-bezier(0.4, 0, 0.2, 1)' }}
                   />
                 )}
                 <circle
@@ -375,7 +447,7 @@ function DailyInteractiveTrendChart({ dailyBreakdown = [], formatCurrency, bcnRa
                   fill={isHovered ? '#34d399' : isHighestTicket ? '#34d399' : isLowestTicket ? '#f59e0b' : '#10b981'}
                   stroke="#ffffff"
                   strokeWidth={isHovered || isHighestTicket || isLowestTicket ? 2 : 1}
-                  style={{ transition: 'all 0.25s cubic-bezier(0.34, 1.56, 0.64, 1)' }}
+                  style={{ transition: 'all 0.5s cubic-bezier(0.4, 0, 0.2, 1)' }}
                 />
               </g>
             );
@@ -409,7 +481,7 @@ function DailyInteractiveTrendChart({ dailyBreakdown = [], formatCurrency, bcnRa
               📅 Día {activeDay.dayLabel} <span style={{ fontSize: '0.72rem', color: '#94a3b8', fontWeight: 400 }}>({activeDay.date})</span>
             </span>
             <span style={{ fontSize: '0.72rem', color: '#10b981', fontWeight: 700, background: 'rgba(16, 185, 129, 0.15)', padding: '0.15rem 0.45rem', borderRadius: '6px' }}>
-              {activeDay.approvedOrders} órdenes
+              {includeSocialSelling ? activeDay.approvedOrders : (activeDay.webOrders ?? activeDay.approvedOrders)} órdenes {!includeSocialSelling ? 'web' : ''}
             </span>
           </div>
 
@@ -429,10 +501,18 @@ function DailyInteractiveTrendChart({ dailyBreakdown = [], formatCurrency, bcnRa
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
             {/* Ventas Aprobadas */}
             <div>
-              <div style={{ fontSize: '0.7rem', color: '#94a3b8', textTransform: 'uppercase', fontWeight: 700 }}>💰 Ventas del Día</div>
-              <div style={{ fontSize: '1.1rem', fontWeight: 800, color: '#10b981', lineHeight: 1.2 }}>
-                {formatCurrency(activeDay.salesNio, activeDay.salesUsd)}
+              <div style={{ fontSize: '0.7rem', color: '#94a3b8', textTransform: 'uppercase', fontWeight: 700 }}>
+                💰 Ventas del Día {includeSocialSelling ? '(Total: Web + Social)' : '(Solo Web Orgánico)'}
               </div>
+              <div style={{ fontSize: '1.1rem', fontWeight: 800, color: '#10b981', lineHeight: 1.2 }}>
+                {formatCurrency(getValA(activeDay), getValUsdA(activeDay))}
+              </div>
+              {includeSocialSelling && ((activeDay.socialSalesNio > 0) || (activeDay.webSalesNio > 0)) && (
+                <div style={{ fontSize: '0.72rem', color: '#94a3b8', marginTop: '0.25rem', display: 'flex', gap: '0.65rem' }}>
+                  <span>🌐 Web: <strong style={{ color: '#38bdf8' }}>{formatCurrency(activeDay.webSalesNio || 0, activeDay.webSalesUsd || 0)}</strong></span>
+                  <span>🤝 Social: <strong style={{ color: '#34d399' }}>{formatCurrency(activeDay.socialSalesNio || 0, activeDay.socialSalesUsd || 0)}</strong></span>
+                </div>
+              )}
             </div>
 
             {/* Devoluciones si existen */}
@@ -447,9 +527,18 @@ function DailyInteractiveTrendChart({ dailyBreakdown = [], formatCurrency, bcnRa
 
             {/* Ticket Promedio del Día */}
             <div style={{ borderTop: '1px dashed rgba(255, 255, 255, 0.1)', paddingTop: '0.35rem', marginTop: '0.1rem' }}>
-              <div style={{ fontSize: '0.7rem', color: '#a5b4fc', textTransform: 'uppercase', fontWeight: 700 }}>🎫 Ticket Promedio del Día</div>
+              <div style={{ fontSize: '0.7rem', color: '#a5b4fc', textTransform: 'uppercase', fontWeight: 700 }}>
+                🎫 Ticket Promedio del Día {!includeSocialSelling ? '(Web)' : ''}
+              </div>
               <div style={{ fontSize: '0.95rem', fontWeight: 800, color: '#a5b4fc' }}>
-                {formatCurrency(activeDay.avgTicketNio, activeDay.avgTicketUsd)}
+                {formatCurrency(
+                  !includeSocialSelling && activeDay.webOrders > 0
+                    ? (activeDay.webAvgTicketNio || (activeDay.webSalesNio / activeDay.webOrders))
+                    : activeDay.avgTicketNio,
+                  !includeSocialSelling && activeDay.webOrders > 0
+                    ? (activeDay.webAvgTicketUsd || (activeDay.webSalesUsd / activeDay.webOrders))
+                    : activeDay.avgTicketUsd
+                )}
               </div>
             </div>
           </div>
@@ -458,6 +547,59 @@ function DailyInteractiveTrendChart({ dailyBreakdown = [], formatCurrency, bcnRa
 
     </div>
   );
+}
+
+const MONTH_NAMES = [
+  'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+  'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'
+];
+
+function getThreeMonthComparison(year, month1Indexed, nicNow) {
+  const isCurrentMonth = (year === nicNow.year && month1Indexed === (nicNow.month + 1));
+  const lastDayA = new Date(year, month1Indexed, 0).getDate();
+  const mAStr = String(month1Indexed).padStart(2, '0');
+  const sA = `${year}-${mAStr}-01`;
+  const eA = isCurrentMonth ? nicNow.todayStr : `${year}-${mAStr}-${String(lastDayA).padStart(2, '0')}`;
+
+  // Period B (1 month before)
+  let yB = year;
+  let mB = month1Indexed - 1;
+  if (mB < 1) {
+    mB = 12;
+    yB -= 1;
+  }
+  const lastDayB = new Date(yB, mB, 0).getDate();
+  const mBStr = String(mB).padStart(2, '0');
+  const sB = `${yB}-${mBStr}-01`;
+  const eB = isCurrentMonth
+    ? `${yB}-${mBStr}-${String(Math.min(nicNow.day, lastDayB)).padStart(2, '0')}`
+    : `${yB}-${mBStr}-${String(lastDayB).padStart(2, '0')}`;
+
+  // Period C (2 months before)
+  let yC = year;
+  let mC = month1Indexed - 2;
+  if (mC < 1) {
+    mC += 12;
+    yC -= 1;
+  }
+  const lastDayC = new Date(yC, mC, 0).getDate();
+  const mCStr = String(mC).padStart(2, '0');
+  const sC = `${yC}-${mCStr}-01`;
+  const eC = isCurrentMonth
+    ? `${yC}-${mCStr}-${String(Math.min(nicNow.day, lastDayC)).padStart(2, '0')}`
+    : `${yC}-${mCStr}-${String(lastDayC).padStart(2, '0')}`;
+
+  return {
+    sA, eA,
+    sB, eB,
+    sC, eC,
+    monthNameA: MONTH_NAMES[month1Indexed - 1],
+    monthNameB: MONTH_NAMES[mB - 1],
+    monthNameC: MONTH_NAMES[mC - 1],
+    yearA: year,
+    yearB: yB,
+    yearC: yC,
+  };
 }
 
 export default function DashboardPage() {
@@ -506,6 +648,8 @@ export default function DashboardPage() {
   const [endDateC, setEndDateC] = useState(sameDayPM2Str);
 
   const [selectedPreset, setSelectedPreset] = useState('today');
+  const [selectedMonthToCompare, setSelectedMonthToCompare] = useState(nicNow.month + 1); // 1-indexed (1 to 12)
+  const [selectedYearToCompare, setSelectedYearToCompare] = useState(nicNow.year);
   const [showRangeDropdown, setShowRangeDropdown] = useState(false);
   const [showMoreDetails, setShowMoreDetails] = useState(false);
   const dropdownRef = useRef(null);
@@ -530,6 +674,7 @@ export default function DashboardPage() {
     { id: 'last_7_days', label: 'Últimos 7 Días' },
     { id: 'current_month', label: 'Mes Actual' },
     { id: 'last_30_days', label: 'Últimos 30 Días' },
+    { id: 'select_month', label: 'Seleccionar Mes' },
   ];
 
   const updateCustomDates = (newSA, newEA) => {
@@ -585,9 +730,30 @@ export default function DashboardPage() {
     }
   };
 
+  const handleApplyMonthComparison = (year, month, autoFetch = false) => {
+    const comp = getThreeMonthComparison(year, month, nicNow);
+    setSelectedPreset('select_month');
+    setSelectedMonthToCompare(month);
+    setSelectedYearToCompare(year);
+    setStartDateA(comp.sA);
+    setEndDateA(comp.eA);
+    setStartDateB(comp.sB);
+    setEndDateB(comp.eB);
+    setStartDateC(comp.sC);
+    setEndDateC(comp.eC);
+
+    if (autoFetch) {
+      fetchAnalytics(comp.sA, comp.eA, comp.sB, comp.eB, comp.sC, comp.eC);
+    }
+  };
+
   const handleSelectPreset = (presetId, autoFetch = false) => {
     setSelectedPreset(presetId);
     if (presetId === 'custom') {
+      return;
+    }
+    if (presetId === 'select_month') {
+      handleApplyMonthComparison(selectedYearToCompare, selectedMonthToCompare, autoFetch);
       return;
     }
 
@@ -858,7 +1024,7 @@ export default function DashboardPage() {
               Dashboard Ejecutivo de Ventas & Analytics Comparativo
             </h1>
             <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', margin: '0.15rem 0 0 0' }}>
-              Comparación en tiempo real: <strong style={{ color: 'var(--accent-primary)' }}>{periods?.current?.label || 'Período A'}</strong> vs. <span style={{ color: '#38bdf8', fontWeight: 600 }}>{periods?.previous?.label || 'Período B'}</span> vs. <span style={{ color: '#34d399', fontWeight: 600 }}>{periods?.previous2?.label || 'Período C'}</span>.
+              Comparación en tiempo real: <strong style={{ color: '#34d399' }}>{periods?.current?.label || 'Período A'}</strong> vs. <span style={{ color: '#a5b4fc', fontWeight: 600 }}>{periods?.previous?.label || 'Período B'}</span> vs. <span style={{ color: '#38bdf8', fontWeight: 600 }}>{periods?.previous2?.label || 'Período C'}</span>.
             </p>
           </div>
 
@@ -1050,7 +1216,9 @@ export default function DashboardPage() {
                     <Calendar size={14} color="#38bdf8" style={{ flexShrink: 0 }} />
                     <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                       Creado: <strong style={{ color: '#38bdf8' }}>{
-                        presetOptions.find(p => p.id === selectedPreset)?.label || 'Personalizado'
+                        selectedPreset === 'select_month'
+                          ? `${MONTH_NAMES[selectedMonthToCompare - 1]} ${selectedYearToCompare}`
+                          : (presetOptions.find(p => p.id === selectedPreset)?.label || 'Personalizado')
                       }</strong>
                     </span>
                   </div>
@@ -1069,39 +1237,117 @@ export default function DashboardPage() {
                       borderRadius: '12px',
                       boxShadow: '0 25px 50px -12px rgba(0,0,0,0.9), 0 0 25px rgba(56, 189, 248, 0.2)',
                       padding: '0.85rem 1rem',
-                      width: '260px',
+                      width: '285px',
                     }}
                   >
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.45rem' }}>
                       {presetOptions.map((opt) => (
-                        <div
-                          key={opt.id}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleSelectPreset(opt.id);
-                          }}
-                          style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '0.65rem',
-                            fontSize: '0.82rem',
-                            color: selectedPreset === opt.id ? '#ffffff' : '#94a3b8',
-                            cursor: 'pointer',
-                            padding: '0.4rem 0.6rem',
-                            borderRadius: '6px',
-                            background: selectedPreset === opt.id ? 'rgba(56, 189, 248, 0.18)' : 'transparent',
-                            fontWeight: selectedPreset === opt.id ? 700 : 500,
-                            userSelect: 'none',
-                          }}
-                        >
-                          <input
-                            type="radio"
-                            name="presetRadio"
-                            checked={selectedPreset === opt.id}
-                            readOnly
-                            style={{ accentColor: '#38bdf8', cursor: 'pointer', pointerEvents: 'none' }}
-                          />
-                          {opt.label}
+                        <div key={opt.id}>
+                          <div
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleSelectPreset(opt.id);
+                            }}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '0.65rem',
+                              fontSize: '0.82rem',
+                              color: selectedPreset === opt.id ? '#ffffff' : '#94a3b8',
+                              cursor: 'pointer',
+                              padding: '0.4rem 0.6rem',
+                              borderRadius: '6px',
+                              background: selectedPreset === opt.id ? 'rgba(56, 189, 248, 0.18)' : 'transparent',
+                              fontWeight: selectedPreset === opt.id ? 700 : 500,
+                              userSelect: 'none',
+                            }}
+                          >
+                            <input
+                              type="radio"
+                              name="presetRadio"
+                              checked={selectedPreset === opt.id}
+                              readOnly
+                              style={{ accentColor: '#38bdf8', cursor: 'pointer', pointerEvents: 'none' }}
+                            />
+                            {opt.label}
+                          </div>
+
+                          {/* Selector interactivo de Mes y Año si 'select_month' está activo */}
+                          {opt.id === 'select_month' && selectedPreset === 'select_month' && (
+                            <div
+                              onClick={(e) => e.stopPropagation()}
+                              style={{
+                                marginTop: '0.35rem',
+                                marginBottom: '0.35rem',
+                                padding: '0.55rem 0.65rem',
+                                background: 'rgba(15, 23, 42, 0.95)',
+                                borderRadius: '8px',
+                                border: '1px solid rgba(56, 189, 248, 0.35)',
+                                display: 'flex',
+                                flexDirection: 'column',
+                                gap: '0.45rem',
+                              }}
+                            >
+                              <div style={{ display: 'flex', gap: '0.4rem' }}>
+                                <select
+                                  value={selectedMonthToCompare}
+                                  onChange={(e) => {
+                                    const m = parseInt(e.target.value, 10);
+                                    handleApplyMonthComparison(selectedYearToCompare, m, false);
+                                  }}
+                                  style={{
+                                    flex: 2,
+                                    background: '#1e293b',
+                                    color: '#ffffff',
+                                    border: '1px solid rgba(255, 255, 255, 0.2)',
+                                    borderRadius: '6px',
+                                    padding: '0.3rem 0.4rem',
+                                    fontSize: '0.78rem',
+                                    outline: 'none',
+                                    cursor: 'pointer',
+                                  }}
+                                >
+                                  {MONTH_NAMES.map((name, i) => (
+                                    <option key={i + 1} value={i + 1}>
+                                      {name}
+                                    </option>
+                                  ))}
+                                </select>
+
+                                <select
+                                  value={selectedYearToCompare}
+                                  onChange={(e) => {
+                                    const y = parseInt(e.target.value, 10);
+                                    handleApplyMonthComparison(y, selectedMonthToCompare, false);
+                                  }}
+                                  style={{
+                                    flex: 1,
+                                    background: '#1e293b',
+                                    color: '#ffffff',
+                                    border: '1px solid rgba(255, 255, 255, 0.2)',
+                                    borderRadius: '6px',
+                                    padding: '0.3rem 0.4rem',
+                                    fontSize: '0.78rem',
+                                    outline: 'none',
+                                    cursor: 'pointer',
+                                  }}
+                                >
+                                  {[nicNow.year, nicNow.year - 1, nicNow.year - 2].map((yr) => (
+                                    <option key={yr} value={yr}>
+                                      {yr}
+                                    </option>
+                                  ))}
+                                </select>
+                              </div>
+
+                              {/* Preview badge explicativo */}
+                              <div style={{ fontSize: '0.7rem', color: '#94a3b8', lineHeight: 1.35 }}>
+                                Comparará: <strong style={{ color: '#34d399' }}>{MONTH_NAMES[selectedMonthToCompare - 1]} {selectedYearToCompare}</strong> vs.{' '}
+                                <strong style={{ color: '#a5b4fc' }}>{getThreeMonthComparison(selectedYearToCompare, selectedMonthToCompare, nicNow).monthNameB}</strong> vs.{' '}
+                                <strong style={{ color: '#38bdf8' }}>{getThreeMonthComparison(selectedYearToCompare, selectedMonthToCompare, nicNow).monthNameC}</strong>
+                              </div>
+                            </div>
+                          )}
                         </div>
                       ))}
 
@@ -1125,9 +1371,9 @@ export default function DashboardPage() {
 
               {/* Rango de Fechas A, B y C */}
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', background: 'rgba(56, 189, 248, 0.08)', padding: '0.2rem 0.5rem', borderRadius: '8px', border: '1px solid rgba(56, 189, 248, 0.25)' }}>
-                  <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#38bdf8', whiteSpace: 'nowrap' }}>
-                    🔵 A:
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', background: 'rgba(52, 211, 153, 0.08)', padding: '0.2rem 0.5rem', borderRadius: '8px', border: '1px solid rgba(52, 211, 153, 0.25)' }}>
+                  <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#34d399', whiteSpace: 'nowrap' }}>
+                    🟢 A:
                   </span>
                   <input
                     type="date"
@@ -1148,7 +1394,7 @@ export default function DashboardPage() {
 
                 <span style={{ color: 'var(--text-dim)', fontWeight: 700, fontSize: '0.75rem' }}>vs.</span>
 
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', background: 'rgba(129, 140, 248, 0.08)', padding: '0.2rem 0.5rem', borderRadius: '8px', border: '1px solid rgba(129, 140, 248, 0.25)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', background: 'rgba(165, 180, 252, 0.08)', padding: '0.2rem 0.5rem', borderRadius: '8px', border: '1px solid rgba(165, 180, 252, 0.25)' }}>
                   <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#a5b4fc', whiteSpace: 'nowrap' }}>
                     🟣 B:
                   </span>
@@ -1171,9 +1417,9 @@ export default function DashboardPage() {
 
                 <span style={{ color: 'var(--text-dim)', fontWeight: 700, fontSize: '0.75rem' }}>vs.</span>
 
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', background: 'rgba(52, 211, 153, 0.08)', padding: '0.2rem 0.5rem', borderRadius: '8px', border: '1px solid rgba(52, 211, 153, 0.25)' }}>
-                  <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#34d399', whiteSpace: 'nowrap' }}>
-                    🟢 C:
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', background: 'rgba(56, 189, 248, 0.08)', padding: '0.2rem 0.5rem', borderRadius: '8px', border: '1px solid rgba(56, 189, 248, 0.25)' }}>
+                  <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#38bdf8', whiteSpace: 'nowrap' }}>
+                    🔵 C:
                   </span>
                   <input
                     type="date"
@@ -1239,7 +1485,9 @@ export default function DashboardPage() {
               >
                 {presetOptions.map((opt) => (
                   <option key={opt.id} value={opt.id} style={{ backgroundColor: '#0f172a', color: '#ffffff' }}>
-                    Creado: {opt.label}
+                    Creado: {opt.id === 'select_month' && selectedPreset === 'select_month'
+                      ? `${MONTH_NAMES[selectedMonthToCompare - 1]} ${selectedYearToCompare}`
+                      : opt.label}
                   </option>
                 ))}
               </select>
@@ -1271,11 +1519,72 @@ export default function DashboardPage() {
             </button>
           </div>
 
+          {/* Selector interactivo de Mes y Año para Móvil */}
+          {selectedPreset === 'select_month' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', marginBottom: '0.65rem', padding: '0.45rem 0.6rem', background: 'rgba(15, 23, 42, 0.9)', borderRadius: '8px', border: '1px solid rgba(56, 189, 248, 0.35)' }}>
+              <div style={{ display: 'flex', gap: '0.35rem', width: '100%' }}>
+                <select
+                  value={selectedMonthToCompare}
+                  onChange={(e) => {
+                    const m = parseInt(e.target.value, 10);
+                    handleApplyMonthComparison(selectedYearToCompare, m, false);
+                  }}
+                  style={{
+                    flex: 2,
+                    height: '32px',
+                    background: '#1e293b',
+                    color: '#ffffff',
+                    border: '1px solid rgba(56, 189, 248, 0.4)',
+                    borderRadius: '6px',
+                    padding: '0 0.4rem',
+                    fontSize: '0.74rem',
+                    outline: 'none',
+                  }}
+                >
+                  {MONTH_NAMES.map((name, i) => (
+                    <option key={i + 1} value={i + 1}>
+                      {name}
+                    </option>
+                  ))}
+                </select>
+                <select
+                  value={selectedYearToCompare}
+                  onChange={(e) => {
+                    const y = parseInt(e.target.value, 10);
+                    handleApplyMonthComparison(y, selectedMonthToCompare, false);
+                  }}
+                  style={{
+                    flex: 1,
+                    height: '32px',
+                    background: '#1e293b',
+                    color: '#ffffff',
+                    border: '1px solid rgba(56, 189, 248, 0.4)',
+                    borderRadius: '6px',
+                    padding: '0 0.4rem',
+                    fontSize: '0.74rem',
+                    outline: 'none',
+                  }}
+                >
+                  {[nicNow.year, nicNow.year - 1, nicNow.year - 2].map((yr) => (
+                    <option key={yr} value={yr}>
+                      {yr}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div style={{ fontSize: '0.68rem', color: '#94a3b8', lineHeight: 1.3 }}>
+                Comparará: <strong style={{ color: '#34d399' }}>{MONTH_NAMES[selectedMonthToCompare - 1]} {selectedYearToCompare}</strong> vs.{' '}
+                <strong style={{ color: '#a5b4fc' }}>{getThreeMonthComparison(selectedYearToCompare, selectedMonthToCompare, nicNow).monthNameB}</strong> vs.{' '}
+                <strong style={{ color: '#38bdf8' }}>{getThreeMonthComparison(selectedYearToCompare, selectedMonthToCompare, nicNow).monthNameC}</strong>
+              </div>
+            </div>
+          )}
+
           {/* Filas de Rangos A, B y C para Móvil */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', width: '100%' }}>
             {/* Rango A */}
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.3rem', background: 'rgba(56, 189, 248, 0.08)', padding: '0.25rem 0.4rem', borderRadius: '8px', border: '1px solid rgba(56, 189, 248, 0.25)', width: '100%', boxSizing: 'border-box' }}>
-              <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#38bdf8', whiteSpace: 'nowrap' }}>🔵 A:</span>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.3rem', background: 'rgba(52, 211, 153, 0.08)', padding: '0.25rem 0.4rem', borderRadius: '8px', border: '1px solid rgba(52, 211, 153, 0.25)', width: '100%', boxSizing: 'border-box' }}>
+              <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#34d399', whiteSpace: 'nowrap' }}>🟢 A:</span>
               <input
                 type="date"
                 className="glass-input"
@@ -1296,7 +1605,7 @@ export default function DashboardPage() {
             <div style={{ textAlign: 'center', color: 'var(--text-dim)', fontWeight: 700, fontSize: '0.7rem', margin: '-0.1rem 0' }}>vs.</div>
 
             {/* Rango B */}
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.3rem', background: 'rgba(129, 140, 248, 0.08)', padding: '0.25rem 0.4rem', borderRadius: '8px', border: '1px solid rgba(129, 140, 248, 0.25)', width: '100%', boxSizing: 'border-box' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.3rem', background: 'rgba(165, 180, 252, 0.08)', padding: '0.25rem 0.4rem', borderRadius: '8px', border: '1px solid rgba(165, 180, 252, 0.25)', width: '100%', boxSizing: 'border-box' }}>
               <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#a5b4fc', whiteSpace: 'nowrap' }}>🟣 B:</span>
               <input
                 type="date"
@@ -1318,8 +1627,8 @@ export default function DashboardPage() {
             <div style={{ textAlign: 'center', color: 'var(--text-dim)', fontWeight: 700, fontSize: '0.7rem', margin: '-0.1rem 0' }}>vs.</div>
 
             {/* Rango C */}
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.3rem', background: 'rgba(52, 211, 153, 0.08)', padding: '0.25rem 0.4rem', borderRadius: '8px', border: '1px solid rgba(52, 211, 153, 0.25)', width: '100%', boxSizing: 'border-box' }}>
-              <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#34d399', whiteSpace: 'nowrap' }}>🟢 C:</span>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.3rem', background: 'rgba(56, 189, 248, 0.08)', padding: '0.25rem 0.4rem', borderRadius: '8px', border: '1px solid rgba(56, 189, 248, 0.25)', width: '100%', boxSizing: 'border-box' }}>
+              <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#38bdf8', whiteSpace: 'nowrap' }}>🔵 C:</span>
               <input
                 type="date"
                 className="glass-input"
@@ -1358,7 +1667,7 @@ export default function DashboardPage() {
           <>
             {/* Top Key Executive Performance Indicators (Rejilla Estricta 4x1 o 4x2) */}
             <div style={{ marginBottom: '1.25rem' }}>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '0.85rem' }} className="mobile-card-grid">
+              <div className="kpi-cards-grid">
                 {/* Card 1: Ventas Netas (Principal) */}
                 <div className="glass-card" style={{ padding: '0.9rem 1.05rem', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', minHeight: '118px' }}>
                   <div>
@@ -1374,7 +1683,7 @@ export default function DashboardPage() {
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginTop: '0.45rem', gap: '0.5rem' }}>
                     <div style={{ fontSize: '0.71rem', color: 'var(--text-dim)', lineHeight: '1.3' }}>
-                      <div>vs. B: {formatCurrency(kpis?.totalRevenue?.previousNio || kpis?.totalRevenue?.previous || 0, kpis?.totalRevenue?.previousUsd || 0)} | C: {formatCurrency(kpis?.totalRevenue?.previous2Nio || kpis?.totalRevenue?.previous2 || 0, kpis?.totalRevenue?.previous2Usd || 0)}</div>
+                      <div>vs. <span style={{ color: '#a5b4fc', fontWeight: 600 }}>B:</span> {formatCurrency(kpis?.totalRevenue?.previousNio || kpis?.totalRevenue?.previous || 0, kpis?.totalRevenue?.previousUsd || 0)} | <span style={{ color: '#38bdf8', fontWeight: 600 }}>C:</span> {formatCurrency(kpis?.totalRevenue?.previous2Nio || kpis?.totalRevenue?.previous2 || 0, kpis?.totalRevenue?.previous2Usd || 0)}</div>
                       <div style={{ color: '#34d399', opacity: 0.85, fontSize: '0.66rem' }}>(Órdenes aprobadas)</div>
                     </div>
                     <button
@@ -1414,7 +1723,7 @@ export default function DashboardPage() {
                     </div>
                   </div>
                   <div style={{ fontSize: '0.71rem', color: 'var(--text-dim)', marginTop: '0.45rem', lineHeight: '1.3' }}>
-                    <div>vs. B: {(kpis?.totalOrders?.previous || 0).toLocaleString()} | C: {(kpis?.totalOrders?.previous2 || 0).toLocaleString()} ord.</div>
+                    <div>vs. <span style={{ color: '#a5b4fc', fontWeight: 600 }}>B:</span> {(kpis?.totalOrders?.previous || 0).toLocaleString()} | <span style={{ color: '#38bdf8', fontWeight: 600 }}>C:</span> {(kpis?.totalOrders?.previous2 || 0).toLocaleString()} ord.</div>
                     <div style={{ fontSize: '0.66rem' }}>
                       <span style={{ color: '#34d399', fontWeight: 600 }}>{kpis?.totalOrders?.validCurrent || 0} apr.</span> | <span style={{ color: '#fb7185', fontWeight: 600 }}>{kpis?.totalOrders?.canceledCurrent || 0} canc.</span>
                     </div>
@@ -1435,7 +1744,7 @@ export default function DashboardPage() {
                     </div>
                   </div>
                   <div style={{ fontSize: '0.71rem', color: 'var(--text-dim)', marginTop: '0.45rem', lineHeight: '1.3' }}>
-                    <div>vs. B: {kpis?.cancelRate?.previous || 0}% | C: {kpis?.cancelRate?.previous2 || 0}%</div>
+                    <div>vs. <span style={{ color: '#a5b4fc', fontWeight: 600 }}>B:</span> {kpis?.cancelRate?.previous || 0}% | <span style={{ color: '#38bdf8', fontWeight: 600 }}>C:</span> {kpis?.cancelRate?.previous2 || 0}%</div>
                     <div style={{ color: '#fb7185', opacity: 0.85, fontSize: '0.66rem' }}>({kpis?.totalOrders?.canceledCurrent || 0} de {kpis?.totalOrders?.current || 0} órdenes)</div>
                   </div>
                 </div>
@@ -1454,7 +1763,7 @@ export default function DashboardPage() {
                     </div>
                   </div>
                   <div style={{ fontSize: '0.71rem', color: 'var(--text-dim)', marginTop: '0.45rem', lineHeight: '1.3' }}>
-                    <div>vs. B: {formatCurrency(kpis?.avgTicket?.previousNio || kpis?.avgTicket?.previous || 0, kpis?.avgTicket?.previousUsd || 0)} | C: {formatCurrency(kpis?.avgTicket?.previous2Nio || kpis?.avgTicket?.previous2 || 0, kpis?.avgTicket?.previous2Usd || 0)}</div>
+                    <div>vs. <span style={{ color: '#a5b4fc', fontWeight: 600 }}>B:</span> {formatCurrency(kpis?.avgTicket?.previousNio || kpis?.avgTicket?.previous || 0, kpis?.avgTicket?.previousUsd || 0)} | <span style={{ color: '#38bdf8', fontWeight: 600 }}>C:</span> {formatCurrency(kpis?.avgTicket?.previous2Nio || kpis?.avgTicket?.previous2 || 0, kpis?.avgTicket?.previous2Usd || 0)}</div>
                     <div style={{ color: '#34d399', opacity: 0.85, fontSize: '0.66rem' }}>(Basado en aprobadas)</div>
                   </div>
                 </div>
@@ -1462,7 +1771,7 @@ export default function DashboardPage() {
                 {/* Fila 2: Tarjetas Adicionales (Visibles solo si showMoreDetails es true) */}
                 {showMoreDetails && (
                   <>
-                    {/* Card 5: Ingresos Brutos (Detalle - Col 1) */}
+                    {/* Card 5: Ingresos Brutos (Detalle - Col 1: debajo de Ventas Netas) */}
                     <div className="glass-card" style={{ padding: '0.9rem 1.05rem', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', minHeight: '118px' }}>
                       <div>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.35rem', gap: '0.25rem' }}>
@@ -1476,7 +1785,7 @@ export default function DashboardPage() {
                         </div>
                       </div>
                       <div style={{ fontSize: '0.71rem', color: 'var(--text-dim)', marginTop: '0.45rem', lineHeight: '1.3' }}>
-                        <div>vs. B: {formatCurrency(kpis?.grossRevenue?.previousNio || 0, kpis?.grossRevenue?.previousUsd || 0)} | C: {formatCurrency(kpis?.grossRevenue?.previous2Nio || 0, kpis?.grossRevenue?.previous2Usd || 0)}</div>
+                        <div>vs. <span style={{ color: '#a5b4fc', fontWeight: 600 }}>B:</span> {formatCurrency(kpis?.grossRevenue?.previousNio || 0, kpis?.grossRevenue?.previousUsd || 0)} | <span style={{ color: '#38bdf8', fontWeight: 600 }}>C:</span> {formatCurrency(kpis?.grossRevenue?.previous2Nio || 0, kpis?.grossRevenue?.previous2Usd || 0)}</div>
                         <div style={{ opacity: 0.65, fontSize: '0.66rem' }}>(100% órdenes registradas)</div>
                       </div>
                     </div>
@@ -1495,7 +1804,7 @@ export default function DashboardPage() {
                         </div>
                       </div>
                       <div style={{ fontSize: '0.71rem', color: 'var(--text-dim)', marginTop: '0.45rem', lineHeight: '1.3' }}>
-                        <div>vs. B: {(kpis?.invoicedOrders?.previous || 0).toLocaleString()} | C: {(kpis?.invoicedOrders?.previous2 || 0).toLocaleString()} fact.</div>
+                        <div>vs. <span style={{ color: '#a5b4fc', fontWeight: 600 }}>B:</span> {(kpis?.invoicedOrders?.previous || 0).toLocaleString()} | <span style={{ color: '#38bdf8', fontWeight: 600 }}>C:</span> {(kpis?.invoicedOrders?.previous2 || 0).toLocaleString()} fact.</div>
                         <div style={{ color: '#34d399', opacity: 0.85, fontSize: '0.66rem' }}>
                           ({kpis?.totalOrders?.current > 0 ? ((kpis?.invoicedOrders?.current / kpis?.totalOrders?.current) * 100).toFixed(1) : 0}% del total)
                         </div>
@@ -1516,7 +1825,7 @@ export default function DashboardPage() {
                         </div>
                       </div>
                       <div style={{ fontSize: '0.71rem', color: 'var(--text-dim)', marginTop: '0.45rem', lineHeight: '1.3' }}>
-                        <div>vs. B: {formatCurrency(kpis?.canceledRevenue?.previousNio || 0, kpis?.canceledRevenue?.previousUsd || 0)} | C: {formatCurrency(kpis?.canceledRevenue?.previous2Nio || 0, kpis?.canceledRevenue?.previous2Usd || 0)}</div>
+                        <div>vs. <span style={{ color: '#a5b4fc', fontWeight: 600 }}>B:</span> {formatCurrency(kpis?.canceledRevenue?.previousNio || 0, kpis?.canceledRevenue?.previousUsd || 0)} | <span style={{ color: '#38bdf8', fontWeight: 600 }}>C:</span> {formatCurrency(kpis?.canceledRevenue?.previous2Nio || 0, kpis?.canceledRevenue?.previous2Usd || 0)}</div>
                         <div style={{ color: '#fb7185', opacity: 0.85, fontSize: '0.66rem' }}>({kpis?.totalOrders?.canceledCurrent || 0} órdenes canceladas)</div>
                       </div>
                     </div>
@@ -1535,7 +1844,7 @@ export default function DashboardPage() {
                         </div>
                       </div>
                       <div style={{ fontSize: '0.71rem', color: 'var(--text-dim)', marginTop: '0.45rem', lineHeight: '1.3' }}>
-                        <div>vs. B: {formatCurrency(kpis?.grossAvgTicket?.previousNio || 0, kpis?.grossAvgTicket?.previousUsd || 0)} | C: {formatCurrency(kpis?.grossAvgTicket?.previous2Nio || 0, kpis?.grossAvgTicket?.previous2Usd || 0)}</div>
+                        <div>vs. <span style={{ color: '#a5b4fc', fontWeight: 600 }}>B:</span> {formatCurrency(kpis?.grossAvgTicket?.previousNio || 0, kpis?.grossAvgTicket?.previousUsd || 0)} | <span style={{ color: '#38bdf8', fontWeight: 600 }}>C:</span> {formatCurrency(kpis?.grossAvgTicket?.previous2Nio || 0, kpis?.grossAvgTicket?.previous2Usd || 0)}</div>
                         <div style={{ opacity: 0.65, fontSize: '0.66rem' }}>(Basado en 100% órdenes)</div>
                       </div>
                     </div>
@@ -1562,7 +1871,7 @@ export default function DashboardPage() {
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', flexWrap: 'wrap', gap: '0.5rem' }}>
                   <h3 style={{ fontSize: '0.92rem', fontWeight: 700, color: '#ffffff', display: 'flex', alignItems: 'flex-start', gap: '0.4rem', lineHeight: 1.35 }}>
                     <Share2 size={18} color="var(--accent-primary)" style={{ flexShrink: 0, marginTop: '2px' }} />
-                    <span>Ventas por Canal: <strong>{periods?.current?.label}</strong> vs. <strong>{periods?.previous?.label}</strong> vs. <strong>{periods?.previous2?.label}</strong></span>
+                    <span>Ventas por Canal: <strong style={{ color: '#34d399' }}>{periods?.current?.label}</strong> vs. <strong style={{ color: '#a5b4fc' }}>{periods?.previous?.label}</strong> vs. <strong style={{ color: '#38bdf8' }}>{periods?.previous2?.label}</strong></span>
                   </h3>
                 </div>
 
@@ -1610,14 +1919,14 @@ export default function DashboardPage() {
                   <div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', fontSize: '0.76rem', marginBottom: '0.2rem', gap: '0.5rem' }}>
                       <span style={{ color: 'var(--text-dim)', flex: 1 }}>
-                        <strong style={{ color: '#34d399' }}>{periods?.previous2?.label}:</strong> {channels?.socialSelling?.previous2?.netCount || 0} órdenes aprobadas <span style={{ opacity: 0.75, fontSize: '0.72rem' }}>({channels?.socialSelling?.previous2?.grossCount || 0} tot / {channels?.socialSelling?.previous2?.canceledCount || 0} canc)</span>
+                        <strong style={{ color: '#38bdf8' }}>{periods?.previous2?.label}:</strong> {channels?.socialSelling?.previous2?.netCount || 0} órdenes aprobadas <span style={{ opacity: 0.75, fontSize: '0.72rem' }}>({channels?.socialSelling?.previous2?.grossCount || 0} tot / {channels?.socialSelling?.previous2?.canceledCount || 0} canc)</span>
                       </span>
                       <span style={{ color: 'var(--text-dim)', fontWeight: 600, whiteSpace: 'nowrap', flexShrink: 0, textAlign: 'right' }}>
                         {channels?.socialSelling?.previous2?.pct || 0}% ({formatCurrency(channels?.socialSelling?.previous2?.netRevenueNio || channels?.socialSelling?.previous2?.revenueNio || 0, channels?.socialSelling?.previous2?.netRevenueUsd || channels?.socialSelling?.previous2?.revenueUsd || 0)})
                       </span>
                     </div>
                     <div style={{ width: '100%', height: '6px', borderRadius: '3px', background: 'rgba(255, 255, 255, 0.05)', overflow: 'hidden' }}>
-                      <div style={{ width: `${channels?.socialSelling?.previous2?.pct || 0}%`, height: '100%', background: 'rgba(52, 211, 153, 0.45)', borderRadius: '3px', transition: 'width 0.6s ease' }} />
+                      <div style={{ width: `${channels?.socialSelling?.previous2?.pct || 0}%`, height: '100%', background: 'rgba(56, 189, 248, 0.45)', borderRadius: '3px', transition: 'width 0.6s ease' }} />
                     </div>
                   </div>
                 </div>
@@ -1635,14 +1944,14 @@ export default function DashboardPage() {
                   <div style={{ marginBottom: '0.65rem' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', fontSize: '0.76rem', marginBottom: '0.2rem', gap: '0.5rem' }}>
                       <span style={{ color: 'var(--text-muted)', flex: 1 }}>
-                        <strong style={{ color: '#38bdf8' }}>{periods?.current?.label}:</strong> {channels?.webDirect?.current?.netCount || 0} órdenes aprobadas <span style={{ opacity: 0.75, fontSize: '0.72rem' }}>({channels?.webDirect?.current?.grossCount || 0} tot / {channels?.webDirect?.current?.canceledCount || 0} canc)</span>
+                        <strong style={{ color: '#34d399' }}>{periods?.current?.label}:</strong> {channels?.webDirect?.current?.netCount || 0} órdenes aprobadas <span style={{ opacity: 0.75, fontSize: '0.72rem' }}>({channels?.webDirect?.current?.grossCount || 0} tot / {channels?.webDirect?.current?.canceledCount || 0} canc)</span>
                       </span>
-                      <span style={{ color: '#38bdf8', fontWeight: 700, whiteSpace: 'nowrap', flexShrink: 0, textAlign: 'right' }}>
+                      <span style={{ color: '#34d399', fontWeight: 700, whiteSpace: 'nowrap', flexShrink: 0, textAlign: 'right' }}>
                         {channels?.webDirect?.current?.pct || 0}% ({formatCurrency(channels?.webDirect?.current?.netRevenueNio || channels?.webDirect?.current?.revenueNio || 0, channels?.webDirect?.current?.netRevenueUsd || channels?.webDirect?.current?.revenueUsd || 0)})
                       </span>
                     </div>
                     <div style={{ width: '100%', height: '8px', borderRadius: '4px', background: 'rgba(255, 255, 255, 0.08)', overflow: 'hidden' }}>
-                      <div style={{ width: `${channels?.webDirect?.current?.pct || 0}%`, height: '100%', background: 'linear-gradient(to right, #38bdf8, #0284c7)', borderRadius: '4px', transition: 'width 0.6s ease' }} />
+                      <div style={{ width: `${channels?.webDirect?.current?.pct || 0}%`, height: '100%', background: 'linear-gradient(to right, #34d399, #059669)', borderRadius: '4px', transition: 'width 0.6s ease' }} />
                     </div>
 
                   </div>
@@ -1666,14 +1975,14 @@ export default function DashboardPage() {
                   <div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', fontSize: '0.76rem', marginBottom: '0.2rem', gap: '0.5rem' }}>
                       <span style={{ color: 'var(--text-dim)', flex: 1 }}>
-                        <strong style={{ color: '#34d399' }}>{periods?.previous2?.label}:</strong> {channels?.webDirect?.previous2?.netCount || 0} órdenes aprobadas <span style={{ opacity: 0.75, fontSize: '0.72rem' }}>({channels?.webDirect?.previous2?.grossCount || 0} tot / {channels?.webDirect?.previous2?.canceledCount || 0} canc)</span>
+                        <strong style={{ color: '#38bdf8' }}>{periods?.previous2?.label}:</strong> {channels?.webDirect?.previous2?.netCount || 0} órdenes aprobadas <span style={{ opacity: 0.75, fontSize: '0.72rem' }}>({channels?.webDirect?.previous2?.grossCount || 0} tot / {channels?.webDirect?.previous2?.canceledCount || 0} canc)</span>
                       </span>
                       <span style={{ color: 'var(--text-dim)', fontWeight: 600, whiteSpace: 'nowrap', flexShrink: 0, textAlign: 'right' }}>
                         {channels?.webDirect?.previous2?.pct || 0}% ({formatCurrency(channels?.webDirect?.previous2?.netRevenueNio || channels?.webDirect?.previous2?.revenueNio || 0, channels?.webDirect?.previous2?.netRevenueUsd || channels?.webDirect?.previous2?.revenueUsd || 0)})
                       </span>
                     </div>
                     <div style={{ width: '100%', height: '6px', borderRadius: '3px', background: 'rgba(255, 255, 255, 0.05)', overflow: 'hidden' }}>
-                      <div style={{ width: `${channels?.webDirect?.previous2?.pct || 0}%`, height: '100%', background: 'rgba(52, 211, 153, 0.45)', borderRadius: '3px', transition: 'width 0.6s ease' }} />
+                      <div style={{ width: `${channels?.webDirect?.previous2?.pct || 0}%`, height: '100%', background: 'rgba(56, 189, 248, 0.45)', borderRadius: '3px', transition: 'width 0.6s ease' }} />
                     </div>
                   </div>
                 </div>
@@ -1743,6 +2052,13 @@ export default function DashboardPage() {
               </div>
 
             </div>
+
+            {/* SECCIÓN DE HISTÓRICO ACUMULADO DE VENTAS ANUAL (YTD) */}
+            <HistoricalTrendChart
+              formatCurrency={formatCurrency}
+              currencyMode={currencyMode}
+              bcnRate={data?.bcnExchangeRate || 36.6243}
+            />
 
           </>
         )}

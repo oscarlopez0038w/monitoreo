@@ -65,7 +65,7 @@ export async function POST(request) {
       const chunk = skuIdList.slice(i, i + BATCH_SIZE);
       const { data, error } = await supabaseAdmin
         .from('vtex_skus')
-        .select('id, name, base_price, list_price, is_active')
+        .select('id, name, base_price, list_price, final_price, promo_name, discount_pct, is_active')
         .in('id', chunk);
 
       if (error) {
@@ -77,7 +77,7 @@ export async function POST(request) {
       }
     }
 
-    // 3. Comparar Precio Xstore Facturación vs. Precio Final Web (base_price)
+    // 3. Comparar Precio Xstore Facturación vs. Precio Final Web Real (final_price ?? base_price)
     const comparisonResults = [];
     let matchCount = 0;
     let mismatchCount = 0;
@@ -96,6 +96,10 @@ export async function POST(request) {
           description: productName,
           xstorePrice: item.xstorePrice,
           webFinalPrice: null,
+          basePrice: null,
+          listPrice: null,
+          promoName: null,
+          discountPct: null,
           diffAmount: null,
           diffPercent: null,
           status: 'NOT_FOUND',
@@ -105,7 +109,19 @@ export async function POST(request) {
         continue;
       }
 
-      const webFinalPrice = dbRow.base_price != null ? Number(dbRow.base_price) : 0;
+      // El precio final real de venta en la web considera promociones activas (final_price).
+      // Si no tiene final_price, toma base_price (o list_price como último recurso).
+      let webFinalPrice = null;
+      if (dbRow.final_price !== null && dbRow.final_price !== undefined) {
+        webFinalPrice = Number(dbRow.final_price);
+      } else if (dbRow.base_price !== null && dbRow.base_price !== undefined) {
+        webFinalPrice = Number(dbRow.base_price);
+      } else if (dbRow.list_price !== null && dbRow.list_price !== undefined) {
+        webFinalPrice = Number(dbRow.list_price);
+      } else {
+        webFinalPrice = 0;
+      }
+
       const diffAmount = webFinalPrice - item.xstorePrice;
       const absDiff = Math.abs(diffAmount);
 
@@ -117,6 +133,10 @@ export async function POST(request) {
           description: productName,
           xstorePrice: item.xstorePrice,
           webFinalPrice,
+          basePrice: dbRow.base_price != null ? Number(dbRow.base_price) : null,
+          listPrice: dbRow.list_price != null ? Number(dbRow.list_price) : null,
+          promoName: dbRow.promo_name || null,
+          discountPct: dbRow.discount_pct != null ? Number(dbRow.discount_pct) : null,
           diffAmount: 0,
           diffPercent: 0,
           status: 'MATCH',
@@ -134,6 +154,10 @@ export async function POST(request) {
             description: productName,
             xstorePrice: item.xstorePrice,
             webFinalPrice,
+            basePrice: dbRow.base_price != null ? Number(dbRow.base_price) : null,
+            listPrice: dbRow.list_price != null ? Number(dbRow.list_price) : null,
+            promoName: dbRow.promo_name || null,
+            discountPct: dbRow.discount_pct != null ? Number(dbRow.discount_pct) : null,
             diffAmount,
             diffPercent,
             status: 'MISMATCH_HIGHER',
@@ -147,6 +171,10 @@ export async function POST(request) {
             description: productName,
             xstorePrice: item.xstorePrice,
             webFinalPrice,
+            basePrice: dbRow.base_price != null ? Number(dbRow.base_price) : null,
+            listPrice: dbRow.list_price != null ? Number(dbRow.list_price) : null,
+            promoName: dbRow.promo_name || null,
+            discountPct: dbRow.discount_pct != null ? Number(dbRow.discount_pct) : null,
             diffAmount,
             diffPercent,
             status: 'MISMATCH_LOWER',

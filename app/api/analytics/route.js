@@ -58,7 +58,7 @@ async function fetchAllPeriodOrders(startIso, endIso) {
 }
 
 // Función para consultar los detalles de las órdenes en lotes concurrentes y calcular analítica completa de Marketing & Social Selling
-async function analyzePeriodMarketingDetails(orders) {
+async function analyzePeriodMarketingDetails(orders, exactRange = null) {
   let grossSocialCount = 0;
   let grossSocialRevenue = 0;
   let canceledSocialCount = 0;
@@ -85,11 +85,14 @@ async function analyzePeriodMarketingDetails(orders) {
     freeFreightCount: 0,
   };
 
+  const socialOrderIds = new Set();
+
   if (!orders || orders.length === 0) {
     return {
       social: { grossCount: 0, grossRevenue: 0, canceledCount: 0, canceledRevenue: 0, netCount: 0, netRevenue: 0 },
       web: { grossCount: 0, grossRevenue: 0, canceledCount: 0, canceledRevenue: 0, netCount: 0, netRevenue: 0 },
       marketing: { utmCampaigns: [], utmSources: [], couponsList: [], vtexPromotions: [], logisticsSummary },
+      socialOrderIds,
     };
   }
 
@@ -183,6 +186,18 @@ async function analyzePeriodMarketingDetails(orders) {
       const utmi = mkt.utmiCampaign || detail?.utmiCampaign || mkt.utmicampaign;
       const mTags = mkt.marketingTags || detail?.marketingTags || [];
       const hasSocialTag = (Array.isArray(mTags) && mTags.includes('vtexSocialSelling')) || Boolean(utmi && String(utmi).trim().length > 0);
+
+      if (hasSocialTag) {
+        socialOrderIds.add(origOrder.orderId);
+      }
+
+      // Si se proporcionó exactRange, filtrar las órdenes fuera de rango para métricas KPI y marketing
+      if (exactRange && origOrder.creationDate) {
+        const oTime = new Date(origOrder.creationDate).getTime();
+        if (oTime < new Date(exactRange.start).getTime() || oTime > new Date(exactRange.end).getTime()) {
+          return;
+        }
+      }
 
       if (hasSocialTag) {
         grossSocialCount++;
@@ -315,6 +330,7 @@ async function analyzePeriodMarketingDetails(orders) {
         freeFreightCount: logisticsSummary.freeFreightCount,
       },
     },
+    socialOrderIds,
   };
 }
 
@@ -547,9 +563,9 @@ export async function GET(request) {
     const prev2CancelRate = prev2TotalOrders > 0 ? (prev2CanceledCount / prev2TotalOrders) * 100 : 0;
 
     const [currAnalysis, prevAnalysis, prev2Analysis] = await Promise.all([
-      analyzePeriodMarketingDetails(currOrders),
-      analyzePeriodMarketingDetails(prevOrdersExact),
-      analyzePeriodMarketingDetails(prev2OrdersExact),
+      analyzePeriodMarketingDetails(chartOrders, { start: currentStartIso, end: currentEndIso }),
+      analyzePeriodMarketingDetails(prevOrders, { start: prevStartIso, end: prevEndIso }),
+      analyzePeriodMarketingDetails(prev2Orders, { start: prev2StartIso, end: prev2EndIso }),
     ]);
 
     const BCN_EXCHANGE_RATE = 36.6243;
@@ -570,14 +586,22 @@ export async function GET(request) {
         totalOrders: 0,
         approvedOrders: 0,
         canceledOrders: 0,
+        webOrders: 0,
+        socialOrders: 0,
         grossSalesNio: 0,
         grossSalesUsd: 0,
         salesNio: 0,
         salesUsd: 0,
+        webSalesNio: 0,
+        webSalesUsd: 0,
+        socialSalesNio: 0,
+        socialSalesUsd: 0,
         refundsNio: 0,
         refundsUsd: 0,
         avgTicketNio: 0,
         avgTicketUsd: 0,
+        webAvgTicketNio: 0,
+        webAvgTicketUsd: 0,
         grossAvgTicketNio: 0,
         grossAvgTicketUsd: 0,
       };
@@ -592,6 +616,7 @@ export async function GET(request) {
       if (dailyMap[dayStr]) {
         const valNio = o.totalValue ? o.totalValue / 100 : 0;
         const valUsd = valNio / BCN_EXCHANGE_RATE;
+        const isSocial = currAnalysis.socialOrderIds ? currAnalysis.socialOrderIds.has(o.orderId) : false;
 
         dailyMap[dayStr].totalOrders += 1;
         dailyMap[dayStr].grossSalesNio += valNio;
@@ -605,6 +630,16 @@ export async function GET(request) {
           dailyMap[dayStr].approvedOrders += 1;
           dailyMap[dayStr].salesNio += valNio;
           dailyMap[dayStr].salesUsd += valUsd;
+
+          if (isSocial) {
+            dailyMap[dayStr].socialOrders += 1;
+            dailyMap[dayStr].socialSalesNio += valNio;
+            dailyMap[dayStr].socialSalesUsd += valUsd;
+          } else {
+            dailyMap[dayStr].webOrders += 1;
+            dailyMap[dayStr].webSalesNio += valNio;
+            dailyMap[dayStr].webSalesUsd += valUsd;
+          }
         }
       }
     });
@@ -617,7 +652,18 @@ export async function GET(request) {
       const dayNum = d.getDate();
       const monthNamesShort = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
       const dayLabel = `${String(dayNum).padStart(2, '0')} ${monthNamesShort[d.getMonth()]}`;
-      dailyMapB[dayStr] = { date: dayStr, dayNum, dayLabel, salesNio: 0, salesUsd: 0, approvedOrders: 0 };
+      dailyMapB[dayStr] = {
+        date: dayStr,
+        dayNum,
+        dayLabel,
+        salesNio: 0,
+        salesUsd: 0,
+        webSalesNio: 0,
+        webSalesUsd: 0,
+        socialSalesNio: 0,
+        socialSalesUsd: 0,
+        approvedOrders: 0,
+      };
     }
     prevOrders.forEach((o) => {
       if (!o.creationDate) return;
@@ -627,9 +673,19 @@ export async function GET(request) {
       if (dailyMapB[dayStr] && o.status !== 'canceled') {
         const valNio = o.totalValue ? o.totalValue / 100 : 0;
         const valUsd = valNio / BCN_EXCHANGE_RATE;
+        const isSocial = prevAnalysis.socialOrderIds ? prevAnalysis.socialOrderIds.has(o.orderId) : false;
+
         dailyMapB[dayStr].approvedOrders += 1;
         dailyMapB[dayStr].salesNio += valNio;
         dailyMapB[dayStr].salesUsd += valUsd;
+
+        if (isSocial) {
+          dailyMapB[dayStr].socialSalesNio += valNio;
+          dailyMapB[dayStr].socialSalesUsd += valUsd;
+        } else {
+          dailyMapB[dayStr].webSalesNio += valNio;
+          dailyMapB[dayStr].webSalesUsd += valUsd;
+        }
       }
     });
 
@@ -641,7 +697,18 @@ export async function GET(request) {
       const dayNum = d.getDate();
       const monthNamesShort = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
       const dayLabel = `${String(dayNum).padStart(2, '0')} ${monthNamesShort[d.getMonth()]}`;
-      dailyMapC[dayStr] = { date: dayStr, dayNum, dayLabel, salesNio: 0, salesUsd: 0, approvedOrders: 0 };
+      dailyMapC[dayStr] = {
+        date: dayStr,
+        dayNum,
+        dayLabel,
+        salesNio: 0,
+        salesUsd: 0,
+        webSalesNio: 0,
+        webSalesUsd: 0,
+        socialSalesNio: 0,
+        socialSalesUsd: 0,
+        approvedOrders: 0,
+      };
     }
     prev2Orders.forEach((o) => {
       if (!o.creationDate) return;
@@ -651,9 +718,19 @@ export async function GET(request) {
       if (dailyMapC[dayStr] && o.status !== 'canceled') {
         const valNio = o.totalValue ? o.totalValue / 100 : 0;
         const valUsd = valNio / BCN_EXCHANGE_RATE;
+        const isSocial = prev2Analysis.socialOrderIds ? prev2Analysis.socialOrderIds.has(o.orderId) : false;
+
         dailyMapC[dayStr].approvedOrders += 1;
         dailyMapC[dayStr].salesNio += valNio;
         dailyMapC[dayStr].salesUsd += valUsd;
+
+        if (isSocial) {
+          dailyMapC[dayStr].socialSalesNio += valNio;
+          dailyMapC[dayStr].socialSalesUsd += valUsd;
+        } else {
+          dailyMapC[dayStr].webSalesNio += valNio;
+          dailyMapC[dayStr].webSalesUsd += valUsd;
+        }
       }
     });
 
@@ -662,10 +739,12 @@ export async function GET(request) {
     const listC = Object.values(dailyMapC).sort((a, b) => (a.date > b.date ? 1 : -1));
 
     const dailyBreakdown = listA.map((dA, idx) => {
-      const dB = listB[idx] || { salesNio: 0, salesUsd: 0, approvedOrders: 0, dayLabel: '' };
-      const dC = listC[idx] || { salesNio: 0, salesUsd: 0, approvedOrders: 0, dayLabel: '' };
+      const dB = listB[idx] || { salesNio: 0, salesUsd: 0, webSalesNio: 0, webSalesUsd: 0, approvedOrders: 0, dayLabel: '' };
+      const dC = listC[idx] || { salesNio: 0, salesUsd: 0, webSalesNio: 0, webSalesUsd: 0, approvedOrders: 0, dayLabel: '' };
       const avgN = dA.approvedOrders > 0 ? dA.salesNio / dA.approvedOrders : 0;
       const avgU = dA.approvedOrders > 0 ? dA.salesUsd / dA.approvedOrders : 0;
+      const webAvgN = dA.webOrders > 0 ? dA.webSalesNio / dA.webOrders : 0;
+      const webAvgU = dA.webOrders > 0 ? dA.webSalesUsd / dA.webOrders : 0;
       const grossAvgN = dA.totalOrders > 0 ? dA.grossSalesNio / dA.totalOrders : 0;
       const grossAvgU = dA.totalOrders > 0 ? dA.grossSalesUsd / dA.totalOrders : 0;
       return {
@@ -674,17 +753,29 @@ export async function GET(request) {
         grossSalesUsd: parseFloat(dA.grossSalesUsd.toFixed(2)),
         salesNio: parseFloat(dA.salesNio.toFixed(2)),
         salesUsd: parseFloat(dA.salesUsd.toFixed(2)),
+        webSalesNio: parseFloat((dA.webSalesNio || 0).toFixed(2)),
+        webSalesUsd: parseFloat((dA.webSalesUsd || 0).toFixed(2)),
+        socialSalesNio: parseFloat((dA.socialSalesNio || 0).toFixed(2)),
+        socialSalesUsd: parseFloat((dA.socialSalesUsd || 0).toFixed(2)),
+        webOrders: dA.webOrders || 0,
+        socialOrders: dA.socialOrders || 0,
         refundsNio: parseFloat(dA.refundsNio.toFixed(2)),
         refundsUsd: parseFloat(dA.refundsUsd.toFixed(2)),
         avgTicketNio: parseFloat(avgN.toFixed(2)),
         avgTicketUsd: parseFloat(avgU.toFixed(2)),
+        webAvgTicketNio: parseFloat(webAvgN.toFixed(2)),
+        webAvgTicketUsd: parseFloat(webAvgU.toFixed(2)),
         grossAvgTicketNio: parseFloat(grossAvgN.toFixed(2)),
         grossAvgTicketUsd: parseFloat(grossAvgU.toFixed(2)),
         salesNioB: parseFloat((dB.salesNio || 0).toFixed(2)),
         salesUsdB: parseFloat((dB.salesUsd || 0).toFixed(2)),
+        webSalesNioB: parseFloat((dB.webSalesNio || 0).toFixed(2)),
+        webSalesUsdB: parseFloat((dB.webSalesUsd || 0).toFixed(2)),
         dayLabelB: dB.dayLabel || '',
         salesNioC: parseFloat((dC.salesNio || 0).toFixed(2)),
         salesUsdC: parseFloat((dC.salesUsd || 0).toFixed(2)),
+        webSalesNioC: parseFloat((dC.webSalesNio || 0).toFixed(2)),
+        webSalesUsdC: parseFloat((dC.webSalesUsd || 0).toFixed(2)),
         dayLabelC: dC.dayLabel || '',
       };
     });

@@ -817,8 +817,8 @@ export default function PricesTable() {
                       <td style={{ padding: '0.6rem 0.75rem', textAlign: 'right', fontFamily: 'var(--font-mono)', fontWeight: 700, color: '#34d399', fontSize: '0.88rem' }}>
                         {effectiveFinalPrice !== null ? `C$ ${effectiveFinalPrice.toLocaleString('es-NI', { minimumFractionDigits: 2 })}` : '—'}
                         {hasExtraPromoDiscount && (
-                          <span style={{ display: 'block', fontSize: '0.68rem', color: '#ec4899', fontWeight: 600 }}>
-                            ↓ Descuento Checkout
+                          <span style={{ display: 'block', fontSize: '0.68rem', color: sku.promoName ? '#c084fc' : '#ec4899', fontWeight: 600 }}>
+                            {sku.promoName ? '↓ Promo Web' : '↓ Descuento Checkout'}
                           </span>
                         )}
                       </td>
