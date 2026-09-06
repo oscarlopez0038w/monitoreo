@@ -58,8 +58,12 @@ export default function AbandonedCartsPanel() {
     totalValue: 0,
     avgValue: 0,
     count: 0,
+    realAbandonedCount: 0,
+    realAbandonedTotalValue: 0,
     convertedCount: 0,
     convertedTotalValue: 0,
+    totalPeriodCount: 0,
+    totalPeriodValue: 0,
   });
 
   // Moneda: 'NIO' (C$) o 'USD' ($)
@@ -152,7 +156,19 @@ export default function AbandonedCartsPanel() {
       if (data.success) {
         setCarts(data.carts || []);
         setPagination(data.pagination || { page: 1, pageSize: 15, total: 0, totalPages: 1 });
-        setSummary(data.summary || { totalValue: 0, avgValue: 0, count: 0, convertedCount: 0, convertedTotalValue: 0 });
+        setSummary(
+          data.summary || {
+            totalValue: 0,
+            avgValue: 0,
+            count: 0,
+            realAbandonedCount: 0,
+            realAbandonedTotalValue: 0,
+            convertedCount: 0,
+            convertedTotalValue: 0,
+            totalPeriodCount: 0,
+            totalPeriodValue: 0,
+          }
+        );
         if (data.stages) {
           setStages(data.stages);
         }
@@ -720,7 +736,9 @@ export default function AbandonedCartsPanel() {
         >
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <span style={{ fontSize: '0.82rem', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-              Carritos Abandonados Reales
+              {stageFilter !== 'all' && stageFilter !== 'converted'
+                ? 'Carritos en esta Etapa'
+                : 'Carritos Abandonados Reales'}
             </span>
             <div style={{ padding: '0.45rem', borderRadius: '10px', background: 'rgba(244, 63, 94, 0.15)', color: '#fb7185', display: 'flex', alignItems: 'center', gap: '6px' }}>
               <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#f43f5e', animation: 'pulse 1.5s infinite' }} />
@@ -728,11 +746,24 @@ export default function AbandonedCartsPanel() {
             </div>
           </div>
           <div style={{ fontSize: '2rem', fontWeight: 800, color: '#fb7185', letterSpacing: '-0.03em' }}>
-            {loading ? '...' : pagination.total.toLocaleString()}
+            {loading
+              ? '...'
+              : (stageFilter !== 'all'
+                  ? pagination.total
+                  : (summary.realAbandonedCount ?? pagination.total)
+                ).toLocaleString()}
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.78rem', color: '#94a3b8' }}>
             <Flame size={14} color="#f43f5e" />
-            <span>Excluyendo compras concretadas</span>
+            {stageFilter !== 'all' ? (
+              <span>Filtrando por etapa seleccionada ({pagination.total} en lista)</span>
+            ) : excludePurchased ? (
+              <span>Excluyendo compras concretadas</span>
+            ) : (
+              <span>
+                Mostrando {pagination.total} en lista ({summary.realAbandonedCount || 0} abandonos + {summary.convertedCount || 0} compras)
+              </span>
+            )}
           </div>
         </div>
 
