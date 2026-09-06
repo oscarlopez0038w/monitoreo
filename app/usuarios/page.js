@@ -413,6 +413,70 @@ export default function UsersManagementPage() {
   // Agrupar permisos por categoría
   const permissionCategories = Array.from(new Set(permissions.map((p) => p.category || 'General')));
 
+  // Formateador de última actividad / conexión
+  const renderLastActivity = (dateStr) => {
+    if (!dateStr) {
+      return <span style={{ color: '#64748b', fontSize: '0.78rem' }}>Sin actividad reciente</span>;
+    }
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) {
+      return <span style={{ color: '#64748b', fontSize: '0.78rem' }}>Sin actividad reciente</span>;
+    }
+
+    const minutesAgo = Math.max(0, Math.floor((Date.now() - d.getTime()) / 60000));
+    const fullDate = d.toLocaleString('es-NI');
+
+    if (minutesAgo < 10) {
+      return (
+        <div
+          title={`Última actividad: ${fullDate}`}
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '6px',
+            padding: '0.22rem 0.6rem',
+            borderRadius: '12px',
+            background: 'rgba(16, 185, 129, 0.15)',
+            border: '1px solid rgba(16, 185, 129, 0.35)',
+            color: '#34d399',
+            fontSize: '0.76rem',
+            fontWeight: 700,
+          }}
+        >
+          <span style={{ width: '7px', height: '7px', borderRadius: '50%', background: '#10b981', boxShadow: '0 0 8px #10b981' }} />
+          <span>En línea ahora</span>
+        </div>
+      );
+    }
+
+    if (minutesAgo < 60) {
+      return (
+        <div title={`Última actividad: ${fullDate}`} style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+          <span style={{ color: '#38bdf8', fontSize: '0.8rem', fontWeight: 600 }}>Hace {minutesAgo} min</span>
+          <span style={{ color: '#64748b', fontSize: '0.72rem' }}>{fullDate}</span>
+        </div>
+      );
+    }
+
+    const hoursAgo = Math.floor(minutesAgo / 60);
+    if (hoursAgo < 24) {
+      return (
+        <div title={`Última actividad: ${fullDate}`} style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+          <span style={{ color: '#e2e8f0', fontSize: '0.8rem', fontWeight: 600 }}>Hoy (Hace {hoursAgo}h)</span>
+          <span style={{ color: '#64748b', fontSize: '0.72rem' }}>{fullDate}</span>
+        </div>
+      );
+    }
+
+    const daysAgo = Math.floor(hoursAgo / 24);
+    return (
+      <div title={`Última actividad: ${fullDate}`} style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+        <span style={{ color: '#94a3b8', fontSize: '0.8rem' }}>{fullDate}</span>
+        <span style={{ color: '#64748b', fontSize: '0.72rem' }}>Hace {daysAgo} día{daysAgo > 1 ? 's' : ''}</span>
+      </div>
+    );
+  };
+
   return (
     <AppLayout>
       <div style={{ maxWidth: '1400px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
@@ -702,7 +766,7 @@ export default function UsersManagementPage() {
                       <th style={{ padding: '1rem 1.25rem' }}>Usuario / Correo</th>
                       <th style={{ padding: '1rem 1.25rem' }}>Rol Asignado</th>
                       <th style={{ padding: '1rem 1.25rem' }}>Acceso (Estado)</th>
-                      <th style={{ padding: '1rem 1.25rem' }}>Último Login</th>
+                      <th style={{ padding: '1rem 1.25rem' }}>Última Actividad</th>
                       <th style={{ padding: '1rem 1.25rem', textAlign: 'right' }}>Acciones</th>
                     </tr>
                   </thead>
@@ -757,8 +821,8 @@ export default function UsersManagementPage() {
                               </button>
                             </td>
 
-                            <td style={{ padding: '1rem 1.25rem', color: '#94a3b8', fontSize: '0.8rem' }}>
-                              {user.last_login_at ? new Date(user.last_login_at).toLocaleString('es-NI') : 'Sin inicio reciente'}
+                            <td style={{ padding: '1rem 1.25rem' }}>
+                              {renderLastActivity(user.last_login_at)}
                             </td>
 
                             <td style={{ padding: '1rem 1.25rem', textAlign: 'right' }}>
