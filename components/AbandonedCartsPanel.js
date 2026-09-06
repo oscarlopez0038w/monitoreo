@@ -68,9 +68,11 @@ export default function AbandonedCartsPanel() {
   // Filtros principales
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
-  const [periodFilter, setPeriodFilter] = useState('all'); // 'all', '24h', '7d', '30d'
+  const [periodFilter, setPeriodFilter] = useState('today'); // 'today', '24h', '7d', '30d', 'all'
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
+  const [inputStartDate, setInputStartDate] = useState('');
+  const [inputEndDate, setInputEndDate] = useState('');
   const [minValueFilter, setMinValueFilter] = useState(0);
   const [sortBy, setSortBy] = useState('time_desc'); // 'time_desc', 'time_asc', 'value_desc', 'value_asc', 'items_desc'
   const [stageFilter, setStageFilter] = useState('all'); // 'all', 'cart', 'profile', 'shipping', 'payment', 'converted'
@@ -188,6 +190,41 @@ export default function AbandonedCartsPanel() {
     setCopiedKey(key);
     showToast('success', 'Copiado al portapapeles');
     setTimeout(() => setCopiedKey(null), 2000);
+  };
+
+  // Aplicar filtro manual de rango de fechas con validación
+  const handleApplyDateRange = () => {
+    if (!inputStartDate && !inputEndDate) {
+      showToast('info', 'Por favor selecciona al menos una fecha (Desde o Hasta).');
+      return;
+    }
+
+    let finalStart = inputStartDate;
+    let finalEnd = inputEndDate;
+
+    if (finalStart && !finalEnd) {
+      finalEnd = finalStart;
+      setInputEndDate(finalStart);
+    } else if (!finalStart && finalEnd) {
+      finalStart = finalEnd;
+      setInputStartDate(finalEnd);
+    }
+
+    setPeriodFilter('custom');
+    setStartDate(finalStart);
+    setEndDate(finalEnd);
+    setPage(1);
+    showToast('success', `Filtrando carritos del ${finalStart} al ${finalEnd}`);
+  };
+
+  // Limpiar rango de fechas y volver a carritos de hoy
+  const handleClearDateRange = () => {
+    setInputStartDate('');
+    setInputEndDate('');
+    setStartDate('');
+    setEndDate('');
+    setPeriodFilter('today');
+    setPage(1);
   };
 
   // Expandir / colapsar un carrito individual
@@ -733,15 +770,28 @@ export default function AbandonedCartsPanel() {
 
         {/* Card 4: Compras Cruzadas Excluidas (Conversión OMS) */}
         <div
+          onClick={() => {
+            if (stageFilter === 'converted') {
+              setStageFilter('all');
+              setExcludePurchased(true);
+            } else {
+              setStageFilter('converted');
+              setExcludePurchased(false);
+            }
+            setPage(1);
+          }}
+          title="Haz clic para ver o alternar las compras concretadas rescatadas"
           style={{
             background: 'linear-gradient(135deg, rgba(30, 41, 59, 0.7) 0%, rgba(15, 23, 42, 0.8) 100%)',
-            border: '1px solid rgba(16, 185, 129, 0.3)',
+            border: stageFilter === 'converted' ? '2px solid #10b981' : '1px solid rgba(16, 185, 129, 0.3)',
             borderRadius: '16px',
             padding: '1.35rem',
             display: 'flex',
             flexDirection: 'column',
             gap: '0.65rem',
-            boxShadow: '0 4px 20px rgba(16, 185, 129, 0.1)',
+            cursor: 'pointer',
+            transition: 'all 0.2s ease',
+            boxShadow: stageFilter === 'converted' ? '0 0 16px rgba(16, 185, 129, 0.3)' : '0 4px 20px rgba(16, 185, 129, 0.1)',
           }}
         >
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -1089,8 +1139,11 @@ export default function AbandonedCartsPanel() {
             <select
               value={periodFilter}
               onChange={(e) => {
-                setPeriodFilter(e.target.value);
-                if (e.target.value !== 'all') {
+                const val = e.target.value;
+                setPeriodFilter(val);
+                if (val !== 'custom') {
+                  setInputStartDate('');
+                  setInputEndDate('');
                   setStartDate('');
                   setEndDate('');
                 }
@@ -1107,14 +1160,16 @@ export default function AbandonedCartsPanel() {
                 outline: 'none',
               }}
             >
-              <option value="all">Todo el Historial</option>
+              <option value="today">Hoy (Día actual)</option>
               <option value="24h">Últimas 24 Horas</option>
               <option value="7d">Últimos 7 Días</option>
               <option value="30d">Últimos 30 Días</option>
+              <option value="all">Todo el Historial</option>
+              {periodFilter === 'custom' && <option value="custom" disabled hidden>Personalizado</option>}
             </select>
           </div>
 
-          {/* Rango de Fechas Específico (Desde / Hasta) */}
+          {/* Rango de Fechas Específico (Desde / Hasta) con Botón Buscar */}
           <div
             style={{
               display: 'flex',
@@ -1123,18 +1178,15 @@ export default function AbandonedCartsPanel() {
               padding: '0.35rem 0.65rem',
               borderRadius: '10px',
               background: 'rgba(15, 23, 42, 0.85)',
-              border: (startDate || endDate) ? '1px solid rgba(56, 189, 248, 0.5)' : '1px solid rgba(255, 255, 255, 0.12)',
+              border: (startDate || endDate) ? '1px solid rgba(56, 189, 248, 0.6)' : '1px solid rgba(255, 255, 255, 0.12)',
             }}
           >
             <span style={{ fontSize: '0.75rem', color: '#94a3b8', fontWeight: 600 }}>Desde:</span>
             <input
               type="date"
-              value={startDate}
-              onChange={(e) => {
-                setStartDate(e.target.value);
-                setPeriodFilter('all');
-                setPage(1);
-              }}
+              value={inputStartDate}
+              onChange={(e) => setInputStartDate(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleApplyDateRange()}
               style={{
                 background: 'transparent',
                 border: 'none',
@@ -1147,12 +1199,9 @@ export default function AbandonedCartsPanel() {
             <span style={{ fontSize: '0.75rem', color: '#94a3b8', fontWeight: 600 }}>Hasta:</span>
             <input
               type="date"
-              value={endDate}
-              onChange={(e) => {
-                setEndDate(e.target.value);
-                setPeriodFilter('all');
-                setPage(1);
-              }}
+              value={inputEndDate}
+              onChange={(e) => setInputEndDate(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleApplyDateRange()}
               style={{
                 background: 'transparent',
                 border: 'none',
@@ -1162,14 +1211,35 @@ export default function AbandonedCartsPanel() {
                 cursor: 'pointer',
               }}
             />
-            {(startDate || endDate) && (
+
+            {/* Botón Buscar / Aplicar */}
+            <button
+              onClick={handleApplyDateRange}
+              disabled={!inputStartDate && !inputEndDate}
+              title="Buscar carritos en este rango de fechas"
+              style={{
+                background: (inputStartDate || inputEndDate) ? 'linear-gradient(135deg, #0284c7, #0369a1)' : 'rgba(255, 255, 255, 0.08)',
+                color: (inputStartDate || inputEndDate) ? '#fff' : '#64748b',
+                border: 'none',
+                padding: '0.35rem 0.65rem',
+                borderRadius: '7px',
+                fontSize: '0.76rem',
+                fontWeight: 700,
+                cursor: (inputStartDate || inputEndDate) ? 'pointer' : 'not-allowed',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '4px',
+                transition: 'all 0.2s ease',
+              }}
+            >
+              <Search size={12} />
+              <span>Buscar</span>
+            </button>
+
+            {(inputStartDate || inputEndDate || startDate || endDate) && (
               <button
-                onClick={() => {
-                  setStartDate('');
-                  setEndDate('');
-                  setPage(1);
-                }}
-                title="Limpiar fechas"
+                onClick={handleClearDateRange}
+                title="Limpiar fechas y volver a hoy"
                 style={{
                   background: 'transparent',
                   border: 'none',
