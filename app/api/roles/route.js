@@ -117,6 +117,12 @@ export async function GET() {
         category: 'Ventas & Pedidos',
       },
       {
+        code: 'masterdata:view',
+        name: 'Master Data & Carritos Abandonados',
+        description: 'Monitorear entidad CL de VTEX Master Data, carritos abandonados y métricas de recuperación',
+        category: 'Ventas & Pedidos',
+      },
+      {
         code: 'users:manage',
         name: 'Administrar Usuarios, Roles & Permisos',
         description: 'Crear roles personalizados, asignar usuarios y gestionar la matriz interactiva RBAC',

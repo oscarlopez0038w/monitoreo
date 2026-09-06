@@ -21,6 +21,7 @@ const ROUTE_PERMISSIONS = {
   '/publitas': { code: 'publitas:view', name: 'Catálogos & Feed Publitas' },
   '/patrones': { code: 'patrones:view', name: 'Patrones de Compra & Horarios' },
   '/embudo': { code: 'embudo:view', name: 'Embudo de Checkout & Conversión' },
+  '/masterdata': { code: 'masterdata:view', name: 'Master Data & Carritos Abandonados' },
   '/usuarios': { code: 'users:manage', name: 'Administración de Usuarios & Permisos' },
 };
 

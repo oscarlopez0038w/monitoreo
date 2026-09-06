@@ -212,4 +212,31 @@ DROP POLICY IF EXISTS "Permitir acceso total home_showcases" ON public.home_show
 CREATE POLICY "Permitir acceso total home_showcases" ON public.home_showcases FOR ALL USING (true) WITH CHECK (true);
 
 
+-- 7. TABLA DE NOTIFICACIONES Y CORREOS DE CARRITOS ABANDONADOS ENVIADOS
+CREATE TABLE IF NOT EXISTS public.vtex_abandoned_cart_notifications (
+    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+    client_id TEXT NULL,
+    client_email TEXT NOT NULL,
+    first_name TEXT NULL,
+    last_name TEXT NULL,
+    rclastcart TEXT NULL,
+    cart_value NUMERIC(12, 2) DEFAULT 0,
+    currency VARCHAR(10) DEFAULT 'NIO',
+    stage VARCHAR(50) NULL,
+    template VARCHAR(100) DEFAULT 'vtexcommerce-abandoned-cart',
+    payload JSONB NULL,
+    vtex_status INT DEFAULT 200,
+    vtex_response TEXT NULL,
+    sent_by TEXT NULL,
+    sent_by_email TEXT NULL,
+    sent_at TIMESTAMPTZ DEFAULT NOW(),
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
 
+CREATE INDEX IF NOT EXISTS idx_vtex_cart_notif_email ON public.vtex_abandoned_cart_notifications(client_email);
+CREATE INDEX IF NOT EXISTS idx_vtex_cart_notif_client_id ON public.vtex_abandoned_cart_notifications(client_id);
+CREATE INDEX IF NOT EXISTS idx_vtex_cart_notif_sent_at ON public.vtex_abandoned_cart_notifications(sent_at DESC);
+
+ALTER TABLE public.vtex_abandoned_cart_notifications ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Permitir acceso total vtex_abandoned_cart_notifications" ON public.vtex_abandoned_cart_notifications;
+CREATE POLICY "Permitir acceso total vtex_abandoned_cart_notifications" ON public.vtex_abandoned_cart_notifications FOR ALL USING (true) WITH CHECK (true);

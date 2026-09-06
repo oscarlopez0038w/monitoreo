@@ -26,6 +26,7 @@ import {
   Sparkles,
   Package,
   Percent,
+  ShoppingBag,
 } from 'lucide-react';
 
 export default function Sidebar({ vtexStatus, supabaseStatus, mobileOpen, onCloseMobile, newTxCount = 0 }) {
@@ -136,6 +137,13 @@ export default function Sidebar({ vtexStatus, supabaseStatus, mobileOpen, onClos
       icon: CreditCard,
       color: '#f43f5e',
       permission: 'transactions:view',
+    },
+    {
+      label: 'Carritos Abandonados',
+      href: '/masterdata',
+      icon: ShoppingBag,
+      color: '#fb7185',
+      permission: 'masterdata:view',
     },
     {
       label: 'Gestión Usuarios',
