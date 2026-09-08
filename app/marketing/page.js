@@ -27,6 +27,9 @@ export default function MarketingPage() {
   const [period, setPeriod] = useState('current_month');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
+  const [draftStartDate, setDraftStartDate] = useState('');
+  const [draftEndDate, setDraftEndDate] = useState('');
+  const [dateError, setDateError] = useState('');
   const [currency, setCurrency] = useState('USD'); // 'USD' o 'NIO'
   const [exporting, setExporting] = useState(false);
 
@@ -72,6 +75,33 @@ export default function MarketingPage() {
 
     return { sA, eA };
   }, []);
+
+  const handlePeriodChange = (nextPeriod) => {
+    setDateError('');
+    if (nextPeriod === 'custom') {
+      const { sA, eA } = getPeriodDates(period);
+      setStartDate(sA);
+      setEndDate(eA);
+      setDraftStartDate(sA);
+      setDraftEndDate(eA);
+    }
+    setPeriod(nextPeriod);
+  };
+
+  const applyDateRange = (event) => {
+    event.preventDefault();
+    if (!draftStartDate || !draftEndDate) {
+      setDateError('Selecciona la fecha inicial y la fecha final.');
+      return;
+    }
+    if (draftStartDate > draftEndDate) {
+      setDateError('La fecha inicial no puede ser posterior a la fecha final.');
+      return;
+    }
+    setDateError('');
+    setStartDate(draftStartDate);
+    setEndDate(draftEndDate);
+  };
 
   // Cargar datos desde API /api/analytics
   const fetchAnalytics = useCallback(async () => {
@@ -165,7 +195,7 @@ export default function MarketingPage() {
       XLSX.utils.book_append_sheet(wb, wsSources, 'Canales de Origen');
       XLSX.utils.book_append_sheet(wb, wsPromotions, 'Promociones VTEX');
 
-      const fileName = `Reporte_Marketing_SINSA_${data?.periods?.current?.startDateStr || 'Ventas'}.xlsx`;
+      const fileName = `Reporte_Marketing_SINSA_${data?.periods?.current?.start || 'Ventas'}_${data?.periods?.current?.end || ''}.xlsx`;
       XLSX.writeFile(wb, fileName);
     } catch (err) {
       console.error('Error exportando Excel de marketing:', err);
@@ -227,7 +257,8 @@ export default function MarketingPage() {
               <Calendar size={15} color="var(--text-dim)" style={{ marginRight: '0.4rem' }} />
               <select
                 value={period}
-                onChange={(e) => setPeriod(e.target.value)}
+                onChange={(e) => handlePeriodChange(e.target.value)}
+                aria-label="Período del reporte"
                 style={{ background: 'transparent', border: 'none', color: '#ffffff', fontSize: '0.82rem', fontWeight: 600, outline: 'none', cursor: 'pointer' }}
               >
                 <option value="current_month" style={{ background: '#0f172a' }}>Mes Actual (MTD)</option>
@@ -236,8 +267,40 @@ export default function MarketingPage() {
                 <option value="last_7_days" style={{ background: '#0f172a' }}>Últimos 7 Días</option>
                 <option value="last_30_days" style={{ background: '#0f172a' }}>Últimos 30 Días</option>
                 <option value="last_month" style={{ background: '#0f172a' }}>Mes Anterior</option>
+                <option value="custom" style={{ background: '#0f172a' }}>Rango personalizado</option>
               </select>
             </div>
+
+            {period === 'custom' && (
+              <form onSubmit={applyDateRange} style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
+                <label style={{ color: 'var(--text-muted)', fontSize: '0.82rem' }}>
+                  Desde
+                  <input
+                    type="date"
+                    required
+                    value={draftStartDate}
+                    onChange={(e) => { setDraftStartDate(e.target.value); setDateError(''); }}
+                    aria-describedby={dateError ? 'marketing-date-error' : undefined}
+                    style={{ marginLeft: '0.4rem', padding: '0.4rem', borderRadius: '8px', border: '1px solid var(--border-subtle)', background: '#0f172a', color: '#fff', colorScheme: 'dark' }}
+                  />
+                </label>
+                <label style={{ color: 'var(--text-muted)', fontSize: '0.82rem' }}>
+                  Hasta
+                  <input
+                    type="date"
+                    required
+                    value={draftEndDate}
+                    onChange={(e) => { setDraftEndDate(e.target.value); setDateError(''); }}
+                    aria-describedby={dateError ? 'marketing-date-error' : undefined}
+                    style={{ marginLeft: '0.4rem', padding: '0.4rem', borderRadius: '8px', border: '1px solid var(--border-subtle)', background: '#0f172a', color: '#fff', colorScheme: 'dark' }}
+                  />
+                </label>
+                <button type="submit" disabled={loading} className="btn-secondary" style={{ padding: '0.45rem 0.75rem', fontSize: '0.82rem' }}>
+                  Aplicar rango
+                </button>
+                {dateError && <span id="marketing-date-error" role="alert" style={{ width: '100%', color: '#f87171', fontSize: '0.8rem' }}>{dateError}</span>}
+              </form>
+            )}
 
             {/* Switcher Moneda USD / NIO */}
             <div style={{ display: 'flex', background: 'rgba(15, 23, 42, 0.8)', border: '1px solid var(--border-subtle)', borderRadius: '10px', padding: '0.2rem' }}>
