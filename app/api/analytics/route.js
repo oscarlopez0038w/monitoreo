@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server';
 import { isVtexConfigured, fetchVtexOrders, fetchVtexOrderDetail } from '@/lib/vtex';
 import { supabaseAdmin, isSupabaseConfigured } from '@/lib/supabase';
 import { getNicaraguaNow } from '@/lib/dateUtils';
+import { summarizeCancellationReasons } from '@/lib/cancellationStats';
+import { summarizeOrderDistribution } from '@/lib/orderDistribution';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -86,6 +88,7 @@ async function analyzePeriodMarketingDetails(orders, exactRange = null) {
   };
 
   const socialOrderIds = new Set();
+  const cancellationDetails = {};
 
   if (!orders || orders.length === 0) {
     return {
@@ -93,6 +96,7 @@ async function analyzePeriodMarketingDetails(orders, exactRange = null) {
       web: { grossCount: 0, grossRevenue: 0, canceledCount: 0, canceledRevenue: 0, netCount: 0, netRevenue: 0 },
       marketing: { utmCampaigns: [], utmSources: [], couponsList: [], vtexPromotions: [], logisticsSummary },
       socialOrderIds,
+      cancellationDetails,
     };
   }
 
@@ -165,6 +169,7 @@ async function analyzePeriodMarketingDetails(orders, exactRange = null) {
     // Procesar métricas para cada orden
     details.forEach((detail, idx) => {
       const origOrder = batch[idx];
+      if (detail) cancellationDetails[origOrder.orderId] = detail;
       const ordObj = detail || origOrder;
       if (!ordObj) return;
 
@@ -331,6 +336,7 @@ async function analyzePeriodMarketingDetails(orders, exactRange = null) {
       },
     },
     socialOrderIds,
+    cancellationDetails,
   };
 }
 
@@ -798,6 +804,7 @@ export async function GET(request) {
     const labelC = formatFriendlyDateRange(startDateC, endDateC);
 
     const responsePayload = {
+      orderDistribution: summarizeOrderDistribution(currOrders, currAnalysis.cancellationDetails, currAnalysis.socialOrderIds),
       success: true,
       bcnExchangeRate: BCN_EXCHANGE_RATE,
       periods: {
@@ -891,6 +898,7 @@ export async function GET(request) {
           changePct: calcChange(currInvoicedCount, prevInvoicedCount),
         },
         cancelRate: {
+          reasons: summarizeCancellationReasons(currOrders, currAnalysis.cancellationDetails),
           current: parseFloat(currCancelRate.toFixed(1)),
           previous: parseFloat(prevCancelRate.toFixed(1)),
           previous2: parseFloat(prev2CancelRate.toFixed(1)),

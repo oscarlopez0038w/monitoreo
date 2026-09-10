@@ -3,6 +3,8 @@
 import { useState, useEffect, useRef } from 'react';
 import AppLayout from '@/components/AppLayout';
 import HistoricalTrendChart from '@/components/HistoricalTrendChart';
+import OrderDistributionCharts from '@/components/OrderDistributionCharts';
+import CancellationReasonsHover from '@/components/CancellationReasonsHover';
 import { getNicaraguaNow } from '@/lib/dateUtils';
 import * as XLSX from 'xlsx';
 import {
@@ -1731,7 +1733,8 @@ export default function DashboardPage() {
                 </div>
 
                 {/* Card 3: Tasa Cancelación (Principal) */}
-                <div className="glass-card" style={{ padding: '0.9rem 1.05rem', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', minHeight: '118px' }}>
+                <CancellationReasonsHover reasons={kpis?.cancelRate?.reasons}>
+                <div className="glass-card" style={{ flex: 1, padding: '0.9rem 1.05rem', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', minHeight: '118px' }}>
                   <div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.35rem', gap: '0.25rem' }}>
                       <span style={{ fontSize: '0.72rem', color: 'var(--text-dim)', textTransform: 'uppercase', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.3rem', whiteSpace: 'nowrap' }}>
@@ -1749,6 +1752,7 @@ export default function DashboardPage() {
                   </div>
                 </div>
 
+                </CancellationReasonsHover>
                 {/* Card 4: Ticket Promedio Neto (Principal) */}
                 <div className="glass-card" style={{ padding: '0.9rem 1.05rem', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', minHeight: '118px' }}>
                   <div>
@@ -1865,7 +1869,7 @@ export default function DashboardPage() {
             )}
 
             {/* Social Selling vs. Web Direct Breakdown Grid */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', gap: '1.5rem', marginBottom: '1.5rem' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '1.5rem', marginBottom: '1.5rem' }}>
               {/* Channel Attribution: Social Selling vs Web */}
               <div className="glass-card" style={{ padding: '1.25rem' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', flexWrap: 'wrap', gap: '0.5rem' }}>
@@ -1875,6 +1879,7 @@ export default function DashboardPage() {
                   </h3>
                 </div>
 
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 340px), 1fr))', gap: '1.25rem' }}>
                 {/* --- Social Selling Section --- */}
                 <div style={{ marginBottom: '1.25rem', background: 'rgba(52, 211, 153, 0.04)', padding: '0.85rem 0.9rem', borderRadius: '12px', border: '1px solid rgba(52, 211, 153, 0.18)' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem', flexWrap: 'wrap', gap: '0.3rem' }}>
@@ -1987,71 +1992,14 @@ export default function DashboardPage() {
                   </div>
                 </div>
 
+                </div>
                 <p style={{ fontSize: '0.78rem', color: 'var(--text-dim)', lineHeight: '1.5', marginTop: '1rem', borderTop: '1px solid var(--border-subtle)', paddingTop: '0.75rem' }}>
                   💡 <strong style={{ color: '#ffffff' }}>Atribución Estricta</strong>: Clasifica como <strong style={{ color: '#34d399' }}>Social Selling</strong> las órdenes que contienen el parámetro de código de vendedor <code style={{ color: '#34d399' }}>UTM icampaign</code>, y como <strong style={{ color: '#38bdf8' }}>Web Directa</strong> las demás.
                 </p>
               </div>
 
-              {/* Order Status Pipeline Breakdown */}
-              <div className="glass-card" style={{ padding: '1.5rem' }}>
-                <h3 style={{ fontSize: '1rem', fontWeight: 700, color: '#ffffff', marginBottom: '1.25rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                  <Zap size={18} color="var(--accent-amber)" />
-                  Embudo de Cumplimiento de Órdenes (Fulfillment) - {periods?.current?.label}
-                </h3>
-
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
-                  
-                  {/* Invoiced */}
-                  <div style={{ background: 'rgba(52, 211, 153, 0.06)', border: '1px solid rgba(52, 211, 153, 0.25)', padding: '0.85rem 1rem', borderRadius: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-                      <CheckCircle2 size={18} color="#34d399" />
-                      <span style={{ fontSize: '0.88rem', fontWeight: 600, color: '#ffffff' }}>Facturadas (Invoiced)</span>
-                    </div>
-                    <strong style={{ fontSize: '1.1rem', color: '#34d399' }}>{pipeline?.invoiced || 0} <span style={{ fontSize: '0.75rem', fontWeight: 400, color: 'var(--text-muted)' }}>órdenes</span></strong>
-                  </div>
-
-                  {/* Ready for Handling */}
-                  <div style={{ background: 'rgba(56, 189, 248, 0.06)', border: '1px solid rgba(56, 189, 248, 0.25)', padding: '0.85rem 1rem', borderRadius: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-                      <Clock size={18} color="#38bdf8" />
-                      <span style={{ fontSize: '0.88rem', fontWeight: 600, color: '#ffffff' }}>Lista para Preparar (Ready)</span>
-                    </div>
-                    <strong style={{ fontSize: '1.1rem', color: '#38bdf8' }}>{pipeline?.readyForHandling || 0} <span style={{ fontSize: '0.75rem', fontWeight: 400, color: 'var(--text-muted)' }}>órdenes</span></strong>
-                  </div>
-
-                  {/* Handling */}
-                  <div style={{ background: 'rgba(251, 191, 36, 0.06)', border: '1px solid rgba(251, 191, 36, 0.25)', padding: '0.85rem 1rem', borderRadius: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-                      <Clock size={18} color="#fbbf24" />
-                      <span style={{ fontSize: '0.88rem', fontWeight: 600, color: '#ffffff' }}>En Preparación (Handling)</span>
-                    </div>
-                    <strong style={{ fontSize: '1.1rem', color: '#fbbf24' }}>{pipeline?.handling || 0} <span style={{ fontSize: '0.75rem', fontWeight: 400, color: 'var(--text-muted)' }}>órdenes</span></strong>
-                  </div>
-
-                  {/* Other / In Process */}
-                  {Boolean(pipeline?.otherInProcess > 0) && (
-                    <div style={{ background: 'rgba(168, 85, 247, 0.06)', border: '1px solid rgba(168, 85, 247, 0.25)', padding: '0.85rem 1rem', borderRadius: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-                        <Clock size={18} color="#c084fc" />
-                        <span style={{ fontSize: '0.88rem', fontWeight: 600, color: '#ffffff' }}>En Proceso / Verificación</span>
-                      </div>
-                      <strong style={{ fontSize: '1.1rem', color: '#c084fc' }}>{pipeline?.otherInProcess || 0} <span style={{ fontSize: '0.75rem', fontWeight: 400, color: 'var(--text-muted)' }}>órdenes</span></strong>
-                    </div>
-                  )}
-
-                  {/* Canceled */}
-                  <div style={{ background: 'rgba(251, 113, 133, 0.06)', border: '1px solid rgba(251, 113, 133, 0.25)', padding: '0.85rem 1rem', borderRadius: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-                      <AlertTriangle size={18} color="#fb7185" />
-                      <span style={{ fontSize: '0.88rem', fontWeight: 600, color: '#ffffff' }}>Canceladas (Canceled)</span>
-                    </div>
-                    <strong style={{ fontSize: '1.1rem', color: '#fb7185' }}>{pipeline?.canceled || 0} <span style={{ fontSize: '0.75rem', fontWeight: 400, color: 'var(--text-muted)' }}>órdenes</span></strong>
-                  </div>
-
-                </div>
-              </div>
-
             </div>
+            <OrderDistributionCharts distribution={data?.orderDistribution} periodLabel={periods?.current?.label} formatCurrency={formatCurrency} exchangeRate={data?.bcnExchangeRate || 36.6243} />
 
             {/* SECCIÓN DE HISTÓRICO ACUMULADO DE VENTAS ANUAL (YTD) */}
             <HistoricalTrendChart
