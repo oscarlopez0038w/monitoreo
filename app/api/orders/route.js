@@ -232,6 +232,9 @@ export async function GET(request) {
     const endDateParam = searchParams.get('endDate');
     const statusParam = (searchParams.get('status') || '').trim();
     const saleTypeParam = (searchParams.get('saleType') || '').trim();
+    const purchaseTypeParam = (searchParams.get('purchaseType') || '').trim();
+    const matchesPurchaseType = (detail) => !purchaseTypeParam ||
+      (extractTasaCeroInfo(detail).isTasaCero ? 'tasa0' : 'contado') === purchaseTypeParam;
     const searchParam = (searchParams.get('search') || '').trim();
     const sortByParam = (searchParams.get('sortBy') || 'date_desc').trim();
     const pageParam = parseInt(searchParams.get('page') || '1', 10);
@@ -272,13 +275,23 @@ export async function GET(request) {
           query = query.order('creation_date', { ascending: false });
         }
 
-        if (!isExport && !saleTypeParam) {
+        if (!isExport && !saleTypeParam && !purchaseTypeParam) {
           const from = (pageParam - 1) * pageSize;
           const to = from + pageSize - 1;
           query = query.range(from, to);
         }
 
-        const { data: rows, count, error } = await query;
+        let { data: rows, count, error } = await query;
+        if (!error && purchaseTypeParam && rows?.length) {
+          const allRows = [...rows];
+          while (allRows.length < count) {
+            const batch = await query.range(allRows.length, allRows.length + 999);
+            if (batch.error) throw batch.error;
+            if (!batch.data?.length) break;
+            allRows.push(...batch.data);
+          }
+          rows = allRows;
+        }
 
         if (error) {
           console.error('Error consultando Supabase vtex_orders query:', error);
@@ -301,11 +314,22 @@ export async function GET(request) {
 
         if (useSupabase) {
           // Conteos y Estadísticas globales en Supabase para el período (< 10ms)
-          const { data: periodRows } = await supabaseAdmin
+          const periodQuery = supabaseAdmin
             .from('vtex_orders')
-            .select('status, fulfillment_type, pickup_store, items, detail_json, marketing_json, total_value')
+            .select('status, fulfillment_type, pickup_store, items, detail_json, marketing_json, total_value', { count: 'exact' })
             .gte('creation_date', startIso)
-            .lte('creation_date', endIso);
+            .lte('creation_date', endIso)
+            .order('order_id');
+          const { data: periodRows, count: periodCount, error: periodError } = await periodQuery;
+          if (periodError) throw periodError;
+          if (purchaseTypeParam && periodRows?.length) {
+            while (periodRows.length < periodCount) {
+              const batch = await periodQuery.range(periodRows.length, periodRows.length + 999);
+              if (batch.error) throw batch.error;
+              if (!batch.data?.length) break;
+              periodRows.push(...batch.data);
+            }
+          }
 
           let invoicedCount = 0;
           let handlingCount = 0;
@@ -323,6 +347,7 @@ export async function GET(request) {
           (periodRows || []).forEach((r) => {
             const orderForMarketing = { ...(r.detail_json || {}), marketingData: r.marketing_json || r.detail_json?.marketingData };
             if (!matchesSaleType(orderForMarketing, saleTypeParam)) return;
+            if (!matchesPurchaseType(r.detail_json)) return;
 
             const st = String(r.status || '').toLowerCase();
             if (st === 'invoiced') {
@@ -383,8 +408,8 @@ export async function GET(request) {
             .sort((a, b) => b.count - a.count);
 
           dbStats = {
-            total: saleTypeParam
-              ? (periodRows || []).filter((r) => matchesSaleType({ ...(r.detail_json || {}), marketingData: r.marketing_json || r.detail_json?.marketingData }, saleTypeParam)).length
+            total: saleTypeParam || purchaseTypeParam
+              ? (periodRows || []).filter((r) => matchesSaleType({ ...(r.detail_json || {}), marketingData: r.marketing_json || r.detail_json?.marketingData }, saleTypeParam) && matchesPurchaseType(r.detail_json)).length
               : (periodRows?.length || totalDbCount),
             invoiced: invoicedCount,
             handling: handlingCount,
@@ -469,8 +494,11 @@ export async function GET(request) {
             };
           });
 
-          if (saleTypeParam) {
-            dbOrders = dbOrders.filter((o) => o.saleType === saleTypeParam);
+          if (saleTypeParam || purchaseTypeParam) {
+            dbOrders = dbOrders.filter((o) =>
+              (!saleTypeParam || o.saleType === saleTypeParam) &&
+              (!purchaseTypeParam || (o.tasaCero.isTasaCero ? 'tasa0' : 'contado') === purchaseTypeParam)
+            );
             totalDbCount = dbOrders.length;
             if (!isExport) {
               const from = (pageParam - 1) * pageSize;
@@ -509,11 +537,12 @@ export async function GET(request) {
           }
         }
       } catch (dbErr) {
+        useSupabase = false;
         console.error('Error consultando Supabase vtex_orders:', dbErr);
       }
     }
 
-    if (useSupabase && dbOrders.length > 0) {
+    if (useSupabase) {
       const totalPages = isExport ? 1 : (Math.ceil(totalDbCount / pageSize) || 1);
       return NextResponse.json({
         success: true,
@@ -572,10 +601,20 @@ export async function GET(request) {
         ? details
         : await Promise.all(statsRawList.map((o) => fetchVtexOrderDetail(o.orderId).catch(() => null)));
 
-      if (saleTypeParam) {
+      {
         const filteredStats = statsRawList
           .map((order, idx) => ({ order, detail: statsDetails[idx] }))
-          .filter(({ order, detail }) => matchesSaleType(detail || order, saleTypeParam));
+          .filter(({ order, detail }) => matchesSaleType(detail || order, saleTypeParam) && matchesPurchaseType(detail || order))
+          .sort((a, b) => {
+            let difference;
+            if (sortByParam === 'amount_desc' || sortByParam === 'amount_asc') {
+              difference = Number(a.order.totalValue ?? a.detail?.value ?? 0) - Number(b.order.totalValue ?? b.detail?.value ?? 0);
+            } else {
+              difference = (Date.parse(a.order.creationDate) || 0) - (Date.parse(b.order.creationDate) || 0);
+            }
+            const direction = sortByParam === 'amount_asc' || sortByParam === 'date_asc' ? 1 : -1;
+            return difference * direction || String(a.order.orderId).localeCompare(String(b.order.orderId));
+          });
 
         statsRawList = filteredStats.map(({ order }) => order);
         statsDetails = filteredStats.map(({ detail }) => detail);

@@ -93,9 +93,11 @@ export default function OrdenesPage() {
 
   const [statusFilter, setStatusFilter] = useState('');
   const [saleTypeFilter, setSaleTypeFilter] = useState('');
+  const [purchaseTypeFilter, setPurchaseTypeFilter] = useState('');
   const [search, setSearch] = useState('');
   const [sortBy, setSortBy] = useState('date_desc'); // 'date_desc' | 'date_asc' | 'amount_desc' | 'amount_asc'
   const [loading, setLoading] = useState(false);
+  const ordersRequestRef = useRef(0);
   const [registeringHook, setRegisteringHook] = useState(false);
   const [orders, setOrders] = useState([]);
   const [paging, setPaging] = useState({ total: 0, currentPage: 1, pages: 1 });
@@ -134,8 +136,10 @@ export default function OrdenesPage() {
         endDate,
         status: statusFilter,
         saleType: saleTypeFilter,
+        purchaseType: purchaseTypeFilter,
         search,
         export: 'true',
+        sortBy,
       });
       const res = await fetch(`/api/orders?${params.toString()}`);
       const json = await res.json();
@@ -156,6 +160,7 @@ export default function OrdenesPage() {
         'Total $ USD': o.totalValue ? ((o.totalValue / 100) / BCN_EXCHANGE_RATE).toFixed(2) : '0.00',
         'Código Vendedor': o.sellerCode || '',
         'Tipo Venta': o.saleType === 'social' || o.sellerCode ? 'Social Selling' : 'Orgánica',
+        'Tipo de Compra': o.tasaCero?.isTasaCero ? 'Tasa 0' : 'Contado',
         'Tipo Entrega': o.fulfillmentType === 'pickup' ? 'Retiro en Tienda' : 'Entrega a Domicilio',
         'Tienda Retiro': o.pickupStore || 'N/A',
         'Cantidad Items': o.itemsCount || 1,
@@ -211,6 +216,7 @@ export default function OrdenesPage() {
   };
 
   const fetchOrders = async (page = 1, currentSort = sortBy) => {
+    const requestId = ++ordersRequestRef.current;
     setLoading(true);
     try {
       const params = new URLSearchParams({
@@ -218,6 +224,7 @@ export default function OrdenesPage() {
         endDate,
         status: statusFilter,
         saleType: saleTypeFilter,
+        purchaseType: purchaseTypeFilter,
         search,
         sortBy: currentSort,
         page: String(page),
@@ -226,6 +233,7 @@ export default function OrdenesPage() {
       const res = await fetch(`/api/orders?${params.toString()}`);
       const data = await res.json();
 
+      if (requestId !== ordersRequestRef.current) return;
       if (data.success) {
         setOrders(data.data || []);
         setPaging(data.paging || { total: 0, currentPage: page, pages: 1 });
@@ -236,7 +244,7 @@ export default function OrdenesPage() {
     } catch (err) {
       console.error('Error cargando órdenes:', err);
     } finally {
-      setLoading(false);
+      if (requestId === ordersRequestRef.current) setLoading(false);
     }
   };
 
@@ -257,6 +265,10 @@ export default function OrdenesPage() {
           (payload) => {
             const row = payload.new;
             if (!row || !row.order_id) return;
+            if (purchaseTypeFilter) {
+              fetchOrders(1);
+              return;
+            }
 
             const realtimeOrder = {
               orderId: row.order_id,
@@ -305,7 +317,7 @@ export default function OrdenesPage() {
         supabase.removeChannel(channel);
       };
     }
-  }, []);
+  }, [purchaseTypeFilter]);
 
 
   // Activar Hook Webhook VTEX en 1 clic
@@ -759,6 +771,20 @@ export default function OrdenesPage() {
             </div>
 
             {/* 5. Ordenar Por */}
+            <div style={{ flex: '1 1 140px', minWidth: '130px' }}>
+              <select
+                aria-label="Tipo de compra"
+                className="glass-input"
+                style={{ width: '100%', fontSize: '0.82rem', height: '38px', padding: '0.35rem 0.75rem', lineHeight: '1.3', boxSizing: 'border-box' }}
+                value={purchaseTypeFilter}
+                onChange={(e) => setPurchaseTypeFilter(e.target.value)}
+              >
+                <option value="">Todas las Compras</option>
+                <option value="tasa0">Tasa 0</option>
+                <option value="contado">Contado</option>
+              </select>
+            </div>
+
             <div style={{ flex: '1 1 120px', minWidth: '120px' }}>
               <select
                 className="glass-input"
