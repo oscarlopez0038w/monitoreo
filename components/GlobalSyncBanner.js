@@ -14,18 +14,23 @@ export default function GlobalSyncBanner() {
 
     const checkAndSchedule = async () => {
       try {
+        if (typeof document !== 'undefined' && document.visibilityState !== 'visible') {
+          timerId = setTimeout(checkAndSchedule, 30000);
+          return;
+        }
+
         const res = await fetch('/api/prices/sync/background');
         const json = await res.json();
         if (json.success) {
           setSyncData(json);
           const isRunning = Boolean(json.syncState?.isRunning);
-          // Si está sincronizando, consultar cada 3s para mostrar avance.
-          // Si NO está sincronizando, pausar sondeo por 60s para mantener el Network tab limpio.
-          const delay = isRunning ? 3000 : 60000;
+          // Si está sincronizando, consultar cada 4s para mostrar avance.
+          // Si NO está sincronizando, pausar sondeo por 2 minutos (120s) para cuidar la cuota de CPU.
+          const delay = isRunning ? 4000 : 120000;
           timerId = setTimeout(checkAndSchedule, delay);
         }
       } catch (err) {
-        timerId = setTimeout(checkAndSchedule, 60000);
+        timerId = setTimeout(checkAndSchedule, 120000);
       }
     };
 

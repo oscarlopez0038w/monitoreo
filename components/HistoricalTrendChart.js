@@ -121,7 +121,8 @@ export default function HistoricalTrendChart({ formatCurrency, currencyMode = 'u
     );
   }
 
-  const items = data?.monthlyBreakdown || [];
+  const rawItems = data?.monthlyBreakdown || [];
+  const items = [...rawItems].sort((a, b) => (a.monthNum || 0) - (b.monthNum || 0));
   if (!items || items.length === 0) return null;
 
   // Helpers según inclusión de Social Selling

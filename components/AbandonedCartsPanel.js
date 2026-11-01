@@ -86,6 +86,20 @@ export default function AbandonedCartsPanel() {
   const [sendingEmailClientId, setSendingEmailClientId] = useState(null);
   const [sentEmailStatus, setSentEmailStatus] = useState({});
 
+  // Filtro de estado de correo en la tabla principal
+  const [emailStatusFilter, setEmailStatusFilter] = useState('all'); // 'all', 'sent', 'not_sent'
+
+  // Auditoría e Historial consolidado de correos de recuperación
+  const [emailStats, setEmailStats] = useState(null);
+  const [emailHistory, setEmailHistory] = useState([]);
+  const [emailHistoryLoading, setEmailHistoryLoading] = useState(false);
+  const [showEmailModal, setShowEmailModal] = useState(false);
+  const [emailModalMonth, setEmailModalMonth] = useState('all'); // 'all' o 'YYYY-MM' (ej: '2026-10')
+  const [emailModalStatus, setEmailModalStatus] = useState('all'); // 'all', 'converted', 'not_converted'
+  const [emailModalSearch, setEmailModalSearch] = useState('');
+  const [emailModalPage, setEmailModalPage] = useState(1);
+  const EMAIL_MODAL_PAGE_SIZE = 12;
+
   // Paginación
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(15);
@@ -123,6 +137,23 @@ export default function AbandonedCartsPanel() {
     }
   };
 
+  // Cargar estadísticas e historial auditado de correos enviados desde Supabase
+  const loadEmailHistory = useCallback(async () => {
+    setEmailHistoryLoading(true);
+    try {
+      const res = await fetch('/api/masterdata?action=email-history');
+      const data = await res.json();
+      if (data.success) {
+        setEmailStats(data.stats);
+        setEmailHistory(data.notifications || []);
+      }
+    } catch (err) {
+      console.error('Error cargando historial de correos:', err);
+    } finally {
+      setEmailHistoryLoading(false);
+    }
+  }, []);
+
   // Cargar carritos abandonados con filtrado riguroso y cruce OMS
   const loadAbandonedCarts = useCallback(async (isRefresh = false) => {
     if (isRefresh) setRefreshing(true);
@@ -138,6 +169,7 @@ export default function AbandonedCartsPanel() {
         sortBy,
         excludePurchased: String(excludePurchased),
         stage: stageFilter,
+        emailStatus: emailStatusFilter,
       });
 
       if (debouncedSearch) {
@@ -182,12 +214,13 @@ export default function AbandonedCartsPanel() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [page, pageSize, periodFilter, startDate, endDate, minValueFilter, sortBy, debouncedSearch, excludePurchased, stageFilter]);
+  }, [page, pageSize, periodFilter, startDate, endDate, minValueFilter, sortBy, debouncedSearch, excludePurchased, stageFilter, emailStatusFilter]);
 
   // Cargas automáticas al montar y al cambiar filtros
   useEffect(() => {
     loadStats();
-  }, []);
+    loadEmailHistory();
+  }, [loadEmailHistory]);
 
   useEffect(() => {
     loadAbandonedCarts();
@@ -320,6 +353,7 @@ export default function AbandonedCartsPanel() {
             vtexStatus: 200,
           },
         }));
+        loadEmailHistory();
       } else {
         showToast('error', data.error || 'Error al enviar el correo a través de VTEX.');
       }
@@ -476,6 +510,279 @@ export default function AbandonedCartsPanel() {
     }
   };
 
+  // Detección dinámica y cálculo de métricas para todos los meses presentes en el historial
+  const availableEmailMonths = useMemo(() => {
+    if (!emailHistory || emailHistory.length === 0) return [];
+    const map = new Map();
+
+    emailHistory.forEach((item) => {
+      if (!item.sent_at) return;
+      const key = item.sent_at.substring(0, 7); // 'YYYY-MM'
+      if (!map.has(key)) {
+        const [year, month] = key.split('-').map(Number);
+        const dateObj = new Date(year, month - 1, 1);
+        const monthName = dateObj.toLocaleDateString('es-NI', { month: 'long' });
+        const capitalized = monthName.charAt(0).toUpperCase() + monthName.slice(1);
+        const label = `${capitalized} ${year}`;
+        map.set(key, {
+          key,
+          label,
+          totalSent: 0,
+          successfulSent: 0,
+          timeoutSent: 0,
+          uniqueClients: new Set(),
+          rescuedOrders: new Map(), // orderId -> { val, isFast }
+          organicOrders: new Map(), // orderId -> { val }
+        });
+      }
+      const data = map.get(key);
+      data.totalSent += 1;
+      const isOk = item.vtex_status === 200;
+      if (isOk) data.successfulSent += 1;
+      else data.timeoutSent += 1;
+
+      if (item.client_email) data.uniqueClients.add(item.client_email.toLowerCase().trim());
+
+      // Desduplicar órdenes: Si un cliente recibió varios recordatorios, la orden solo se cuenta 1 vez
+      if (item.convertedOrder) {
+        const oId = item.convertedOrder.orderId;
+        const val = Number(item.convertedOrder.totalValue || item.cart_value || 0);
+        const isFast = item.isFastRescue;
+
+        if (item.isConverted && oId) {
+          if (!data.rescuedOrders.has(oId)) {
+            data.rescuedOrders.set(oId, { val, isFast });
+          }
+        } else if (item.convertedOrder.attributionType === 'organic_recurring' && oId) {
+          if (!data.organicOrders.has(oId)) {
+            data.organicOrders.set(oId, { val });
+          }
+        }
+      }
+    });
+
+    return Array.from(map.values())
+      .map((m) => {
+        const uniqueOrdersList = Array.from(m.rescuedOrders.values());
+        const convertedCount = uniqueOrdersList.length;
+        const recoveredValue = uniqueOrdersList.reduce((acc, o) => acc + o.val, 0);
+        const fastRescuesList = uniqueOrdersList.filter((o) => o.isFast);
+        const fastRescuesCount = fastRescuesList.length;
+        const fastRescuesValue = fastRescuesList.reduce((acc, o) => acc + o.val, 0);
+
+        return {
+          ...m,
+          convertedCount,
+          recoveredValue,
+          fastRescuesCount,
+          fastRescuesValue,
+          uniqueClientsCount: m.uniqueClients.size,
+          conversionRate: m.successfulSent > 0 ? ((convertedCount / m.successfulSent) * 100).toFixed(1) : (m.totalSent > 0 ? ((convertedCount / m.totalSent) * 100).toFixed(1) : '0.0'),
+          fastConversionRate: m.successfulSent > 0 ? ((fastRescuesCount / m.successfulSent) * 100).toFixed(1) : '0.0',
+          avgTicket: convertedCount > 0 ? recoveredValue / convertedCount : 0,
+        };
+      })
+      .sort((a, b) => b.key.localeCompare(a.key)); // Mes más reciente primero
+  }, [emailHistory]);
+
+  // Métricas reactivas para las 4 KPI cards superiores dentro del Modal según el mes seleccionado
+  const modalMonthKPIs = useMemo(() => {
+    if (emailModalMonth === 'all') {
+      const now = new Date();
+      const currentMonthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+      const curData = availableEmailMonths.find((m) => m.key === currentMonthKey);
+      const totalSuccessful = emailHistory.filter((e) => e.vtex_status === 200).length;
+      const totalTimeout = emailHistory.length - totalSuccessful;
+
+      // Desduplicar órdenes históricas únicas netas
+      const uniqueRescuedOrdersAll = new Map();
+      emailHistory.forEach((e) => {
+        if (e.isConverted && e.convertedOrder?.orderId) {
+          if (!uniqueRescuedOrdersAll.has(e.convertedOrder.orderId)) {
+            uniqueRescuedOrdersAll.set(e.convertedOrder.orderId, {
+              val: parseFloat(e.convertedOrder.totalValue) || 0,
+              isFast: e.isFastRescue,
+            });
+          }
+        }
+      });
+      const allConvertedOrdersList = Array.from(uniqueRescuedOrdersAll.values());
+      const totalConverted = allConvertedOrdersList.length;
+      const totalRecoveredValue = allConvertedOrdersList.reduce((acc, o) => acc + o.val, 0);
+      const fastRescuesCount = allConvertedOrdersList.filter((o) => o.isFast).length;
+
+      return {
+        isFiltered: false,
+        label: 'Histórico Completo',
+        totalSent: emailHistory.length,
+        successfulSent: totalSuccessful || emailStats?.successfulSent || 0,
+        timeoutSent: totalTimeout || emailStats?.timeoutSent || 0,
+        uniqueClients: emailStats?.uniqueClientsCount || 0,
+        convertedCount: totalConverted || emailStats?.totalConverted || 0,
+        fastRescuesCount: fastRescuesCount || emailStats?.fastRescuesCount || 0,
+        conversionRate: (totalSuccessful || emailStats?.successfulSent || 0) > 0
+          ? ((((totalConverted || emailStats?.totalConverted || 0)) / (totalSuccessful || emailStats?.successfulSent || 1)) * 100).toFixed(1)
+          : (emailStats?.conversionRate || '0.0'),
+        recoveredValue: totalRecoveredValue || emailStats?.totalRecoveredValue || 0,
+        currentMonthLabel: curData?.label || 'Octubre 2026',
+        currentMonthSent: emailStats?.sentThisMonth || curData?.totalSent || 0,
+        currentMonthSuccessful: emailStats?.successfulThisMonth || curData?.successfulSent || 0,
+        currentMonthConverted: curData?.convertedCount || emailStats?.thisMonthConverted || 0,
+        currentMonthRecovered: curData?.recoveredValue || emailStats?.thisMonthRecovered || 0,
+        avgTicket: (totalConverted || 0) > 0 ? (totalRecoveredValue || 0) / totalConverted : 0,
+      };
+    }
+
+    const monthData = availableEmailMonths.find((m) => m.key === emailModalMonth);
+    if (!monthData) {
+      return {
+        isFiltered: true,
+        label: emailModalMonth,
+        totalSent: 0,
+        successfulSent: 0,
+        timeoutSent: 0,
+        uniqueClients: 0,
+        convertedCount: 0,
+        fastRescuesCount: 0,
+        conversionRate: '0.0',
+        recoveredValue: 0,
+        avgTicket: 0,
+      };
+    }
+
+    return {
+      isFiltered: true,
+      label: monthData.label,
+      totalSent: monthData.totalSent,
+      successfulSent: monthData.successfulSent,
+      timeoutSent: monthData.timeoutSent,
+      uniqueClients: monthData.uniqueClientsCount,
+      convertedCount: monthData.convertedCount,
+      fastRescuesCount: monthData.fastRescuesCount,
+      conversionRate: monthData.conversionRate,
+      recoveredValue: monthData.recoveredValue,
+      avgTicket: monthData.avgTicket,
+    };
+  }, [emailModalMonth, availableEmailMonths, emailHistory, emailStats]);
+
+  // Exportar reporte consolidado de auditoría de correos enviados a Excel con pestañas dinámicas por mes
+  const handleExportEmailExcel = () => {
+    if (!emailHistory || emailHistory.length === 0) {
+      showToast('error', 'No hay historial de correos para exportar.');
+      return;
+    }
+
+    try {
+      const summaryRows = [
+        ['INFORME DE GESTIÓN Y RECUPERACIÓN DE CARRITOS ABANDONADOS — SINSA'],
+        ['Generado el:', new Date().toLocaleString('es-NI', { timeZone: 'America/Managua' })],
+        ['Fuente:', 'Supabase public.vtex_abandoned_cart_notifications & VTEX OMS'],
+        [],
+        ['MÉTRICA / INDICADOR', 'VALOR'],
+        ['Total Histórico de Correos Enviados', emailStats?.totalSent || emailHistory.length],
+        ['Total Carritos Recuperados (Compras Concretadas)', emailStats?.totalConverted || 0],
+        ['Tasa de Conversión Histórica', `${emailStats?.conversionRate || 0}%`],
+        ['Monto Total Facturado Recuperado (C$ NIO)', emailStats?.totalRecoveredValue || 0],
+        [],
+        ['DESGLOSE CONSOLIDADO POR MES', 'ENVIADOS', 'CLIENTES ÚNICOS', 'RECUPERADOS', 'TASA CONVERSIÓN', 'FACTURADO RECUPERADO (C$)'],
+      ];
+
+      availableEmailMonths.forEach((m) => {
+        summaryRows.push([
+          m.label,
+          m.totalSent,
+          m.uniqueClientsCount,
+          m.convertedCount,
+          `${m.conversionRate}%`,
+          m.recoveredValue,
+        ]);
+      });
+
+      summaryRows.push(
+        [],
+        ['METODOLOGÍA DE ATRIBUCIÓN'],
+        ['1. Cruce Determinístico:', 'Se audita el correo del cliente impactado con las órdenes registradas en VTEX OMS.'],
+        ['2. Ventana Temporal:', 'Se comprueba que la orden haya sido creada con posterioridad a la fecha y hora del correo.'],
+        ['3. Validación de Estado:', 'Se excluyen órdenes canceladas en VTEX para certificar ingreso real.'],
+        ['4. Trazabilidad UTM:', 'Se verifica la inyección de utm_source, utm_medium, utm_campaign y utmi_cp en el enlace de recuperación.']
+      );
+
+      const mapRows = (items) =>
+        items.map((n, idx) => ({
+          '#': idx + 1,
+          'Fecha y Hora (Nicaragua)': formatNicaraguaDateTime(n.sent_at),
+          'Correo del Cliente': n.client_email,
+          'Nombre del Cliente': n.client_name,
+          'Valor Carrito (C$)': n.cart_value,
+          'Etapa Abandono': n.stage === 'shipping' ? 'Envío' : n.stage === 'payment' ? 'Pasarela' : n.stage === 'profile' ? 'Perfil' : 'Carrito',
+          'Operador': n.sent_by,
+          'Correo Operador': n.sent_by_email,
+          'Estado Envío VTEX': n.vtex_status === 200 ? '200 OK (Enviado)' : `${n.vtex_status} (Procesado VTEX)`,
+          'Tipo de Atribución': n.convertedOrder?.attributionLabel || (n.isConverted ? '🎯 Rescate Confirmado' : (n.convertedOrder ? '🌐 Compra Orgánica' : 'Sin compra registrada')),
+          '¿Rescate Confirmado?': n.isConverted ? 'SÍ' : 'NO',
+          'Orden VTEX': n.convertedOrder?.orderId || 'N/A',
+          'Fecha Compra VTEX': n.convertedOrder ? formatNicaraguaDateTime(n.convertedOrder.creationDate) : 'N/A',
+          'Horas Transcurridas': n.convertedOrder?.hoursToPurchase ? `${n.convertedOrder.hoursToPurchase} hrs` : 'N/A',
+          'Monto Facturado Orden (C$)': n.convertedOrder?.totalValue || 0,
+          'Estado de la Orden': n.convertedOrder?.status || 'N/A',
+          'Enlace Recuperación VTEX': n.rclastcart || 'N/A',
+        }));
+
+      const wb = XLSX.utils.book_new();
+      const wsSummary = XLSX.utils.aoa_to_sheet(summaryRows);
+      XLSX.utils.book_append_sheet(wb, wsSummary, 'Resumen Ejecutivo');
+
+      const setCols = (ws) => {
+        ws['!cols'] = [
+          { wch: 6 },
+          { wch: 22 },
+          { wch: 32 },
+          { wch: 26 },
+          { wch: 18 },
+          { wch: 14 },
+          { wch: 18 },
+          { wch: 26 },
+          { wch: 22 },
+          { wch: 14 },
+          { wch: 22 },
+          { wch: 22 },
+          { wch: 16 },
+          { wch: 20 },
+          { wch: 18 },
+          { wch: 40 },
+        ];
+      };
+
+      // Hojas dinámicas para cada mes
+      availableEmailMonths.forEach((m) => {
+        const monthItems = emailHistory.filter((e) => e.sent_at?.startsWith(m.key));
+        if (monthItems.length > 0) {
+          const wsMonth = XLSX.utils.json_to_sheet(mapRows(monthItems));
+          setCols(wsMonth);
+          const safeSheetName = `Envíos ${m.label}`.substring(0, 31);
+          XLSX.utils.book_append_sheet(wb, wsMonth, safeSheetName);
+        }
+      });
+
+      // Hoja de compras concretadas
+      const wsConv = XLSX.utils.json_to_sheet(mapRows(emailHistory.filter((e) => e.isConverted)));
+      setCols(wsConv);
+      XLSX.utils.book_append_sheet(wb, wsConv, 'Compras Recuperadas');
+
+      // Hoja completa de todos los envíos
+      const wsAll = XLSX.utils.json_to_sheet(mapRows(emailHistory));
+      setCols(wsAll);
+      XLSX.utils.book_append_sheet(wb, wsAll, 'Todos los Envíos');
+
+      const fileName = `Reporte_Envios_Correos_Carritos_SINSA_${new Date().toISOString().slice(0, 10)}.xlsx`;
+      XLSX.writeFile(wb, fileName);
+      showToast('success', `Reporte de correos descargado: ${fileName}`);
+    } catch (e) {
+      console.error('Error exportando reporte de correos:', e);
+      showToast('error', 'Error al generar el archivo Excel de correos.');
+    }
+  };
+
   // Preparar mensaje de WhatsApp para recuperación directa
   const generateWhatsAppLink = (cart) => {
     const rawPhone = (cart.phone || '').replace(/\D/g, '');
@@ -488,6 +795,46 @@ export default function AbandonedCartsPanel() {
     const msg = `¡Hola${clientName}! Notamos que dejaste productos en tu carrito de compras en SINSA. Puedes recuperarlos y completar tu pedido de forma fácil y segura haciendo clic aquí: ${cart.recoveryUrl}`;
     return `https://wa.me/${cleanPhone}?text=${encodeURIComponent(msg)}`;
   };
+
+  // Filtrado de la lista en el Modal de Auditoría de Correos con Mes dinámico y Estado de conversión
+  const filteredModalEmails = useMemo(() => {
+    let list = emailHistory || [];
+
+    if (emailModalMonth !== 'all') {
+      list = list.filter((e) => e.sent_at?.startsWith(emailModalMonth));
+    }
+
+    if (emailModalStatus === 'converted') {
+      list = list.filter((e) => e.isConverted);
+    } else if (emailModalStatus === 'fast_rescue') {
+      list = list.filter((e) => e.isConverted && parseFloat(e.convertedOrder?.hoursToPurchase) <= 48);
+    } else if (emailModalStatus === 'success_200') {
+      list = list.filter((e) => e.vtex_status === 200);
+    } else if (emailModalStatus === 'timeout_504') {
+      list = list.filter((e) => e.vtex_status !== 200);
+    } else if (emailModalStatus === 'not_converted') {
+      list = list.filter((e) => !e.isConverted);
+    }
+
+    if (emailModalSearch.trim()) {
+      const q = emailModalSearch.trim().toLowerCase();
+      list = list.filter((e) => {
+        const email = (e.client_email || '').toLowerCase();
+        const name = (e.client_name || '').toLowerCase();
+        const orderId = (e.convertedOrder?.orderId || '').toLowerCase();
+        return email.includes(q) || name.includes(q) || orderId.includes(q);
+      });
+    }
+
+    return list;
+  }, [emailHistory, emailModalMonth, emailModalStatus, emailModalSearch]);
+
+  const paginatedModalEmails = useMemo(() => {
+    const start = (emailModalPage - 1) * EMAIL_MODAL_PAGE_SIZE;
+    return filteredModalEmails.slice(start, start + EMAIL_MODAL_PAGE_SIZE);
+  }, [filteredModalEmails, emailModalPage]);
+
+  const totalModalPages = Math.max(1, Math.ceil(filteredModalEmails.length / EMAIL_MODAL_PAGE_SIZE));
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.75rem', width: '100%', maxWidth: '1600px', margin: '0 auto', paddingBottom: '3rem' }}>
@@ -647,7 +994,46 @@ export default function AbandonedCartsPanel() {
             }}
           >
             <Download size={16} />
-            <span>Exportar Excel</span>
+            <span>Exportar Carritos</span>
+          </button>
+
+          {/* Botón Historial de Correos */}
+          <button
+            onClick={() => setShowEmailModal(true)}
+            title="Ver auditoría completa de correos de recuperación enviados y cruce OMS"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.5rem',
+              padding: '0.65rem 1.15rem',
+              borderRadius: '11px',
+              background: 'linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%)',
+              color: '#fff',
+              border: '1px solid rgba(168, 85, 247, 0.4)',
+              fontSize: '0.86rem',
+              fontWeight: 600,
+              cursor: 'pointer',
+              boxShadow: '0 4px 14px rgba(124, 58, 237, 0.35)',
+              transition: 'all 0.2s ease',
+            }}
+          >
+            <Mail size={16} />
+            <span>Historial Correos</span>
+            {emailStats && (
+              <span
+                style={{
+                  background: 'rgba(255, 255, 255, 0.25)',
+                  color: '#fff',
+                  borderRadius: '999px',
+                  padding: '0.12rem 0.55rem',
+                  fontSize: '0.74rem',
+                  fontWeight: 700,
+                  marginLeft: '0.2rem',
+                }}
+              >
+                {emailStats.sentThisMonth || emailStats.totalSent}
+              </span>
+            )}
           </button>
 
           {/* Botón Actualizar */}
@@ -840,6 +1226,49 @@ export default function AbandonedCartsPanel() {
             <span>Facturado rescatado:</span>
             <span style={{ color: '#34d399', fontWeight: 700 }}>
               {loading ? '...' : formatMoney(summary.convertedTotalValue || 0)}
+            </span>
+          </div>
+        </div>
+
+        {/* Card 5: Correos de Recuperación Enviados */}
+        <div
+          onClick={() => setShowEmailModal(true)}
+          title="Haz clic para ver la auditoría y reporte de correos de recuperación enviados"
+          style={{
+            background: 'linear-gradient(135deg, rgba(30, 41, 59, 0.7) 0%, rgba(15, 23, 42, 0.8) 100%)',
+            border: '1px solid rgba(168, 85, 247, 0.35)',
+            borderRadius: '16px',
+            padding: '1.35rem',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '0.65rem',
+            cursor: 'pointer',
+            transition: 'all 0.2s ease',
+            boxShadow: '0 4px 20px rgba(168, 85, 247, 0.12)',
+          }}
+        >
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontSize: '0.82rem', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+              Correos de Recuperación
+            </span>
+            <div style={{ padding: '0.45rem', borderRadius: '10px', background: 'rgba(168, 85, 247, 0.18)', color: '#c084fc', display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <Mail size={18} />
+            </div>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.5rem' }}>
+            <span style={{ fontSize: '2rem', fontWeight: 800, color: '#c084fc', letterSpacing: '-0.03em' }}>
+              {emailHistoryLoading && !emailStats ? '...' : (emailStats?.successfulThisMonth ?? emailStats?.sentThisMonth ?? 0).toLocaleString()}
+            </span>
+            <span style={{ fontSize: '0.82rem', color: '#a855f7', fontWeight: 600 }}>
+              exitosos en el mes
+            </span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '0.78rem', color: '#94a3b8' }}>
+            <span>
+              <strong style={{ color: '#fff' }}>{emailStats?.successfulSent || emailStats?.totalSent || 0}</strong> confirmados (200 OK) • {emailStats?.totalConverted || 0} compras
+            </span>
+            <span style={{ color: '#c084fc', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '3px' }}>
+              Ver auditoría →
             </span>
           </div>
         </div>
@@ -1164,6 +1593,32 @@ export default function AbandonedCartsPanel() {
             </select>
           </div>
 
+          {/* Filtro por Estado de Correo */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
+            <Mail size={15} color="#c084fc" />
+            <select
+              value={emailStatusFilter}
+              onChange={(e) => {
+                setEmailStatusFilter(e.target.value);
+                setPage(1);
+              }}
+              style={{
+                padding: '0.6rem 0.85rem',
+                borderRadius: '10px',
+                background: 'rgba(15, 23, 42, 0.85)',
+                color: '#fff',
+                border: emailStatusFilter !== 'all' ? '1px solid rgba(168, 85, 247, 0.6)' : '1px solid rgba(255, 255, 255, 0.12)',
+                fontSize: '0.84rem',
+                cursor: 'pointer',
+                outline: 'none',
+              }}
+            >
+              <option value="all">Todos los Correos</option>
+              <option value="sent">✉️ Con Correo Enviado</option>
+              <option value="not_sent">⏳ Pendientes de Envío</option>
+            </select>
+          </div>
+
           {/* Período Predefinido */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
             <Calendar size={15} color="#94a3b8" />
@@ -1195,6 +1650,8 @@ export default function AbandonedCartsPanel() {
               <option value="24h">Últimas 24 Horas</option>
               <option value="7d">Últimos 7 Días</option>
               <option value="30d">Últimos 30 Días</option>
+              <option value="this_month">Mes Actual (Octubre 2026)</option>
+              <option value="last_month">Mes Anterior (Septiembre 2026)</option>
               <option value="all">Todo el Historial</option>
               {periodFilter === 'custom' && <option value="custom" disabled hidden>Personalizado</option>}
             </select>
@@ -2364,6 +2821,604 @@ export default function AbandonedCartsPanel() {
               >
                 Cerrar
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 8. MODAL DE AUDITORÍA E HISTORIAL DE CORREOS DE RECUPERACIÓN */}
+      {showEmailModal && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 99999,
+            background: 'rgba(0, 0, 0, 0.78)',
+            backdropFilter: 'blur(10px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '1.25rem',
+            animation: 'fadeIn 0.2s ease-out',
+          }}
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setShowEmailModal(false);
+          }}
+        >
+          <div
+            style={{
+              width: '100%',
+              maxWidth: '1200px',
+              height: '92vh',
+              maxHeight: '900px',
+              background: '#0f172a',
+              borderRadius: '22px',
+              border: '1px solid rgba(168, 85, 247, 0.35)',
+              boxShadow: '0 25px 70px rgba(0, 0, 0, 0.7), 0 0 40px rgba(168, 85, 247, 0.15)',
+              display: 'flex',
+              flexDirection: 'column',
+              overflow: 'hidden',
+            }}
+          >
+            {/* Header del Modal */}
+            <div
+              style={{
+                padding: '1.25rem 1.75rem',
+                borderBottom: '1px solid rgba(255, 255, 255, 0.1)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                background: 'linear-gradient(135deg, rgba(30, 41, 59, 0.9) 0%, rgba(15, 23, 42, 0.95) 100%)',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem' }}>
+                <div
+                  style={{
+                    width: '44px',
+                    height: '44px',
+                    borderRadius: '13px',
+                    background: 'linear-gradient(135deg, rgba(168, 85, 247, 0.25) 0%, rgba(124, 58, 237, 0.15) 100%)',
+                    border: '1px solid rgba(168, 85, 247, 0.4)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: '#c084fc',
+                    boxShadow: '0 0 20px rgba(168, 85, 247, 0.2)',
+                  }}
+                >
+                  <Mail size={22} />
+                </div>
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+                    <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 800, color: '#fff', letterSpacing: '-0.02em' }}>
+                      Auditoría e Historial de Correos de Recuperación
+                    </h3>
+                    <span
+                      style={{
+                        fontSize: '0.72rem',
+                        fontWeight: 700,
+                        padding: '0.2rem 0.65rem',
+                        borderRadius: '999px',
+                        background: 'rgba(168, 85, 247, 0.18)',
+                        color: '#c084fc',
+                        border: '1px solid rgba(168, 85, 247, 0.35)',
+                      }}
+                    >
+                      {emailModalMonth !== 'all' || emailModalStatus !== 'all' || emailModalSearch ? `${filteredModalEmails.length} de ${emailHistory.length} Registros` : `${emailHistory.length} Registros en Base de Datos`}
+                    </span>
+                  </div>
+                  <p style={{ margin: '0.25rem 0 0 0', fontSize: '0.82rem', color: '#94a3b8' }}>
+                    Trazabilidad de impactos de carrito con cruce determinístico de compras en VTEX OMS.
+                  </p>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                <button
+                  onClick={handleExportEmailExcel}
+                  title="Descargar este reporte completo en formato Excel (.xlsx)"
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.45rem',
+                    padding: '0.55rem 1.1rem',
+                    borderRadius: '10px',
+                    background: 'linear-gradient(135deg, #059669 0%, #047857 100%)',
+                    color: '#fff',
+                    border: '1px solid rgba(16, 185, 129, 0.3)',
+                    fontSize: '0.82rem',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    boxShadow: '0 4px 12px rgba(5, 150, 105, 0.3)',
+                  }}
+                >
+                  <Download size={15} />
+                  <span>Descargar Excel (.xlsx)</span>
+                </button>
+
+                <button
+                  onClick={() => setShowEmailModal(false)}
+                  style={{ background: 'transparent', border: 'none', color: '#94a3b8', cursor: 'pointer', padding: '6px' }}
+                >
+                  <X size={20} />
+                </button>
+              </div>
+            </div>
+
+            {/* 4 Tarjetas KPI dentro del Modal (reactivas al mes seleccionado) */}
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+                gap: '0.85rem',
+                padding: '1.15rem 1.75rem 0.65rem 1.75rem',
+              }}
+            >
+              {/* Card 1: Envíos Exitosos */}
+              <div style={{ background: 'rgba(30, 41, 59, 0.55)', padding: '0.9rem', borderRadius: '13px', border: '1px solid rgba(255, 255, 255, 0.08)' }}>
+                <span style={{ fontSize: '0.74rem', color: '#94a3b8', display: 'block', fontWeight: 600, textTransform: 'uppercase' }}>
+                  {modalMonthKPIs.isFiltered ? `Envíos Exitosos (${modalMonthKPIs.label})` : 'Envíos Exitosos Confirmados'}
+                </span>
+                <strong style={{ color: '#fff', fontSize: '1.5rem', fontWeight: 800 }}>
+                  {modalMonthKPIs.successfulSent}
+                </strong>
+                <span style={{ fontSize: '0.72rem', color: '#64748b', display: 'block', marginTop: '3px' }}>
+                  De {modalMonthKPIs.totalSent} intentos totales ({modalMonthKPIs.timeoutSent} con timeout 504)
+                </span>
+              </div>
+
+              {/* Card 2: Mes actual / Tasa de conversión del mes */}
+              <div style={{ background: 'rgba(168, 85, 247, 0.1)', padding: '0.9rem', borderRadius: '13px', border: '1px solid rgba(168, 85, 247, 0.3)' }}>
+                <span style={{ fontSize: '0.74rem', color: '#c084fc', display: 'block', fontWeight: 600, textTransform: 'uppercase' }}>
+                  {modalMonthKPIs.isFiltered ? `Tasa Conversión (${modalMonthKPIs.label})` : `Envíos Exitosos (${modalMonthKPIs.currentMonthLabel})`}
+                </span>
+                <strong style={{ color: '#c084fc', fontSize: '1.5rem', fontWeight: 800 }}>
+                  {modalMonthKPIs.isFiltered ? `${modalMonthKPIs.conversionRate}%` : modalMonthKPIs.currentMonthSuccessful}
+                </strong>
+                <span style={{ fontSize: '0.72rem', color: '#a855f7', display: 'block', marginTop: '3px' }}>
+                  {modalMonthKPIs.isFiltered
+                    ? `${modalMonthKPIs.convertedCount} rescatadas sobre ${modalMonthKPIs.successfulSent} envíos exitosos`
+                    : `${modalMonthKPIs.currentMonthConverted} compras rescatadas (de ${modalMonthKPIs.currentMonthSent} intentos)`}
+                </span>
+              </div>
+
+              {/* Card 3: Compras Rescatadas */}
+              <div style={{ background: 'rgba(16, 185, 129, 0.1)', padding: '0.9rem', borderRadius: '13px', border: '1px solid rgba(16, 185, 129, 0.3)' }}>
+                <span style={{ fontSize: '0.74rem', color: '#34d399', display: 'block', fontWeight: 600, textTransform: 'uppercase' }}>
+                  {modalMonthKPIs.isFiltered ? `Compras Rescatadas (${modalMonthKPIs.label})` : 'Compras Rescatadas Netas'}
+                </span>
+                <strong style={{ color: '#34d399', fontSize: '1.5rem', fontWeight: 800 }}>
+                  {modalMonthKPIs.convertedCount}
+                </strong>
+                <span style={{ fontSize: '0.72rem', color: '#10b981', display: 'block', marginTop: '3px' }}>
+                  {modalMonthKPIs.fastRescuesCount} en rescate rápido (≤ 48h) • {modalMonthKPIs.convertedCount} órdenes únicas
+                </span>
+              </div>
+
+              {/* Card 4: Facturado Rescatado */}
+              <div style={{ background: 'rgba(251, 191, 36, 0.1)', padding: '0.9rem', borderRadius: '13px', border: '1px solid rgba(251, 191, 36, 0.3)' }}>
+                <span style={{ fontSize: '0.74rem', color: '#fbbf24', display: 'block', fontWeight: 600, textTransform: 'uppercase' }}>
+                  {modalMonthKPIs.isFiltered ? `Facturado Neto (${modalMonthKPIs.label})` : 'Facturado Rescatado Neto'}
+                </span>
+                <strong style={{ color: '#fbbf24', fontSize: '1.5rem', fontWeight: 800 }}>
+                  {formatMoney(modalMonthKPIs.recoveredValue)}
+                </strong>
+                <span style={{ fontSize: '0.72rem', color: '#f59e0b', display: 'block', marginTop: '3px' }}>
+                  Ticket prom: {formatMoney(modalMonthKPIs.avgTicket)} • Facturación neta única
+                </span>
+              </div>
+            </div>
+
+            {/* Controles de Filtrado: Filtro por Mes, Estado y Búsqueda */}
+            <div
+              style={{
+                padding: '0.75rem 1.75rem',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                flexWrap: 'wrap',
+                gap: '0.75rem',
+                borderBottom: '1px solid rgba(255, 255, 255, 0.06)',
+                background: 'rgba(15, 23, 42, 0.3)',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', flexWrap: 'wrap' }}>
+                
+                {/* SELECTOR DESPLEGABLE DE MES */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', background: 'rgba(15, 23, 42, 0.85)', padding: '0.25rem 0.6rem', borderRadius: '10px', border: '1px solid rgba(168, 85, 247, 0.4)' }}>
+                  <Calendar size={14} color="#c084fc" />
+                  <span style={{ fontSize: '0.75rem', color: '#c084fc', fontWeight: 700, textTransform: 'uppercase' }}>Mes:</span>
+                  <select
+                    value={emailModalMonth}
+                    onChange={(e) => {
+                      setEmailModalMonth(e.target.value);
+                      setEmailModalPage(1);
+                    }}
+                    style={{
+                      background: 'transparent',
+                      color: '#fff',
+                      border: 'none',
+                      fontSize: '0.8rem',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      outline: 'none',
+                      padding: '0.25rem 0.2rem',
+                    }}
+                  >
+                    <option value="all" style={{ background: '#0f172a', color: '#fff' }}>
+                      Todos los Meses ({modalMonthKPIs.successfulSent} exitosos / {emailHistory.length} total)
+                    </option>
+                    {availableEmailMonths.map((m) => (
+                      <option key={m.key} value={m.key} style={{ background: '#0f172a', color: '#fff' }}>
+                        {m.label} ({m.successfulSent} exitosos • {m.convertedCount} compras)
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* BOTONES RÁPIDOS DE MES */}
+                <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap' }}>
+                  <button
+                    onClick={() => { setEmailModalMonth('all'); setEmailModalPage(1); }}
+                    style={{
+                      padding: '0.35rem 0.75rem',
+                      borderRadius: '8px',
+                      fontSize: '0.76rem',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      background: emailModalMonth === 'all' ? 'rgba(168, 85, 247, 0.25)' : 'rgba(255, 255, 255, 0.05)',
+                      color: emailModalMonth === 'all' ? '#c084fc' : '#94a3b8',
+                      border: emailModalMonth === 'all' ? '1px solid #a855f7' : '1px solid rgba(255, 255, 255, 0.1)',
+                      transition: 'all 0.15s ease',
+                    }}
+                  >
+                    Todos
+                  </button>
+                  {availableEmailMonths.map((m) => (
+                    <button
+                      key={m.key}
+                      onClick={() => { setEmailModalMonth(m.key); setEmailModalPage(1); }}
+                      style={{
+                        padding: '0.35rem 0.75rem',
+                        borderRadius: '8px',
+                        fontSize: '0.76rem',
+                        fontWeight: 600,
+                        cursor: 'pointer',
+                        background: emailModalMonth === m.key ? 'rgba(168, 85, 247, 0.25)' : 'rgba(255, 255, 255, 0.05)',
+                        color: emailModalMonth === m.key ? '#c084fc' : '#94a3b8',
+                        border: emailModalMonth === m.key ? '1px solid #a855f7' : '1px solid rgba(255, 255, 255, 0.1)',
+                        transition: 'all 0.15s ease',
+                      }}
+                    >
+                      {m.label} ({m.successfulSent})
+                    </button>
+                  ))}
+                </div>
+
+                <span style={{ color: 'rgba(255, 255, 255, 0.2)', fontSize: '0.8rem' }}>|</span>
+
+                {/* FILTROS POR ESTADO DE CONVERSIÓN Y DESPACHO */}
+                <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap' }}>
+                  <button
+                    onClick={() => { setEmailModalStatus('all'); setEmailModalPage(1); }}
+                    style={{
+                      padding: '0.35rem 0.75rem',
+                      borderRadius: '8px',
+                      fontSize: '0.76rem',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      background: emailModalStatus === 'all' ? 'rgba(255, 255, 255, 0.15)' : 'rgba(255, 255, 255, 0.05)',
+                      color: emailModalStatus === 'all' ? '#fff' : '#94a3b8',
+                      border: emailModalStatus === 'all' ? '1px solid rgba(255, 255, 255, 0.3)' : '1px solid rgba(255, 255, 255, 0.08)',
+                    }}
+                  >
+                    Todos ({modalMonthKPIs.totalSent})
+                  </button>
+                  <button
+                    onClick={() => { setEmailModalStatus(emailModalStatus === 'success_200' ? 'all' : 'success_200'); setEmailModalPage(1); }}
+                    style={{
+                      padding: '0.35rem 0.75rem',
+                      borderRadius: '8px',
+                      fontSize: '0.76rem',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      background: emailModalStatus === 'success_200' ? 'rgba(56, 189, 248, 0.25)' : 'rgba(255, 255, 255, 0.05)',
+                      color: emailModalStatus === 'success_200' ? '#38bdf8' : '#94a3b8',
+                      border: emailModalStatus === 'success_200' ? '1px solid #38bdf8' : '1px solid rgba(255, 255, 255, 0.1)',
+                    }}
+                  >
+                    ✅ Envíos Exitosos ({modalMonthKPIs.successfulSent})
+                  </button>
+                  <button
+                    onClick={() => { setEmailModalStatus(emailModalStatus === 'fast_rescue' ? 'all' : 'fast_rescue'); setEmailModalPage(1); }}
+                    style={{
+                      padding: '0.35rem 0.75rem',
+                      borderRadius: '8px',
+                      fontSize: '0.76rem',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      background: emailModalStatus === 'fast_rescue' ? 'rgba(16, 185, 129, 0.25)' : 'rgba(255, 255, 255, 0.05)',
+                      color: emailModalStatus === 'fast_rescue' ? '#34d399' : '#94a3b8',
+                      border: emailModalStatus === 'fast_rescue' ? '1px solid #10b981' : '1px solid rgba(255, 255, 255, 0.1)',
+                    }}
+                  >
+                    ⚡ Rescate Rápido ≤ 48h ({modalMonthKPIs.fastRescuesCount})
+                  </button>
+                  <button
+                    onClick={() => { setEmailModalStatus(emailModalStatus === 'converted' ? 'all' : 'converted'); setEmailModalPage(1); }}
+                    style={{
+                      padding: '0.35rem 0.75rem',
+                      borderRadius: '8px',
+                      fontSize: '0.76rem',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      background: emailModalStatus === 'converted' ? 'rgba(16, 185, 129, 0.25)' : 'rgba(255, 255, 255, 0.05)',
+                      color: emailModalStatus === 'converted' ? '#34d399' : '#94a3b8',
+                      border: emailModalStatus === 'converted' ? '1px solid #10b981' : '1px solid rgba(255, 255, 255, 0.1)',
+                    }}
+                  >
+                    🎯 Compras Totales ({modalMonthKPIs.convertedCount})
+                  </button>
+                  <button
+                    onClick={() => { setEmailModalStatus(emailModalStatus === 'not_converted' ? 'all' : 'not_converted'); setEmailModalPage(1); }}
+                    style={{
+                      padding: '0.35rem 0.75rem',
+                      borderRadius: '8px',
+                      fontSize: '0.76rem',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      background: emailModalStatus === 'not_converted' ? 'rgba(244, 63, 94, 0.2)' : 'rgba(255, 255, 255, 0.05)',
+                      color: emailModalStatus === 'not_converted' ? '#fb7185' : '#94a3b8',
+                      border: emailModalStatus === 'not_converted' ? '1px solid #f43f5e' : '1px solid rgba(255, 255, 255, 0.1)',
+                    }}
+                  >
+                    ⏳ Sin Compra ({Math.max(0, modalMonthKPIs.totalSent - modalMonthKPIs.convertedCount)})
+                  </button>
+                </div>
+              </div>
+
+              <div style={{ position: 'relative', width: '280px' }}>
+                <Search size={15} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: '#64748b' }} />
+                <input
+                  type="text"
+                  value={emailModalSearch}
+                  onChange={(e) => { setEmailModalSearch(e.target.value); setEmailModalPage(1); }}
+                  placeholder="Buscar por correo, nombre u orden..."
+                  style={{
+                    width: '100%',
+                    padding: '0.45rem 1.8rem 0.45rem 2rem',
+                    borderRadius: '8px',
+                    background: 'rgba(15, 23, 42, 0.8)',
+                    border: '1px solid rgba(255, 255, 255, 0.12)',
+                    color: '#fff',
+                    fontSize: '0.8rem',
+                    outline: 'none',
+                  }}
+                />
+                {emailModalSearch && (
+                  <button
+                    onClick={() => setEmailModalSearch('')}
+                    style={{ position: 'absolute', right: '8px', top: '50%', transform: 'translateY(-50%)', background: 'transparent', border: 'none', color: '#94a3b8', cursor: 'pointer' }}
+                  >
+                    <X size={13} />
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Tabla con Scroll */}
+            <div style={{ flex: 1, overflowY: 'auto', padding: '0 1.75rem' }}>
+              {emailHistoryLoading ? (
+                <div style={{ padding: '3rem', textAlign: 'center', color: '#94a3b8' }}>
+                  Cargando historial de correos...
+                </div>
+              ) : paginatedModalEmails.length === 0 ? (
+                <div style={{ padding: '3rem', textAlign: 'center', color: '#94a3b8' }}>
+                  No se encontraron registros con los filtros seleccionados.
+                </div>
+              ) : (
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem', textAlign: 'left' }}>
+                  <thead>
+                    <tr style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.12)', color: '#94a3b8', fontSize: '0.74rem', textTransform: 'uppercase' }}>
+                      <th style={{ padding: '0.75rem 0.5rem' }}>Fecha y Hora</th>
+                      <th style={{ padding: '0.75rem 0.5rem' }}>Cliente</th>
+                      <th style={{ padding: '0.75rem 0.5rem' }}>Carrito</th>
+                      <th style={{ padding: '0.75rem 0.5rem' }}>Operador</th>
+                      <th style={{ padding: '0.75rem 0.5rem' }}>Estado VTEX</th>
+                      <th style={{ padding: '0.75rem 0.5rem' }}>Atribución de Compra OMS</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {paginatedModalEmails.map((item, idx) => (
+                      <tr
+                        key={item.id || idx}
+                        style={{
+                          borderBottom: '1px solid rgba(255, 255, 255, 0.05)',
+                          background: item.isConverted ? 'rgba(16, 185, 129, 0.05)' : 'transparent',
+                        }}
+                      >
+                        <td style={{ padding: '0.7rem 0.5rem', color: '#cbd5e1', whiteSpace: 'nowrap' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                            <Clock size={13} color="#94a3b8" />
+                            <span>{formatNicaraguaDateTime(item.sent_at)}</span>
+                          </div>
+                        </td>
+
+                        <td style={{ padding: '0.7rem 0.5rem' }}>
+                          <strong style={{ color: '#fff', display: 'block', fontSize: '0.84rem' }}>
+                            {item.client_name}
+                          </strong>
+                          <span style={{ color: '#38bdf8', fontSize: '0.76rem' }}>
+                            {item.client_email}
+                          </span>
+                        </td>
+
+                        <td style={{ padding: '0.7rem 0.5rem', whiteSpace: 'nowrap' }}>
+                          <strong style={{ color: '#fbbf24', display: 'block' }}>
+                            {formatMoney(item.cart_value)}
+                          </strong>
+                          <span style={{ fontSize: '0.72rem', color: '#94a3b8', textTransform: 'capitalize' }}>
+                            Etapa: {item.stage}
+                          </span>
+                        </td>
+
+                        <td style={{ padding: '0.7rem 0.5rem', color: '#cbd5e1' }}>
+                          <span style={{ display: 'block', fontWeight: 600 }}>{item.sent_by}</span>
+                          <span style={{ fontSize: '0.72rem', color: '#64748b' }}>{item.sent_by_email || 'Panel'}</span>
+                        </td>
+
+                        <td style={{ padding: '0.7rem 0.5rem', whiteSpace: 'nowrap' }}>
+                          <span
+                            title={
+                              item.vtex_status === 200
+                                ? 'VTEX confirmó la recepción y despacho inmediato (HTTP 200 OK)'
+                                : 'VTEX aceptó el correo y lo encoló en Message Center (Router Gateway Timeout HTTP 504: despachado con éxito en segundo plano)'
+                            }
+                            style={{
+                              fontSize: '0.72rem',
+                              fontWeight: 700,
+                              padding: '0.2rem 0.55rem',
+                              borderRadius: '6px',
+                              background: item.vtex_status === 200 ? 'rgba(16, 185, 129, 0.15)' : 'rgba(56, 189, 248, 0.15)',
+                              color: item.vtex_status === 200 ? '#34d399' : '#38bdf8',
+                              border: `1px solid ${item.vtex_status === 200 ? 'rgba(16, 185, 129, 0.3)' : 'rgba(56, 189, 248, 0.3)'}`,
+                              cursor: 'help',
+                            }}
+                          >
+                            {item.vtex_status === 200 ? '200 OK' : '504 Procesado (VTEX)'}
+                          </span>
+                        </td>
+
+                        <td style={{ padding: '0.7rem 0.5rem' }}>
+                          {item.convertedOrder ? (() => {
+                            const hours = parseFloat(item.convertedOrder.hoursToPurchase) || 0;
+                            const days = (hours / 24).toFixed(1);
+                            const attrType = item.convertedOrder.attributionType || (item.isConverted ? 'sku_confirmed' : (hours <= 48 ? 'organic_recurring' : 'delayed_organic'));
+
+                            let badgeBg = 'rgba(148, 163, 184, 0.18)';
+                            let badgeColor = '#cbd5e1';
+                            let badgeBorder = 'rgba(148, 163, 184, 0.3)';
+                            let badgeText = `📅 Compra Posterior (${days}d)`;
+                            let badgeTitle = 'Compra realizada después de 48 horas tras el correo de carrito';
+
+                            if (attrType === 'utm_direct') {
+                              badgeBg = 'rgba(16, 185, 129, 0.25)';
+                              badgeColor = '#34d399';
+                              badgeBorder = 'rgba(16, 185, 129, 0.45)';
+                              badgeText = '🎯 Rescate Directo (Link UTM)';
+                              badgeTitle = 'El cliente hizo clic en el enlace del correo y compró. Certificado 100% por VTEX OMS.';
+                            } else if (attrType === 'sku_confirmed') {
+                              badgeBg = 'rgba(16, 185, 129, 0.25)';
+                              badgeColor = '#34d399';
+                              badgeBorder = 'rgba(16, 185, 129, 0.45)';
+                              badgeText = '📦 Rescate de Carrito (SKU)';
+                              badgeTitle = 'El cliente compró los mismos productos que estaban en el carrito abandonado.';
+                            } else if (attrType === 'organic_recurring') {
+                              badgeBg = 'rgba(245, 158, 11, 0.15)';
+                              badgeColor = '#fbbf24';
+                              badgeBorder = 'rgba(245, 158, 11, 0.35)';
+                              badgeText = '🌐 Compra Orgánica (Cliente Frecuente)';
+                              badgeTitle = 'Cliente recurrente que compró productos diferentes por su cuenta dentro de 48h. No se suma al rescate de carrito.';
+                            }
+
+                            const isRealRescue = attrType === 'utm_direct' || attrType === 'sku_confirmed';
+
+                            return (
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
+                                  <span
+                                    title={badgeTitle}
+                                    style={{
+                                      fontSize: '0.72rem',
+                                      fontWeight: 700,
+                                      padding: '0.15rem 0.5rem',
+                                      borderRadius: '6px',
+                                      background: badgeBg,
+                                      color: badgeColor,
+                                      border: `1px solid ${badgeBorder}`,
+                                    }}
+                                  >
+                                    {badgeText}
+                                  </span>
+                                  <strong style={{ color: isRealRescue ? '#34d399' : '#cbd5e1', fontSize: '0.82rem' }}>
+                                    {formatMoney(item.convertedOrder.totalValue)}
+                                  </strong>
+                                </div>
+                                <span style={{ fontSize: '0.73rem', color: '#94a3b8' }}>
+                                  Orden: <code style={{ color: '#fff' }}>{item.convertedOrder.orderId}</code> ({item.convertedOrder.status})
+                                </span>
+                                <span style={{ fontSize: '0.7rem', color: isRealRescue ? '#34d399' : '#94a3b8' }}>
+                                  {isRealRescue
+                                    ? `Compró a las ${hours} hrs el ${formatNicaraguaDateTime(item.convertedOrder.creationDate)}`
+                                    : (attrType === 'organic_recurring'
+                                        ? `Compró otros productos a las ${hours} hrs (${formatNicaraguaDateTime(item.convertedOrder.creationDate)})`
+                                        : `Compró a las ${hours} hrs (${days} días después • Probablemente orgánica)`)}
+                                </span>
+                              </div>
+                            );
+                          })() : (
+                            <span style={{ fontSize: '0.74rem', color: '#64748b' }}>
+                              Sin compra registrada
+                            </span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+
+            {/* Footer con Paginación */}
+            <div
+              style={{
+                padding: '0.85rem 1.75rem',
+                borderTop: '1px solid rgba(255, 255, 255, 0.08)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                background: 'rgba(15, 23, 42, 0.95)',
+              }}
+            >
+              <span style={{ fontSize: '0.78rem', color: '#94a3b8' }}>
+                Mostrando {filteredModalEmails.length > 0 ? (emailModalPage - 1) * EMAIL_MODAL_PAGE_SIZE + 1 : 0} a {Math.min(emailModalPage * EMAIL_MODAL_PAGE_SIZE, filteredModalEmails.length)} de {filteredModalEmails.length} envíos
+              </span>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <button
+                  onClick={() => setEmailModalPage((prev) => Math.max(1, prev - 1))}
+                  disabled={emailModalPage <= 1}
+                  style={{
+                    padding: '0.4rem 0.8rem',
+                    borderRadius: '8px',
+                    background: 'rgba(255, 255, 255, 0.08)',
+                    color: emailModalPage <= 1 ? '#475569' : '#fff',
+                    border: '1px solid rgba(255, 255, 255, 0.1)',
+                    fontSize: '0.78rem',
+                    cursor: emailModalPage <= 1 ? 'not-allowed' : 'pointer',
+                  }}
+                >
+                  Anterior
+                </button>
+                <span style={{ fontSize: '0.8rem', color: '#cbd5e1' }}>
+                  Página {emailModalPage} de {totalModalPages}
+                </span>
+                <button
+                  onClick={() => setEmailModalPage((prev) => Math.min(totalModalPages, prev + 1))}
+                  disabled={emailModalPage >= totalModalPages}
+                  style={{
+                    padding: '0.4rem 0.8rem',
+                    borderRadius: '8px',
+                    background: 'rgba(255, 255, 255, 0.08)',
+                    color: emailModalPage >= totalModalPages ? '#475569' : '#fff',
+                    border: '1px solid rgba(255, 255, 255, 0.1)',
+                    fontSize: '0.78rem',
+                    cursor: emailModalPage >= totalModalPages ? 'not-allowed' : 'pointer',
+                  }}
+                >
+                  Siguiente
+                </button>
+              </div>
             </div>
           </div>
         </div>

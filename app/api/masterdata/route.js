@@ -6,6 +6,7 @@ import {
   fetchMasterDataClients,
   fetchMasterDataClientById,
   sendAbandonedCartEmail,
+  fetchAbandonedCartEmailStats,
 } from '@/lib/vtex';
 import { verifySessionToken, AUTH_COOKIE_NAME } from '@/lib/auth';
 
@@ -23,7 +24,13 @@ export async function GET(request) {
       return NextResponse.json(statsData);
     }
 
-    // 2. Detalle de cliente específico por ID de documento
+    // 2. Historial y auditoría de correos de recuperación enviados
+    if (action === 'email-history' || action === 'email-stats') {
+      const emailReport = await fetchAbandonedCartEmailStats();
+      return NextResponse.json(emailReport);
+    }
+
+    // 3. Detalle de cliente específico por ID de documento
     if (action === 'client-detail') {
       const id = searchParams.get('id');
       if (!id) {
@@ -42,7 +49,7 @@ export async function GET(request) {
       return NextResponse.json({ success: true, client });
     }
 
-    // 3. Consulta de clientes en Master Data CL
+    // 4. Consulta de clientes en Master Data CL
     if (action === 'clients') {
       const page = parseInt(searchParams.get('page') || '1', 10);
       const pageSize = parseInt(searchParams.get('pageSize') || '20', 10);
@@ -52,7 +59,7 @@ export async function GET(request) {
       return NextResponse.json(result);
     }
 
-    // 4. Carritos Abandonados (por defecto)
+    // 5. Carritos Abandonados (por defecto)
     const page = parseInt(searchParams.get('page') || '1', 10);
     const pageSize = parseInt(searchParams.get('pageSize') || '15', 10);
     const period = searchParams.get('period') || 'all';
@@ -63,6 +70,7 @@ export async function GET(request) {
     const sortBy = searchParams.get('sortBy') || 'time_desc';
     const excludePurchased = searchParams.get('excludePurchased') !== 'false';
     const stage = searchParams.get('stage') || 'all';
+    const emailStatus = searchParams.get('emailStatus') || 'all';
 
     const cartsData = await fetchAbandonedCarts({
       page,
@@ -75,6 +83,7 @@ export async function GET(request) {
       sortBy,
       excludePurchased,
       stage,
+      emailStatus,
     });
 
     return NextResponse.json(cartsData);

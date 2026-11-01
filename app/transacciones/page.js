@@ -78,13 +78,14 @@ export default function TransaccionesPage() {
     fetchTransactionsData(false);
   }, [fetchTransactionsData]);
 
-  // Auto-refresh Timer Setup (30s fijo en segundo plano)
+  // Auto-refresh Timer Setup (cada 60s y solo si la pestaña está activa y visible)
   useEffect(() => {
     if (timerRef.current) clearInterval(timerRef.current);
 
     timerRef.current = setInterval(() => {
+      if (typeof document !== 'undefined' && document.visibilityState !== 'visible') return;
       fetchTransactionsData(true);
-    }, 30000);
+    }, 60000);
 
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);

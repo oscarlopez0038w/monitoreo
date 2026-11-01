@@ -119,10 +119,17 @@ export default function AppLayout({ children }) {
   }, []);
 
   useEffect(() => {
-    checkNewTransactions();
-    const interval = setInterval(checkNewTransactions, 20000);
-    return () => clearInterval(interval);
+    if (pathname === '/transacciones') {
+      setNewTxCount(0);
+    }
   }, [pathname]);
+
+  useEffect(() => {
+    // Sondeo espaciado a 5 minutos (300s) para no saturar la CPU Serverless de Vercel
+    checkNewTransactions();
+    const interval = setInterval(checkNewTransactions, 300000);
+    return () => clearInterval(interval);
+  }, []);
 
   // Evaluador instantáneo de permisos de la ruta actual
   const currentRoutePerm = ROUTE_PERMISSIONS[pathname];

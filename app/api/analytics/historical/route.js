@@ -312,8 +312,10 @@ export async function GET(request) {
       }
     });
 
-    // Finalizar cálculos de promedios en Meses
-    const monthlyBreakdown = Object.values(monthlyMap).map((m) => {
+    // Finalizar cálculos de promedios en Meses (orden cronológico explícito)
+    const monthlyBreakdown = Object.values(monthlyMap)
+      .sort((a, b) => a.monthNum - b.monthNum)
+      .map((m) => {
       const avgNio = m.approvedOrders > 0 ? m.salesNio / m.approvedOrders : 0;
       return {
         ...m,
@@ -332,8 +334,10 @@ export async function GET(request) {
       };
     });
 
-    // Finalizar cálculos de promedios en Días
-    const dailyBreakdown = Object.values(dailyMap).map((d) => {
+    // Finalizar cálculos de promedios en Días (orden cronológico explícito)
+    const dailyBreakdown = Object.values(dailyMap)
+      .sort((a, b) => a.date.localeCompare(b.date))
+      .map((d) => {
       const avgNio = d.approvedOrders > 0 ? d.salesNio / d.approvedOrders : 0;
       return {
         ...d,
